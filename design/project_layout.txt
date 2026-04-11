@@ -1,0 +1,46 @@
+rosenholz/
+├── src/
+│   ├── core/
+│   │   ├── Logger          - verbosity-controlled logging
+│   │   ├── Config          - JSON settings, base path
+│   │   ├── FileOps         - all file/folder ops (Linux+Windows)
+│   │   ├── Database        - SQLite abstraction layer
+│   │   ├── BackupManager   - configurable backup
+│   │   ├── GitStateManager - github state writing
+│   │   └── RegNumber       - structured reg number generator
+│   ├── model/
+│   │   ├── Trackable       - base class (ise-cobra states)
+│   │   ├── Note            - JSON notes, attachable everywhere
+│   │   ├── Reminder        - part of Trackable
+│   │   ├── QTCSBase        - Quality/Time/Cost/Scope base
+│   │   ├── Quality         - quality attributes
+│   │   ├── TimeDim         - time dimension
+│   │   ├── Cost            - cost dimension
+│   │   ├── Scope           - scope dimension
+│   │   ├── WorkflowEngine  - definition/state/transition/instance
+│   │   ├── Person          - person entity
+│   │   ├── Team            - team + team member
+│   │   ├── ProjectF16      - project entity
+│   │   ├── TaskF22         - task entity
+│   │   ├── IncidentF18     - incident entity
+│   │   ├── Meeting         - meeting (child of task)
+│   │   ├── Milestone       - milestone
+│   │   ├── Document        - document + file archiving
+│   │   ├── Risk            - risk register
+│   │   ├── Measure         - measure/action
+│   │   ├── QualityGate     - quality gate
+│   │   ├── KPI             - KPI
+│   │   ├── CommunicationPlan
+│   │   ├── LessonLearned
+│   │   ├── DecisionLog
+│   │   ├── AssumptionConstraint
+│   │   ├── ChangeRequest
+│   │   ├── Approval
+│   │   ├── Dependency
+│   │   └── ArchivedProjectAU
+│   ├── mfs/
+│   │   └── MFSWriter       - plaintext MFS-style file writer
+│   └── app/
+│       └── AppController   - CLI/UI mode switch
+├── main.cpp
+└── settings.json
