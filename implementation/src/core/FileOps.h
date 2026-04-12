@@ -12,7 +12,7 @@
 #include <functional>
 #include <cstdint>
 
-namespace RH {
+namespace Rosenholz {
 
 class FileOps {
 public:
@@ -84,4 +84,4 @@ private:
     FileOps() = delete; // static-only class
 };
 
-} // namespace RH
+} // namespace Rosenholz

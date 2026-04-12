@@ -20,7 +20,7 @@
 #include <string>
 #include <functional>
 
-namespace RH {
+namespace Rosenholz {
 
 enum class AppMode { CLI, UI };
 
@@ -69,4 +69,4 @@ private:
     void runBackupIfDue();
 };
 
-} // namespace RH
+} // namespace Rosenholz

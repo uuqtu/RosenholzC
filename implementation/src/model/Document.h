@@ -15,7 +15,7 @@
 #include "../core/Database.h"
 #include <nlohmann/json.hpp>
 
-namespace RH {
+namespace Rosenholz {
 
 class Document {
 public:
@@ -88,4 +88,4 @@ private:
     static std::string archiveWebsite(const std::string& url, const std::string& destDir);
 };
 
-} // namespace RH
+} // namespace Rosenholz

@@ -13,7 +13,7 @@
 #include <random>
 
 using json = nlohmann::json;
-namespace RH {
+namespace Rosenholz {
 
 
 // ═════════════════════════════════════════════════════════════
@@ -27,7 +27,7 @@ std::shared_ptr<TeamMember> TeamMember::create(
 {
     LOG_INFO("Adding TeamMember person=" + personId_ + " to team=" + teamId_);
     auto m = std::make_shared<TeamMember>();
-    m->membershipId      = genId("tea");
+    m->membershipId      = genId("DE");
     m->teamId            = teamId_;
     m->personId          = personId_;
     m->role              = role_;
@@ -195,7 +195,7 @@ std::shared_ptr<Team> Team::create(
 {
     LOG_INFO("Creating Team: " + name_);
     auto t = std::make_shared<Team>();
-    t->teamId       = genId("tea");
+    t->teamId       = genId("DE");
     t->regNumber    = RegNumberGenerator::next(RegDept::TEAM);
     t->name         = name_;
     t->type         = type_;
@@ -370,4 +370,4 @@ json Team::toJson() const {
     };
 }
 
-} // namespace RH
+} // namespace Rosenholz

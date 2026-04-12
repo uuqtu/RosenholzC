@@ -12,7 +12,7 @@
 #include <functional>
 #include <chrono>
 
-namespace RH {
+namespace Rosenholz {
 
 enum class LogLevel {
     DEBUG = 0,  ///< Finest detail — internal state, flow tracing
@@ -63,9 +63,9 @@ private:
 };
 
 // ── Convenience macros (include file/line in DEBUG) ────────
-#define LOG_DEBUG(msg) RH::Logger::instance().debug(msg, __FUNCTION__)
-#define LOG_INFO(msg)  RH::Logger::instance().info (msg, __FUNCTION__)
-#define LOG_WARN(msg)  RH::Logger::instance().warn (msg, __FUNCTION__)
-#define LOG_ERROR(msg) RH::Logger::instance().error(msg, __FUNCTION__)
+#define LOG_DEBUG(msg) Rosenholz::Logger::instance().debug(msg, __FUNCTION__)
+#define LOG_INFO(msg)  Rosenholz::Logger::instance().info (msg, __FUNCTION__)
+#define LOG_WARN(msg)  Rosenholz::Logger::instance().warn (msg, __FUNCTION__)
+#define LOG_ERROR(msg) Rosenholz::Logger::instance().error(msg, __FUNCTION__)
 
-} // namespace RH
+} // namespace Rosenholz

@@ -15,7 +15,7 @@
 
 using json = nlohmann::json;
 
-namespace RH {
+namespace Rosenholz {
 
 // ── Status helpers ───────────────────────────────────────────
 std::string trackableStatusToString(TrackableStatus s) {
@@ -218,7 +218,7 @@ std::shared_ptr<TrackableItem> TrackableItem::create(
     const std::string& createdBy_)
 {
     auto item = std::make_shared<TrackableItem>();
-    item->trackableId = genId("trk");
+    item->trackableId = genId("VBF");
     item->entityType  = entityType;
     item->entityId    = entityId;
     item->title       = title_;
@@ -368,4 +368,4 @@ std::vector<std::shared_ptr<TrackableItem>> TrackableItem::loadForEntity(
     return result;
 }
 
-} // namespace RH
+} // namespace Rosenholz

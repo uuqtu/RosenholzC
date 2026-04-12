@@ -8,7 +8,7 @@
 #include <iomanip>
 #include <vector>
 
-namespace RH {
+namespace Rosenholz {
 
 static std::string backupTimestamp() {
     auto now = std::chrono::system_clock::now();
@@ -123,4 +123,4 @@ bool BackupManager::isDue(const std::string& backupDest, int intervalHours) {
     return false; // safe default — let caller decide timing
 }
 
-} // namespace RH
+} // namespace Rosenholz

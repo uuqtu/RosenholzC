@@ -8,7 +8,7 @@
 #include <sstream>
 #include <ctime>
 
-namespace RH {
+namespace Rosenholz {
 
 // ── Singleton ────────────────────────────────────────────────
 Logger& Logger::instance() {
@@ -92,4 +92,4 @@ std::string Logger::timestamp() const {
     return oss.str();
 }
 
-} // namespace RH
+} // namespace Rosenholz

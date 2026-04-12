@@ -55,6 +55,8 @@ set(MODEL_SOURCES
     src/model/IncidentF18.cpp
     src/model/Risk.cpp
     src/model/Document.cpp
+    src/model/Milestone.cpp
+    src/model/ReportingModels.cpp
 )
 
 set(MFS_SOURCES

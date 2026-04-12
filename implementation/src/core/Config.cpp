@@ -10,7 +10,7 @@
 
 using json = nlohmann::json;
 
-namespace RH {
+namespace Rosenholz {
 
 Config& Config::instance() {
     static Config inst;
@@ -145,6 +145,13 @@ void Config::fromJson(const json& j) {
         if (m.contains("enabled"))    m_mfs.enabled    = m["enabled"];
         if (m.contains("rootFolder")) m_mfs.rootFolder = m["rootFolder"];
     }
+    if (j.contains("registratur")) {
+        auto& r = j["registratur"];
+        if (r.contains("diensteinheitKuerzel")) m_registratur.diensteinheitKuerzel = r["diensteinheitKuerzel"];
+        if (r.contains("aktenfuehrendeStelle")) m_registratur.aktenfuehrendeStelle = r["aktenfuehrendeStelle"];
+        if (r.contains("geschaeftszeichen"))    m_registratur.geschaeftszeichen    = r["geschaeftszeichen"];
+        if (r.contains("archivSignatur"))        m_registratur.archivSignatur        = r["archivSignatur"];
+    }
     if (j.contains("db")) {
         auto& d = j["db"];
         if (d.contains("walMode"))   m_db.walMode   = d["walMode"];
@@ -168,9 +175,15 @@ nlohmann::json Config::toJson() const {
                      {"token", m_github.token} };
     j["mfs"]     = { {"enabled", m_mfs.enabled},
                      {"rootFolder", m_mfs.rootFolder} };
+    j["registratur"] = {
+        {"diensteinheitKuerzel", m_registratur.diensteinheitKuerzel},
+        {"aktenfuehrendeStelle", m_registratur.aktenfuehrendeStelle},
+        {"geschaeftszeichen",    m_registratur.geschaeftszeichen},
+        {"archivSignatur",       m_registratur.archivSignatur}
+    };
     j["db"]      = { {"walMode", m_db.walMode},
                      {"cacheSize", m_db.cacheSize} };
     return j;
 }
 
-} // namespace RH
+} // namespace Rosenholz

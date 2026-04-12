@@ -7,7 +7,7 @@
 #include "../core/BackupManager.h"
 #include <iostream>
 
-namespace RH {
+namespace Rosenholz {
 
 AppController& AppController::instance() {
     static AppController inst;
@@ -151,4 +151,4 @@ int AppController::runCLI() {
     return 0;
 }
 
-} // namespace RH
+} // namespace Rosenholz

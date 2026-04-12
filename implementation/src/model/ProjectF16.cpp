@@ -2,6 +2,7 @@
 // ProjectF16.cpp  —  Project entity implementation
 // ============================================================
 
+#include "../mfs/MFSWriter.h"
 #include "ProjectF16.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
@@ -20,7 +21,7 @@
 
 using json = nlohmann::json;
 
-namespace RH {
+namespace Rosenholz {
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
     LOG_INFO("Creating ProjectF16: " + title_);
 
     auto p = std::make_shared<ProjectF16>();
-    p->projectId   = genId("f16");
+    p->projectId   = genId("F16");
     p->regNumber   = RegNumberGenerator::next(RegDept::PROJECT);
     p->title       = title_;
     p->projectType = projectType_;
@@ -458,33 +459,7 @@ std::shared_ptr<ProjectF16> ProjectF16::fromJson(const json& j) {
 
 // ── MFS plaintext output ─────────────────────────────────────
 bool ProjectF16::writeMFSFile(const std::string& mfsRoot) const {
-    // MFS-style file: only the owner can correlate this file with F22/F18
-    // The file itself contains only the reg number as identifier — no real title.
-    std::string dir  = FileOps::joinPath(mfsRoot, "F16");
-    std::string path = FileOps::joinPath(dir, "F16_" + regNumber.toString() + ".txt");
-
-    std::ostringstream oss;
-    oss << "REGISTRIERNUMMER: " << regNumber.toString() << "\n";
-    oss << "VORGANGSART:      " << projectType << "\n";
-    oss << "GROESSENKLASSE:   " << sizeClass   << "\n";
-    oss << "STATUS:           " << status       << "\n";
-    oss << "PHASE:            " << phase        << "\n";
-    oss << "ANGELEGT:         " << createdAt    << "\n";
-    oss << "GEAENDERT:        " << updatedAt    << "\n";
-    oss << "---\n";
-    // Do NOT write title/lead/team — those are in the owner key file
-    oss << "VERBINDUNGEN: F22/" << regNumber.toString()
-        << " | F18/" << regNumber.toString() << "\n";
-
-    FileOps::makeDirs(dir);
-    bool ok = FileOps::writeTextFile(path, oss.str());
-    LOG_DEBUG("MFS F16 file written: " + path);
-
-#ifndef _WIN32
-    // Owner-only permissions (600) — owner can read/write, no one else
-    if (ok) chmod(path.c_str(), S_IRUSR | S_IWUSR);
-#endif
-    return ok;
+    return MFSWriter::writeProject(*this, mfsRoot);
 }
 
-} // namespace RH
+} // namespace Rosenholz

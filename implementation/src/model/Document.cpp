@@ -12,7 +12,7 @@
 #include <random>
 #include <algorithm>
 
-namespace RH {
+namespace Rosenholz {
 
 
 
@@ -21,7 +21,7 @@ std::shared_ptr<Document> Document::create(
     const std::string& title_, const std::string& type_, const std::string& pid)
 {
     auto d = std::make_shared<Document>();
-    d->documentId  = genId("doc"); d->title = title_;
+    d->documentId  = genId("DOK"); d->title = title_;
     d->docType     = type_; d->projectId = pid;
     d->status      = "draft"; d->dateCreated = nowIso();
     d->createdAt   = d->dateCreated; d->updatedAt = d->createdAt;
@@ -211,4 +211,4 @@ nlohmann::json Document::toJson() const {
             {"format",format},{"status",status},{"fileUrl",fileUrl}};
 }
 
-} // namespace RH
+} // namespace Rosenholz

@@ -28,7 +28,7 @@
 struct sqlite3;
 struct sqlite3_stmt;
 
-namespace RH {
+namespace Rosenholz {
 
 // ── Row type —  column name -> string value ──────────────────
 using Row = std::map<std::string, std::string>;
@@ -142,4 +142,4 @@ namespace Schema {
     std::string reportingSchema();
 } // namespace Schema
 
-} // namespace RH
+} // namespace Rosenholz

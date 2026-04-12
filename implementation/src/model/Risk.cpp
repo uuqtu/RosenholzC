@@ -9,14 +9,14 @@
 #include <iomanip>
 #include <random>
 
-namespace RH {
+namespace Rosenholz {
 
 
 
 std::shared_ptr<Risk> Risk::create(const std::string& pid, const std::string& t, const std::string& lvl) {
     LOG_INFO("Creating Risk: " + t + " for project " + pid);
     auto r = std::make_shared<Risk>();
-    r->riskId = genId("risk"); r->projectId = pid; r->title = t;
+    r->riskId = genId("RSK"); r->projectId = pid; r->title = t;
     r->riskLevel = lvl; r->status = "open";
     r->identifiedDate = nowIso(); r->createdAt = nowIso(); r->updatedAt = r->createdAt;
     r->notes = "{}";
@@ -127,4 +127,4 @@ nlohmann::json Risk::toJson() const {
     return {{"riskId",riskId},{"title",title},{"riskLevel",riskLevel},{"status",status},
             {"overallRiskScore",overallRiskScore},{"projectId",projectId}};
 }
-} // namespace RH
+} // namespace Rosenholz

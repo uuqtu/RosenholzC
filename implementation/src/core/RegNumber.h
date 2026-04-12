@@ -14,7 +14,7 @@
 #include <string>
 #include <cstdint>
 
-namespace RH {
+namespace Rosenholz {
 
 struct RegNumber {
     std::string dept;      ///< Roman numeral department code
@@ -61,4 +61,4 @@ private:
     static int currentYear();
 };
 
-} // namespace RH
+} // namespace Rosenholz

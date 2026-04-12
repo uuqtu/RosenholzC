@@ -10,7 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace RH {
+namespace Rosenholz {
 
 // ── RegNumber struct ─────────────────────────────────────────
 std::string RegNumber::toString() const {
@@ -118,4 +118,4 @@ bool RegNumberGenerator::isValid(const std::string& regStr) {
     return RegNumber::fromString(regStr).isValid();
 }
 
-} // namespace RH
+} // namespace Rosenholz

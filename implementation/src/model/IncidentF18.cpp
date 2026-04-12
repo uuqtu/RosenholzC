@@ -2,6 +2,7 @@
 // IncidentF18.cpp  —  Incident record implementation
 // ============================================================
 
+#include "../mfs/MFSWriter.h"
 #include "IncidentF18.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
@@ -19,7 +20,7 @@
 
 using json = nlohmann::json;
 
-namespace RH {
+namespace Rosenholz {
 
 
 
@@ -31,7 +32,7 @@ std::shared_ptr<IncidentF18> IncidentF18::create(
 {
     LOG_INFO("Creating IncidentF18: " + title_);
     auto i = std::make_shared<IncidentF18>();
-    i->incidentId  = genId("f18");
+    i->incidentId  = genId("F18");
     i->regNumber   = RegNumberGenerator::next(RegDept::INCIDENT);
     i->projectId   = projectId_;
     i->title       = title_;
@@ -284,27 +285,7 @@ std::shared_ptr<IncidentF18> IncidentF18::fromJson(const json& j) {
 
 // ── MFS output ───────────────────────────────────────────────
 bool IncidentF18::writeMFSFile(const std::string& mfsRoot) const {
-    std::string dir  = FileOps::joinPath(mfsRoot, "F18");
-    std::string path = FileOps::joinPath(dir, "F18_" + regNumber.toString() + ".txt");
-
-    std::ostringstream oss;
-    oss << "REGISTRIERNUMMER: " << regNumber.toString() << "\n";
-    oss << "SCHWERE:          " << severity             << "\n";
-    oss << "STATUS:           " << status               << "\n";
-    oss << "GEMELDET:         " << reportedDate         << "\n";
-    oss << "ANGELEGT:         " << createdAt            << "\n";
-    oss << "---\n";
-    oss << "VERBINDUNG-F16:   F16/" << projectId << "\n";
-    if (!riskId.empty())
-        oss << "VERBINDUNG-RISK:  " << riskId << "\n";
-
-    FileOps::makeDirs(dir);
-    bool ok = FileOps::writeTextFile(path, oss.str());
-#ifndef _WIN32
-    if (ok) chmod(path.c_str(), S_IRUSR | S_IWUSR);
-#endif
-    LOG_DEBUG("MFS F18 file written: " + path);
-    return ok;
+    return MFSWriter::writeIncident(*this, mfsRoot);
 }
 
-} // namespace RH
+} // namespace Rosenholz

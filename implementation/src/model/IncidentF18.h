@@ -17,7 +17,7 @@
 #include "../core/RegNumber.h"
 #include <nlohmann/json.hpp>
 
-namespace RH {
+namespace Rosenholz {
 
 class IncidentF18 {
 public:
@@ -126,4 +126,4 @@ private:
     void fromRow(const Row& r);
 };
 
-} // namespace RH
+} // namespace Rosenholz

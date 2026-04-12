@@ -15,7 +15,7 @@
 #include "../core/Database.h"
 #include <nlohmann/json.hpp>
 
-namespace RH {
+namespace Rosenholz {
 
 class Person {
 public:
@@ -98,4 +98,4 @@ private:
     void fromRow(const Row& r);
 };
 
-} // namespace RH
+} // namespace Rosenholz

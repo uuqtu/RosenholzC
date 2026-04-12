@@ -36,7 +36,7 @@
 #include <string>
 #include <nlohmann/json.hpp>
 
-namespace RH {
+namespace Rosenholz {
 
 struct BackupConfig {
     bool        enabled       { false };
@@ -55,6 +55,16 @@ struct GitHubConfig {
 struct MFSConfig {
     bool        enabled    { true };
     std::string rootFolder { "mfs" };
+};
+
+// ── Registratur / naming settings ────────────────────────────
+// Controls the Roman-numeral department codes used in reg numbers
+// and the physical filing prefix (e.g. "XV" for dept XV).
+struct RegistraturConfig {
+    std::string diensteinheitKuerzel { "XV" };    ///< Department abbreviation (Roman numeral)
+    std::string aktenfuehrendeStelle { "Rosenholz-Referat" };  ///< Filing authority name
+    std::string geschaeftszeichen    { "GZ" };    ///< Business sign prefix for documents
+    std::string archivSignatur       { "BStU-MfS" }; ///< Archive signature prefix
 };
 
 struct DBConfig {
@@ -93,6 +103,8 @@ public:
     const std::string& projectName() const { return m_projectName; }
 
     void setBasePath(const std::string& p)    { m_basePath = p; }
+    const RegistraturConfig& registratur()  const { return m_registratur; }
+    void setDiensteinheit(const std::string& d)   { m_registratur.diensteinheitKuerzel = d; }
     void setLogLevel(const std::string& l)    { m_logLevel = l; }
     void setProjectName(const std::string& n) { m_projectName = n; }
 
@@ -122,6 +134,7 @@ private:
     MFSConfig    m_mfs;
     DBConfig     m_db;
     std::string  m_settingsPath { "settings.json" };
+    RegistraturConfig m_registratur;
 };
 
-} // namespace RH
+} // namespace Rosenholz

@@ -19,7 +19,7 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 
-namespace RH {
+namespace Rosenholz {
 
 // ── TrackableStatus ──────────────────────────────────────────
 enum class TrackableStatus {
@@ -143,4 +143,4 @@ public:
 
 };
 
-} // namespace RH
+} // namespace Rosenholz

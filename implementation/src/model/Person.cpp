@@ -13,7 +13,7 @@
 #include <random>
 
 using json = nlohmann::json;
-namespace RH {
+namespace Rosenholz {
 
 
 std::shared_ptr<Person> Person::create(
@@ -22,7 +22,7 @@ std::shared_ptr<Person> Person::create(
 {
     LOG_INFO("Creating Person: " + first + " " + last);
     auto p = std::make_shared<Person>();
-    p->personId   = genId("per");
+    p->personId   = genId("PER");
     p->regNumber  = RegNumberGenerator::next(RegDept::PERSON);
     p->firstName  = first;
     p->lastName   = last;
@@ -225,4 +225,4 @@ std::shared_ptr<Person> Person::fromJson(const json& j) {
     return p;
 }
 
-} // namespace RH
+} // namespace Rosenholz

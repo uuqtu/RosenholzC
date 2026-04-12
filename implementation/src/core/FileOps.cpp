@@ -31,7 +31,7 @@
   #define PATH_SEP_STR "/"
 #endif
 
-namespace RH {
+namespace Rosenholz {
 
 // ── Path utilities ───────────────────────────────────────────
 std::string FileOps::joinPath(const std::string& a, const std::string& b) {
@@ -446,12 +446,20 @@ std::string FileOps::sanitizeFilename(const std::string& name) {
 bool FileOps::ensureMFSTree(const std::string& mfsRoot) {
     LOG_INFO("Ensuring MFS directory tree at: " + mfsRoot);
     bool ok = true;
-    // Top-level MFS folders mirroring the card-file structure
-    for (auto& sub : {"F16", "F22", "F18", "AU", "DOKUMENTE", "STATISTIK",
-                       "MASSNAHMEN", "RISIKEN", "ENTSCHEIDUNGEN", "QUALITAET"}) {
+    // Top-level folders per DDR Ablagesystem
+    // Entity-year subfolders are created on demand when items are filed.
+    for (auto& sub : {
+        "F16",              // Vorgangsakten (Projects)
+        "F22",              // Aufgabenkartei index (Tasks)
+        "F18",              // Vorfallkartei index (Incidents)
+        "PERSONEN",         // Personenkartei
+        "DIENSTEINHEITEN",  // Org units / Teams
+        "RISIKEN",          // Risk register
+        "AU",               // Archivierte Untersuchungsvorgaenge
+    }) {
         ok &= makeDirs(joinPath(mfsRoot, sub));
     }
     return ok;
 }
 
-} // namespace RH
+} // namespace Rosenholz

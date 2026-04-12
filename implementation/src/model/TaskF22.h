@@ -20,7 +20,7 @@
 #include "../core/RegNumber.h"
 #include <nlohmann/json.hpp>
 
-namespace RH {
+namespace Rosenholz {
 
 class TaskF22 {
 public:
@@ -138,4 +138,4 @@ private:
     void fromRow(const Row& r);
 };
 
-} // namespace RH
+} // namespace Rosenholz

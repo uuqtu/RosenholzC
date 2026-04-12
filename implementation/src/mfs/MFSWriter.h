@@ -22,7 +22,7 @@
 #include <vector>
 #include <map>
 
-namespace RH {
+namespace Rosenholz {
 
 // Forward declarations — avoids pulling in all model headers
 class ProjectF16;
@@ -65,4 +65,4 @@ private:
     static bool ownerOnlyWrite(const std::string& path, const std::string& content);
 };
 
-} // namespace RH
+} // namespace Rosenholz

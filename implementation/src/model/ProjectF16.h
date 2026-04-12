@@ -20,7 +20,7 @@
 #include "../core/RegNumber.h"
 #include <nlohmann/json.hpp>
 
-namespace RH {
+namespace Rosenholz {
 
 // ── QTCS dimension stubs (defined in their own files) ────────
 struct QualityDimension;
@@ -169,4 +169,4 @@ private:
     void fromRow(const Row& r);
 };
 
-} // namespace RH
+} // namespace Rosenholz

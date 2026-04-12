@@ -9,7 +9,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace RH {
+namespace Rosenholz {
 
 // ── Database ─────────────────────────────────────────────────
 Database::Database(const std::string& path) : m_path(path) {
@@ -1234,4 +1234,4 @@ CREATE INDEX IF NOT EXISTS idx_lessons_project ON lessons_learned(project_id);
 )SQL"; }
 
 } // namespace Schema
-} // namespace RH
+} // namespace Rosenholz

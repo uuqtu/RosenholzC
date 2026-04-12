@@ -8,7 +8,7 @@
 // ============================================================
 #include <string>
 
-namespace RH {
+namespace Rosenholz {
 
 class BackupManager {
 public:
@@ -34,4 +34,4 @@ public:
     static bool isDue(const std::string& backupDest, int intervalHours);
 };
 
-} // namespace RH
+} // namespace Rosenholz

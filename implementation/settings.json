@@ -1,8 +1,14 @@
 {
     "basePath": "",
-    "projectName": "My Rosenholz Project",
-    "logLevel": "DEBUG",
+    "projectName": "Rosenholz PM",
+    "logLevel": "INFO",
     "logFile": "rosenholz.log",
+    "registratur": {
+        "diensteinheitKuerzel": "XV",
+        "aktenfuehrendeStelle": "Rosenholz-Referat XV",
+        "geschaeftszeichen": "GZ",
+        "archivSignatur": "BStU-MfS"
+    },
     "backup": {
         "enabled": false,
         "intervalHours": 24,

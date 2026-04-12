@@ -2,6 +2,7 @@
 // TaskF22.cpp  —  Task entity implementation
 // ============================================================
 
+#include "../mfs/MFSWriter.h"
 #include "TaskF22.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
@@ -19,7 +20,7 @@
 
 using json = nlohmann::json;
 
-namespace RH {
+namespace Rosenholz {
 
 
 
@@ -32,7 +33,7 @@ std::shared_ptr<TaskF22> TaskF22::create(
 {
     LOG_INFO("Creating TaskF22: " + title_ + " in project " + projectId_);
     auto t = std::make_shared<TaskF22>();
-    t->taskId        = genId("f22");
+    t->taskId        = genId("F22");
     t->regNumber     = RegNumberGenerator::next(RegDept::TASK);
     t->projectId     = projectId_;
     t->title         = title_;
@@ -339,27 +340,7 @@ std::shared_ptr<TaskF22> TaskF22::fromJson(const json& j) {
 
 // ── MFS output ───────────────────────────────────────────────
 bool TaskF22::writeMFSFile(const std::string& mfsRoot) const {
-    std::string dir  = FileOps::joinPath(mfsRoot, "F22");
-    std::string path = FileOps::joinPath(dir, "F22_" + regNumber.toString() + ".txt");
-
-    std::ostringstream oss;
-    oss << "REGISTRIERNUMMER:   " << regNumber.toString() << "\n";
-    oss << "VORGANGSNUMMER:     " << projectId            << "\n";
-    oss << "STATUS:             " << status               << "\n";
-    oss << "PROZENT:            " << percentComplete      << "%\n";
-    oss << "ANGELEGT:           " << createdAt            << "\n";
-    oss << "---\n";
-    oss << "VERBINDUNG-F16:     F16/" << projectId << "\n";
-    if (!parentTaskId.empty())
-        oss << "VERBINDUNG-F22:   F22/" << parentTaskId << "\n";
-
-    FileOps::makeDirs(dir);
-    bool ok = FileOps::writeTextFile(path, oss.str());
-#ifndef _WIN32
-    if (ok) chmod(path.c_str(), S_IRUSR | S_IWUSR);
-#endif
-    LOG_DEBUG("MFS F22 file written: " + path);
-    return ok;
+    return MFSWriter::writeTask(*this, mfsRoot);
 }
 
-} // namespace RH
+} // namespace Rosenholz
