@@ -1,0 +1,26 @@
+{
+    "basePath": "",
+    "projectName": "My Rosenholz Project",
+    "logLevel": "DEBUG",
+    "logFile": "rosenholz.log",
+    "backup": {
+        "enabled": false,
+        "intervalHours": 24,
+        "maxCopies": 7,
+        "backupPath": ""
+    },
+    "github": {
+        "enabled": false,
+        "repoUrl": "",
+        "branch": "main",
+        "token": ""
+    },
+    "mfs": {
+        "enabled": true,
+        "rootFolder": "mfs"
+    },
+    "db": {
+        "walMode": true,
+        "cacheSize": -64000
+    }
+}

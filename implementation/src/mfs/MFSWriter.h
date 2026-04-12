@@ -1,0 +1,68 @@
+#pragma once
+// ============================================================
+// MFSWriter.h  —  Centralised MFS-style plaintext file output
+//
+// Writes one plaintext file per entity into the MFS root folder
+// structure, in the style the East German MfS (Stasi) used for
+// their physical filing system.
+//
+// Security model:
+//   - Each entity file contains ONLY its own reg number and
+//     opaque cross-references (no human-readable names).
+//   - The OWNER KEY file (owner_key.txt, owner-only readable)
+//     maps reg numbers to real names and full relationships.
+//   - Without the owner key, an observer can enumerate files
+//     but cannot connect them to real entities.
+//
+// All files written with owner-only (chmod 600) permissions
+// on Linux. On Windows, DACL-based restriction is applied.
+// ============================================================
+
+#include <string>
+#include <vector>
+#include <map>
+
+namespace RH {
+
+// Forward declarations — avoids pulling in all model headers
+class ProjectF16;
+class TaskF22;
+class IncidentF18;
+class Risk;
+class Document;
+class Person;
+class Team;
+
+class MFSWriter {
+public:
+    MFSWriter() = delete;
+
+    // ── Entity writers ─────────────────────────────────────
+    static bool writeProject (const ProjectF16&   p,   const std::string& mfsRoot);
+    static bool writeTask    (const TaskF22&       t,   const std::string& mfsRoot);
+    static bool writeIncident(const IncidentF18&   i,   const std::string& mfsRoot);
+    static bool writeRisk    (const Risk&           r,   const std::string& mfsRoot);
+    static bool writeDocument(const Document&       d,   const std::string& mfsRoot);
+    static bool writePerson  (const Person&         p,   const std::string& mfsRoot);
+    static bool writeTeam    (const Team&           t,   const std::string& mfsRoot);
+
+    // ── Owner key file ─────────────────────────────────────
+    /// Append an entry to the owner key file.
+    /// owner_key.txt maps reg_number -> real entity name + full FK list.
+    /// This file is owner-readable only and is the ONLY place
+    /// where real names appear in the MFS tree.
+    static bool appendOwnerKey(
+        const std::string& regNumber,
+        const std::string& realTitle,
+        const std::map<std::string, std::string>& connections,
+        const std::string& mfsRoot);
+
+    // ── Batch rebuild ──────────────────────────────────────
+    /// Re-generate the entire MFS tree from the database.
+    static bool rebuildAll(const std::string& mfsRoot);
+
+private:
+    static bool ownerOnlyWrite(const std::string& path, const std::string& content);
+};
+
+} // namespace RH
