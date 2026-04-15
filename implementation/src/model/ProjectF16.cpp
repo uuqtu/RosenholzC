@@ -7,8 +7,8 @@
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
+#include "../core/Repository.h"
 #ifndef _WIN32
-#include <sys/stat.h>
 #endif
 #include "../core/RegNumber.h"
 #include "../core/FileOps.h"
@@ -17,7 +17,6 @@
 #include <ctime>
 #include <sstream>
 #include <iomanip>
-#include <random>
 
 using json = nlohmann::json;
 
@@ -52,9 +51,22 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
 }
 
 // ── CRUD ─────────────────────────────────────────────────────
+// ------------------------------
+// save
+//
+// Behavior:
+//   Wrapped in BEGIN/COMMIT transaction for atomicity
+//   Saves project record + all QTCS links together
+//   Uses INSERT OR REPLACE (upsert)
+//
+// Returns:
+//   true on success, false on DB error or rollback
+// ------------------------------
 bool ProjectF16::save() const {
     auto* db = DatabasePool::instance().get("projects");
     if (!db) { LOG_ERROR("ProjectF16::save — projects DB not available"); return false; }
+    // Wrap in transaction for atomicity
+    db->beginTransaction();
 
     LOG_DEBUG("Saving ProjectF16: " + projectId);
 
@@ -84,26 +96,26 @@ bool ProjectF16::save() const {
         )
     )", {
         BindParam::text(projectId),
-        ton(workflowInstanceId),
-        ton(workflowStatus),
-        ton(workflowCurrentState),
+        textOrNull(workflowInstanceId),
+        textOrNull(workflowStatus),
+        textOrNull(workflowCurrentState),
         BindParam::text(regNumber.toString()),
         BindParam::text(regNumber.dept),
         BindParam::int64(regNumber.sequence),
         BindParam::int64(regNumber.year),
         BindParam::text(title),
-        ton(codename),
+        textOrNull(codename),
         BindParam::text(projectType),
         BindParam::text(sizeClass),
-        ton(ownerTeamId),
-        ton(leadId),
-        ton(sponsorId),
+        textOrNull(ownerTeamId),
+        textOrNull(leadId),
+        textOrNull(sponsorId),
         BindParam::text(status),
-        ton(phase),
-        ton(startDatePlanned),
-        ton(startDateActual),
-        ton(endDatePlanned),
-        ton(endDateActual),
+        textOrNull(phase),
+        textOrNull(startDatePlanned),
+        textOrNull(startDateActual),
+        textOrNull(endDatePlanned),
+        textOrNull(endDateActual),
         BindParam::int64(durationPlannedDays),
         BindParam::int64(durationActualDays),
         BindParam::int64(scheduleVarianceDays),
@@ -120,28 +132,33 @@ bool ProjectF16::save() const {
         BindParam::real(eac),
         BindParam::real(etc),
         BindParam::real(vac),
-        ton(scopeStatement),
-        ton(scopeVersion),
-        ton(scopeLastChanged),
-        ton(scopeChangeReason),
+        textOrNull(scopeStatement),
+        textOrNull(scopeVersion),
+        textOrNull(scopeLastChanged),
+        textOrNull(scopeChangeReason),
         BindParam::int64(scopeChangeCount),
-        ton(priority),
-        ton(complexity),
-        ton(strategicAlignment),
-        ton(qualityGateId),
-        ton(communicationPlanId),
+        textOrNull(priority),
+        textOrNull(complexity),
+        textOrNull(strategicAlignment),
+        textOrNull(qualityGateId),
+        textOrNull(communicationPlanId),
         BindParam::text(currency),
-        ton(externalRef),
-        ton(methodology),
-        ton(classification),
-        ton(links),
+        textOrNull(externalRef),
+        textOrNull(methodology),
+        textOrNull(classification),
+        textOrNull(links),
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
     });
 
-    if (ok) LOG_INFO("ProjectF16 saved: " + projectId);
-    else    LOG_ERROR("ProjectF16 save failed: " + projectId);
+    if (ok) {
+        LOG_INFO("ProjectF16 saved: " + projectId);
+        db->commitTransaction();
+    } else {
+        LOG_ERROR("ProjectF16 save failed: " + projectId);
+        db->rollbackTransaction();
+    }
     return ok;
 }
 
@@ -157,60 +174,60 @@ void ProjectF16::fromRow(const Row& r) {
         auto v = get(k); return v.empty() ? 0 : std::stoi(v);
     };
 
-    projectId            = get("project_id");
-    workflowInstanceId   = get("workflow_instance_id");
-    workflowStatus       = get("workflow_status");
-    workflowCurrentState = get("workflow_current_state");
-    regNumber.dept       = get("reg_dept");
-    regNumber.sequence   = getI("reg_sequence");
-    regNumber.year       = getI("reg_year");
-    title                = get("title");
-    codename             = get("codename");
-    projectType          = get("project_type");
-    sizeClass            = get("size_class");
-    ownerTeamId          = get("owner_team_id");
-    leadId               = get("lead_id");
-    sponsorId            = get("sponsor_id");
-    status               = get("status");
-    phase                = get("phase");
-    startDatePlanned     = get("start_date_planned");
-    startDateActual      = get("start_date_actual");
-    endDatePlanned       = get("end_date_planned");
-    endDateActual        = get("end_date_actual");
-    durationPlannedDays  = getI("duration_planned_days");
-    durationActualDays   = getI("duration_actual_days");
-    scheduleVarianceDays = getI("schedule_variance_days");
-    budgetPlanned        = getD("budget_planned");
-    budgetApproved       = getD("budget_approved");
-    budgetCommitted      = getD("budget_committed");
-    budgetActual         = getD("budget_actual");
-    costVariance         = getD("cost_variance");
-    cpi                  = getD("cost_performance_index");
-    spi                  = getD("schedule_performance_index");
-    earnedValue          = getD("earned_value");
-    plannedValue         = getD("planned_value");
-    actualCost           = getD("actual_cost");
-    eac                  = getD("estimate_at_completion");
-    etc                  = getD("estimate_to_complete");
-    vac                  = getD("variance_at_completion");
-    scopeStatement       = get("scope_statement");
-    scopeVersion         = get("scope_version");
-    scopeLastChanged     = get("scope_last_changed");
-    scopeChangeReason    = get("scope_change_reason");
-    scopeChangeCount     = getI("scope_change_count");
-    priority             = get("priority");
-    complexity           = get("complexity");
-    strategicAlignment   = get("strategic_alignment");
-    qualityGateId        = get("quality_gate_id");
-    communicationPlanId  = get("communication_plan_id");
-    currency             = get("currency");
-    externalRef          = get("external_ref");
-    methodology          = get("methodology");
-    classification       = get("classification");
-    links                = get("links");
-    notes                = get("notes");
-    createdAt            = get("created_at");
-    updatedAt            = get("updated_at");
+    projectId            = rowGet(r,"project_id");
+    workflowInstanceId   = rowGet(r,"workflow_instance_id");
+    workflowStatus       = rowGet(r,"workflow_status");
+    workflowCurrentState = rowGet(r,"workflow_current_state");
+    regNumber.dept       = rowGet(r,"reg_dept");
+    regNumber.sequence   = rowGetInt(r,"reg_sequence");
+    regNumber.year       = rowGetInt(r,"reg_year");
+    title                = rowGet(r,"title");
+    codename             = rowGet(r,"codename");
+    projectType          = rowGet(r,"project_type");
+    sizeClass            = rowGet(r,"size_class");
+    ownerTeamId          = rowGet(r,"owner_team_id");
+    leadId               = rowGet(r,"lead_id");
+    sponsorId            = rowGet(r,"sponsor_id");
+    status               = rowGet(r,"status");
+    phase                = rowGet(r,"phase");
+    startDatePlanned     = rowGet(r,"start_date_planned");
+    startDateActual      = rowGet(r,"start_date_actual");
+    endDatePlanned       = rowGet(r,"end_date_planned");
+    endDateActual        = rowGet(r,"end_date_actual");
+    durationPlannedDays  = rowGetInt(r,"duration_planned_days");
+    durationActualDays   = rowGetInt(r,"duration_actual_days");
+    scheduleVarianceDays = rowGetInt(r,"schedule_variance_days");
+    budgetPlanned        = rowGetDbl(r,"budget_planned");
+    budgetApproved       = rowGetDbl(r,"budget_approved");
+    budgetCommitted      = rowGetDbl(r,"budget_committed");
+    budgetActual         = rowGetDbl(r,"budget_actual");
+    costVariance         = rowGetDbl(r,"cost_variance");
+    cpi                  = rowGetDbl(r,"cost_performance_index");
+    spi                  = rowGetDbl(r,"schedule_performance_index");
+    earnedValue          = rowGetDbl(r,"earned_value");
+    plannedValue         = rowGetDbl(r,"planned_value");
+    actualCost           = rowGetDbl(r,"actual_cost");
+    eac                  = rowGetDbl(r,"estimate_at_completion");
+    etc                  = rowGetDbl(r,"estimate_to_complete");
+    vac                  = rowGetDbl(r,"variance_at_completion");
+    scopeStatement       = rowGet(r,"scope_statement");
+    scopeVersion         = rowGet(r,"scope_version");
+    scopeLastChanged     = rowGet(r,"scope_last_changed");
+    scopeChangeReason    = rowGet(r,"scope_change_reason");
+    scopeChangeCount     = rowGetInt(r,"scope_change_count");
+    priority             = rowGet(r,"priority");
+    complexity           = rowGet(r,"complexity");
+    strategicAlignment   = rowGet(r,"strategic_alignment");
+    qualityGateId        = rowGet(r,"quality_gate_id");
+    communicationPlanId  = rowGet(r,"communication_plan_id");
+    currency             = rowGet(r,"currency");
+    externalRef          = rowGet(r,"external_ref");
+    methodology          = rowGet(r,"methodology");
+    classification       = rowGet(r,"classification");
+    links                = rowGet(r,"links");
+    notes                = rowGet(r,"notes");
+    createdAt            = rowGet(r,"created_at");
+    updatedAt            = rowGet(r,"updated_at");
 }
 
 bool ProjectF16::load(const std::string& id) {
@@ -343,19 +360,7 @@ void ProjectF16::loadQTCSLinks() {
     scopeIds   = loadIds("project_scope",   "scope_id");
 }
 
-// ── Trackable management ─────────────────────────────────────
-std::shared_ptr<TrackableItem> ProjectF16::addTrackable(
-    const std::string& title_, const std::string& createdBy_)
-{
-    auto t = TrackableItem::create("project", projectId, title_, createdBy_);
-    t->save();
-    trackables.push_back(t);
-    return t;
-}
 
-void ProjectF16::loadTrackables() {
-    trackables = TrackableItem::loadForEntity("project", projectId);
-}
 
 // ── Earned value recalculation ────────────────────────────────
 void ProjectF16::recalcEarnedValue() {
@@ -408,12 +413,12 @@ std::string ProjectF16::convertToTask(const std::string& parentProjectId) {
         BindParam::text(taskReg.toString()),
         BindParam::text(parentProjectId),
         BindParam::text(title + " [converted from F16/" + projectId + "]"),
-        ton(scopeStatement),
+        textOrNull(scopeStatement),
         BindParam::text(status),
-        ton(priority),
+        textOrNull(priority),
         BindParam::real(budgetPlanned),
-        ton(startDatePlanned),
-        ton(endDatePlanned),
+        textOrNull(startDatePlanned),
+        textOrNull(endDatePlanned),
         BindParam::text(regNumber.toString()),
         BindParam::text(notes),
         BindParam::text(nowIso())

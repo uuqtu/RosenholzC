@@ -1,5 +1,12 @@
 #pragma once
 // ============================================================
+// Logger.h  —  Structured application logger
+//
+// Log levels: DEBUG < INFO < WARN < ERROR
+// Use macros: LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR
+// Output includes timestamp, level, and caller context.
+// ============================================================
+// ============================================================
 // Logger.h  —  Verbosity-controlled logging subsystem
 // Levels: DEBUG < INFO < WARN < ERROR
 // Only messages at or above the current level are emitted.

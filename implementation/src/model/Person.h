@@ -1,3 +1,10 @@
+// ============================================================
+// Person.h  —  Person entity (PER)
+//
+// DDR-Aktenzeichen: XV/PER/{seq}/{year}
+// Persons can be project leads, task assignees, or approvers
+// dayRate supports EV cost calculations
+// ============================================================
 #pragma once
 #include "Utils.h"
 // ============================================================

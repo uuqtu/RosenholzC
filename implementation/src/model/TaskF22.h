@@ -1,3 +1,11 @@
+// ============================================================
+// TaskF22.h  —  Task entity (Aufgabenkartei F22)
+//
+// DDR-Aktenzeichen: XV/F22/{seq}/{year}
+// Tasks belong to a project (projectId required)
+// Supports: WBS hierarchy (parentTaskId), effort tracking,
+//   cost tracking, and workflow attachment
+// ============================================================
 #pragma once
 #include "Utils.h"
 // ============================================================
@@ -15,7 +23,6 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include "Trackable.h"
 #include "../core/Database.h"
 #include "../core/RegNumber.h"
 #include <nlohmann/json.hpp>
@@ -78,8 +85,6 @@ public:
     /// meeting IDs — meetings are loaded separately via Meeting class
     std::vector<std::string> meetingIds;
 
-    // ── Trackable items ───────────────────────────────────
-    std::vector<std::shared_ptr<TrackableItem>> trackables;
 
     // ── External ──────────────────────────────────────────
     std::string externalRef;
@@ -111,11 +116,6 @@ public:
     bool addTime   (const std::string& id);
     bool addScope  (const std::string& id);
     void loadQTCSLinks();
-
-    // ── Trackable ────────────────────────────────────────
-    std::shared_ptr<TrackableItem> addTrackable(
-        const std::string& title, const std::string& createdBy = "");
-    void loadTrackables();
 
     // ── Reassign ─────────────────────────────────────────
     bool reassignTo(const std::string& newAssigneeId);

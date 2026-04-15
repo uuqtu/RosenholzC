@@ -30,13 +30,13 @@ bool Milestone::save() const {
          contractual,payment_trigger,links,notes,created_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
-        BindParam::text(milestoneId), ton(workflowInstanceId), ton(workflowStatus), ton(workflowCurrentState),
-        BindParam::text(projectId), ton(taskId), ton(ownerId),
-        BindParam::text(title), ton(description), ton(milestoneType),
-        ton(plannedDate), ton(actualDate), BindParam::int64(varianceDays),
-        BindParam::text(status.empty()?"pending":status), ton(criteria),
+        BindParam::text(milestoneId), textOrNull(workflowInstanceId), textOrNull(workflowStatus), textOrNull(workflowCurrentState),
+        BindParam::text(projectId), textOrNull(taskId), textOrNull(ownerId),
+        BindParam::text(title), textOrNull(description), textOrNull(milestoneType),
+        textOrNull(plannedDate), textOrNull(actualDate), BindParam::int64(varianceDays),
+        BindParam::text(status.empty()?"pending":status), textOrNull(criteria),
         BindParam::int64(contractual?1:0), BindParam::int64(paymentTrigger?1:0),
-        ton(links), BindParam::text(notes.empty()?"{}":notes), BindParam::text(createdAt)
+        textOrNull(links), BindParam::text(notes.empty()?"{}":notes), BindParam::text(createdAt)
     });
     if (ok) LOG_INFO("Milestone saved: " + milestoneId);
     else    LOG_ERROR("Milestone save failed: " + milestoneId);

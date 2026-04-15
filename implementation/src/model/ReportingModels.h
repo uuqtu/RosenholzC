@@ -1,8 +1,6 @@
 #pragma once
 // ============================================================
-// ReportingModels.h  —  Measure, QualityGate, KPI,
-//                        LessonLearned, DecisionLog,
-//                        ChangeRequest, AssumptionConstraint
+// ReportingModels.h  —  Measure, QualityGate, ChangeRequest, Meeting
 // All stored in reporting.db or tracking.db (per schema).
 // ============================================================
 #include <string>
@@ -60,71 +58,11 @@ public:
 private: void fromRow(const Row& r);
 };
 
-// ── KPI ──────────────────────────────────────────────────────
-class KPI {
-public:
-    std::string kpiId, projectId, taskId, ownerId;
-    std::string title, description, category, dimension, unit;
-    double targetValue{0}, actualValue{0}, baselineValue{0};
-    double thresholdGreen{0}, thresholdAmber{0}, thresholdRed{0};
-    std::string ragStatus;  // green|amber|red
-    std::string measurementMethod, measurementFrequency;
-    std::string lastMeasuredDate, nextMeasurementDate;
-    std::string trend;      // up|down|stable
-    std::string links, notes, createdAt;
 
-    bool save() const; bool load(const std::string& id); bool remove(); bool update();
-    static std::shared_ptr<KPI> create(const std::string& projectId, const std::string& title, const std::string& unit="");
-    static std::shared_ptr<KPI> loadById(const std::string& id);
-    static std::vector<std::shared_ptr<KPI>> loadForProject(const std::string& pid);
-    void updateRAG();  // recalculate rag from thresholds
-    bool recordMeasurement(double value, const std::string& date="");
-    nlohmann::json toJson() const;
-private: void fromRow(const Row& r);
-};
 
-// ── LessonLearned ────────────────────────────────────────────
-class LessonLearned {
-public:
-    std::string lessonId, workflowInstanceId, workflowStatus, workflowCurrentState;
-    std::string projectId, taskId, incidentId;
-    std::string submittedBy, reviewedBy;
-    std::string title, description, category, dimension;
-    std::string identifiedDate, reviewedDate;
-    std::string status;  // draft|reviewed|approved|published
-    std::string impact, recommendation, actionTaken;
-    bool addedToKb{false};
-    std::string tags, links, notes, createdAt;
 
-    bool save() const; bool load(const std::string& id); bool remove(); bool update();
-    static std::shared_ptr<LessonLearned> create(const std::string& projectId, const std::string& title);
-    static std::shared_ptr<LessonLearned> loadById(const std::string& id);
-    static std::vector<std::shared_ptr<LessonLearned>> loadForProject(const std::string& pid);
-    static std::vector<std::shared_ptr<LessonLearned>> loadKnowledgeBase();
-    nlohmann::json toJson() const;
-private: void fromRow(const Row& r);
-};
 
-// ── DecisionLog ──────────────────────────────────────────────
-class DecisionLog {
-public:
-    std::string decisionId, workflowInstanceId, workflowStatus, workflowCurrentState;
-    std::string projectId, taskId, meetingId, decidedBy;
-    std::string title, description, decisionType;
-    std::string status;  // open|implemented|superseded|cancelled
-    std::string decisionDate, reviewDate;
-    std::string optionsConsidered, rationale;
-    std::string impactCost, impactSchedule, impactScope, impactQuality;
-    std::string assumptionsMade;
-    std::string links, notes, createdAt;
 
-    bool save() const; bool load(const std::string& id); bool remove(); bool update();
-    static std::shared_ptr<DecisionLog> create(const std::string& projectId, const std::string& title);
-    static std::shared_ptr<DecisionLog> loadById(const std::string& id);
-    static std::vector<std::shared_ptr<DecisionLog>> loadForProject(const std::string& pid);
-    nlohmann::json toJson() const;
-private: void fromRow(const Row& r);
-};
 
 // ── ChangeRequest ─────────────────────────────────────────────
 class ChangeRequest {
@@ -150,29 +88,7 @@ public:
 private: void fromRow(const Row& r);
 };
 
-// ── AssumptionConstraint ──────────────────────────────────────
-class AssumptionConstraint {
-public:
-    std::string acId, workflowInstanceId, workflowStatus, workflowCurrentState;
-    std::string projectId, taskId, ownerId;
-    std::string title, description;
-    std::string acType;      // assumption|constraint
-    std::string category, dimension;
-    std::string status;      // active|validated|breached|closed
-    std::string identifiedDate, reviewDate;
-    std::string validationMethod, validatedDate, validatedBy;
-    bool breached{false};
-    std::string breachedDate, impactIfWrong, mitigation;
-    std::string links, notes, createdAt;
 
-    bool save() const; bool load(const std::string& id); bool remove(); bool update();
-    static std::shared_ptr<AssumptionConstraint> create(const std::string& projectId, const std::string& title, const std::string& type="assumption");
-    static std::shared_ptr<AssumptionConstraint> loadById(const std::string& id);
-    static std::vector<std::shared_ptr<AssumptionConstraint>> loadForProject(const std::string& pid);
-    bool markBreached(const std::string& date="");
-    nlohmann::json toJson() const;
-private: void fromRow(const Row& r);
-};
 
 // ── Meeting ───────────────────────────────────────────────────
 class Meeting {

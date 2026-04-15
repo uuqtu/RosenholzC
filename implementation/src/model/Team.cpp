@@ -5,12 +5,8 @@
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
+#include "../core/Repository.h"
 #include "../core/RegNumber.h"
-#include <chrono>
-#include <ctime>
-#include <sstream>
-#include <iomanip>
-#include <random>
 
 using json = nlohmann::json;
 namespace Rosenholz {
@@ -57,7 +53,7 @@ bool TeamMember::save() const {
         BindParam::text(membershipId),
         BindParam::text(teamId),
         BindParam::text(personId),
-        ton(role), ton(roleCategory), ton(seniorityInTeam), ton(memberType),
+        textOrNull(role), textOrNull(roleCategory), textOrNull(seniorityInTeam), textOrNull(memberType),
         BindParam::int64(isLead?1:0),
         BindParam::int64(isDeputy?1:0),
         BindParam::int64(isCoreMemember?1:0),
@@ -65,15 +61,15 @@ bool TeamMember::save() const {
         BindParam::int64(isObserver?1:0),
         BindParam::real(allocationPct),
         BindParam::real(fteEquivalent),
-        ton(startDate), ton(endDate), ton(assignmentType),
-        ton(primarySkill), ton(secondarySkills),
-        ton(certificationsRelevant), ton(clearanceLevel),
+        textOrNull(startDate), textOrNull(endDate), textOrNull(assignmentType),
+        textOrNull(primarySkill), textOrNull(secondarySkills),
+        textOrNull(certificationsRelevant), textOrNull(clearanceLevel),
         BindParam::real(plannedHoursPerWeek),
         BindParam::real(actualHoursPerWeek),
         BindParam::real(costRate),
-        ton(costCenter),
+        textOrNull(costCenter),
         BindParam::text(status.empty() ? "active" : status),
-        ton(onboardedDate), ton(offboardedDate), ton(offboardingReason),
+        textOrNull(onboardedDate), textOrNull(offboardedDate), textOrNull(offboardingReason),
         BindParam::text(notes.empty() ? "{}" : notes)
     });
     if (!ok) LOG_ERROR("TeamMember save failed: " + membershipId);
@@ -220,21 +216,21 @@ bool Team::save() const {
     )", {
         BindParam::text(teamId),
         BindParam::text(name),
-        ton(abbreviation),
-        ton(rosenholzEquiv),
-        ton(parentTeamId),   // soft ref — NULL when empty
-        ton(leadId),
-        ton(location),
-        ton(type),
+        textOrNull(abbreviation),
+        textOrNull(rosenholzEquiv),
+        textOrNull(parentTeamId),   // soft ref — NULL when empty
+        textOrNull(leadId),
+        textOrNull(location),
+        textOrNull(type),
         BindParam::int64(headcountPlanned),
         BindParam::int64(headcountActual),
         BindParam::real(budgetAllocated),
         BindParam::real(budgetConsumed),
-        ton(methodology),
-        ton(tools),
+        textOrNull(methodology),
+        textOrNull(tools),
         BindParam::text(status.empty() ? "active" : status),
-        ton(externalRef),
-        ton(links),
+        textOrNull(externalRef),
+        textOrNull(links),
         BindParam::text(notes.empty() ? "{}" : notes)
     });
     if (ok) LOG_INFO("Team saved: " + teamId + " " + name);

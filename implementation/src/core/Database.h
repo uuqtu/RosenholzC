@@ -1,5 +1,12 @@
 #pragma once
 // ============================================================
+// Database.h  —  SQLite connection wrapper and pool
+//
+// DatabasePool is a singleton managing 6 SQLite databases.
+// Each DB opened once at startup; shared across the app.
+// Thread safety: single-threaded CLI; no mutex needed.
+// ============================================================
+// ============================================================
 // Database.h  —  Thin SQLite abstraction layer
 //
 // Multiple database files are used for performance isolation:
@@ -121,7 +128,6 @@ public:
     void closeAll();
 
     /// Run pending schema migrations on all databases
-    bool migrateAll();
 
 private:
     DatabasePool() = default;

@@ -1,5 +1,12 @@
 #pragma once
 // ============================================================
+// Config.h  —  Application configuration singleton
+//
+// Loads settings.json at startup.
+// Provides typed access to DB paths, MFS root,
+// backup destination, and registratur settings.
+// ============================================================
+// ============================================================
 // Config.h  —  Application configuration manager
 //
 // Reads/writes settings.json in the application directory.

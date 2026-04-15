@@ -83,7 +83,7 @@ inline std::string genId(const std::string& typeCode) {
 
 /// Return NULL BindParam when string is empty, TEXT otherwise.
 /// Prevents FK constraint failures on soft references.
-inline BindParam ton(const std::string& s) {
+inline BindParam textOrNull(const std::string& s) {
     return s.empty() ? BindParam::null() : BindParam::text(s);
 }
 
@@ -97,11 +97,7 @@ inline double safeDbl(const std::string& s, double def = 0.0) {
     return s.empty() ? def : std::stod(s);
 }
 
-/// Get value from Row map safely
-inline std::string rowGet(const Row& r, const std::string& k) {
-    auto it = r.find(k);
-    return it != r.end() ? it->second : "";
-}
+// rowGet() defined in core/Repository.h
 
 // ── MFS physical folder path helpers ───────────────────────
 // Every item that gets materialised to the MFS tree lives under:

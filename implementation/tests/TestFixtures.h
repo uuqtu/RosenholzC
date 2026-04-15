@@ -1,0 +1,227 @@
+#pragma once
+// ============================================================
+// TestFixtures.h  —  Test Fixture Pattern for Rosenholz PM
+//
+// Each fixture creates self-contained test data and can
+// optionally clean up after itself. Tests are fully independent.
+// ============================================================
+#include "../src/model/Person.h"
+#include "../src/model/Team.h"
+#include "../src/model/ProjectF16.h"
+#include "../src/model/TaskF22.h"
+#include "../src/model/IncidentF18.h"
+#include "../src/model/Risk.h"
+#include "../src/model/Document.h"
+#include "../src/model/Milestone.h"
+#include "../src/model/ReportingModels.h"
+#include "../src/workflow/WorkflowEngine.h"
+#include <memory>
+#include <vector>
+#include <string>
+
+namespace Rosenholz { namespace Test {
+
+// ── Base fixture ─────────────────────────────────────────────
+struct Fixture {
+    std::vector<std::string> createdIds;  // tracked for cleanup
+
+    virtual ~Fixture() = default;
+
+    void trackId(const std::string& id) {
+        if (!id.empty()) createdIds.push_back(id);
+    }
+};
+
+// ── Person fixture ────────────────────────────────────────────
+struct PersonFixture : Fixture {
+    std::shared_ptr<Person> person;
+
+    explicit PersonFixture(const std::string& first    = "Test",
+                           const std::string& last     = "Person",
+                           const std::string& email    = "test@fixture.de",
+                           const std::string& type     = "internal")
+    {
+        person = Person::create(first, last, email, type);
+        person->roleTitle   = "Test Role";
+        person->department  = "Test Dept";
+        person->dayRate     = 800.0;
+        person->save();
+        trackId(person->personId);
+    }
+};
+
+// ── Team fixture ──────────────────────────────────────────────
+struct TeamFixture : Fixture {
+    std::shared_ptr<Team>   team;
+    std::shared_ptr<Person> lead;
+
+    explicit TeamFixture(const std::string& name = "Test Team",
+                         const std::string& type = "engineering")
+    {
+        lead = Person::create("Team","Lead","lead@fixture.de","internal");
+        lead->save();
+        trackId(lead->personId);
+
+        team = Team::create(name, type);
+        team->leadId = lead->personId;
+        team->save();
+        trackId(team->teamId);
+    }
+};
+
+// ── Project fixture ───────────────────────────────────────────
+struct ProjectFixture : Fixture {
+    std::shared_ptr<ProjectF16> project;
+    std::shared_ptr<Person>     lead;
+    std::shared_ptr<Team>       team;
+
+    explicit ProjectFixture(const std::string& title   = "Fixture-Vorgang",
+                            const std::string& type    = "OV",
+                            const std::string& size    = "medium")
+    {
+        lead = Person::create("Projekt","Leiter","pl@fixture.de","internal");
+        lead->save();
+        trackId(lead->personId);
+
+        team = Team::create("Fixture Team","engineering");
+        team->save();
+        trackId(team->teamId);
+
+        project = ProjectF16::create(title, type, size);
+        project->leadId       = lead->personId;
+        project->ownerTeamId  = team->teamId;
+        project->budgetPlanned= 100000.0;
+        project->startDatePlanned = "2025-01-01";
+        project->endDatePlanned   = "2025-12-31";
+        project->save();
+        trackId(project->projectId);
+    }
+};
+
+// ── Task fixture (requires project) ──────────────────────────
+struct TaskFixture : Fixture {
+    std::shared_ptr<TaskF22>    task;
+    std::shared_ptr<Person>     assignee;
+    ProjectFixture              projFix;
+
+    explicit TaskFixture(const std::string& title = "Fixture-Aufgabe")
+        : projFix()
+    {
+        assignee = Person::create("Task","Bearbeiter","tb@fixture.de","internal");
+        assignee->save();
+        trackId(assignee->personId);
+
+        task = TaskF22::create(projFix.project->projectId, title,
+                               assignee->personId, "");
+        task->wbsCode          = "1.1";
+        task->priority         = "high";
+        task->startDatePlanned = "2025-01-15";
+        task->dueDatePlanned   = "2025-03-31";
+        task->effortPlannedHrs = 40.0;
+        task->save();
+        trackId(task->taskId);
+    }
+};
+
+// ── Full project fixture (project + multiple tasks + team) ────
+struct FullProjectFixture : Fixture {
+    std::shared_ptr<ProjectF16>  project;
+    std::shared_ptr<Person>      lead;
+    std::shared_ptr<Person>      member1;
+    std::shared_ptr<Person>      member2;
+    std::shared_ptr<Team>        team;
+    std::shared_ptr<TaskF22>     task1;
+    std::shared_ptr<TaskF22>     task2;
+    std::shared_ptr<TaskF22>     childTask;
+    std::shared_ptr<IncidentF18> incident;
+    std::shared_ptr<Risk>        risk;
+
+    FullProjectFixture() {
+        lead    = Person::create("Full","Leiter","fl@fixture.de","internal");
+        member1 = Person::create("Full","Member1","fm1@fixture.de","internal");
+        member2 = Person::create("Full","Member2","fm2@fixture.de","external");
+        for (auto& p : {lead, member1, member2}) { p->save(); trackId(p->personId); }
+
+        team = Team::create("Full Fixture Team","cross-functional");
+        team->leadId = lead->personId;
+        team->save();
+        trackId(team->teamId);
+        team->addMember(member1->personId, "developer");
+        team->addMember(member2->personId, "qa");
+
+        project = ProjectF16::create("Full Fixture Vorgang","OV","large");
+        project->leadId       = lead->personId;
+        project->ownerTeamId  = team->teamId;
+        project->budgetPlanned= 500000.0;
+        project->earnedValue  = 250000.0;
+        project->plannedValue = 300000.0;
+        project->actualCost   = 260000.0;
+        project->recalcEarnedValue();
+        project->save();
+        trackId(project->projectId);
+
+        task1 = TaskF22::create(project->projectId,"Analyse",member1->personId,"");
+        task1->wbsCode="1.1"; task1->effortPlannedHrs=80.0; task1->save();
+        trackId(task1->taskId);
+
+        task2 = TaskF22::create(project->projectId,"Implementierung",member1->personId,"");
+        task2->wbsCode="1.2"; task2->effortPlannedHrs=120.0; task2->save();
+        trackId(task2->taskId);
+
+        childTask = TaskF22::create(project->projectId,"Teilaufgabe",member2->personId,
+                                    task2->taskId);
+        childTask->wbsCode="1.2.1"; childTask->save();
+        trackId(childTask->taskId);
+
+        incident = IncidentF18::create(project->projectId,
+                                       "Fixture-Vorfall","high",member2->personId);
+        incident->save();
+        trackId(incident->incidentId);
+
+        risk = Risk::create(project->projectId,"Fixture-Risiko");
+        risk->probabilityScore=3; risk->impactScoreTime=4; risk->impactScoreCost=4; risk->recalcScore(); risk->save();
+        trackId(risk->riskId);
+    }
+};
+
+// ── Workflow fixture ──────────────────────────────────────────
+struct WorkflowFixture : Fixture {
+    std::shared_ptr<WorkflowTemplate> templ;
+    std::shared_ptr<WorkflowInstance> instance;
+    ProjectFixture                    projFix;
+
+    WorkflowFixture() : projFix() {
+        templ = WorkflowTemplate::create("Fixture-Workflow","sequential");
+        templ->entityTypes = "project";
+
+        WorkflowTemplateAction init;
+        init.tplActionId = genId("WFT"); init.templateId = templ->templateId;
+        init.title = "Initialisierung"; init.sequenceOrder = 0;
+        init.isInitialize = true; init.autoApprove = true;
+        templ->templateActions.push_back(init);
+
+        WorkflowTemplateAction step;
+        step.tplActionId = genId("WFT"); step.templateId = templ->templateId;
+        step.title = "Prüfschritt"; step.sequenceOrder = 1;
+        step.predecessorIds = init.tplActionId;
+        templ->templateActions.push_back(step);
+
+        WorkflowTemplateAction final_;
+        final_.tplActionId = genId("WFT"); final_.templateId = templ->templateId;
+        final_.title = "Abschluss"; final_.sequenceOrder = 2;
+        final_.predecessorIds = step.tplActionId;
+        final_.isFinal = true; final_.requiresDecisionLogEntry = true;
+        templ->templateActions.push_back(final_);
+
+        templ->save();
+        trackId(templ->templateId);
+
+        instance = WorkflowEngine::startFromTemplate(
+            templ->templateId,
+            "project", projFix.project->projectId,
+            "Fixture-Instanz");
+        if (instance) trackId(instance->instanceId);
+    }
+};
+
+}} // namespace

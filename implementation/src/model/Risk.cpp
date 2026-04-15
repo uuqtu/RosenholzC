@@ -3,11 +3,7 @@
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
-#include <chrono>
-#include <ctime>
-#include <sstream>
-#include <iomanip>
-#include <random>
+#include "../core/Repository.h"
 
 namespace Rosenholz {
 
@@ -38,22 +34,22 @@ bool Risk::save() const {
          escalated,escalated_to,links,notes)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
-        BindParam::text(riskId), ton(workflowInstanceId),
-        ton(workflowStatus), ton(workflowCurrentState),
-        BindParam::text(projectId), ton(taskId), ton(ownerId),
-        ton(identifiedBy), BindParam::text(title), ton(description),
-        ton(category), ton(subcategory), ton(riskType),
-        BindParam::text(status), ton(identifiedDate),
-        ton(reviewDate), ton(closedDate),
+        BindParam::text(riskId), textOrNull(workflowInstanceId),
+        textOrNull(workflowStatus), textOrNull(workflowCurrentState),
+        BindParam::text(projectId), textOrNull(taskId), textOrNull(ownerId),
+        textOrNull(identifiedBy), BindParam::text(title), textOrNull(description),
+        textOrNull(category), textOrNull(subcategory), textOrNull(riskType),
+        BindParam::text(status), textOrNull(identifiedDate),
+        textOrNull(reviewDate), textOrNull(closedDate),
         BindParam::int64(probabilityScore), BindParam::int64(impactScoreTime),
         BindParam::int64(impactScoreCost), BindParam::int64(impactScoreQuality),
         BindParam::int64(impactScoreScope), BindParam::int64(overallRiskScore),
-        ton(riskLevel), ton(responseStrategy),
-        ton(contingencyPlan), BindParam::real(costReserve),
-        BindParam::int64(scheduleReserveDays), ton(triggerCondition),
-        ton(earlyWarning), ton(residualRiskLevel),
-        BindParam::int64(escalated?1:0), ton(escalatedTo),
-        ton(links), BindParam::text(notes)
+        textOrNull(riskLevel), textOrNull(responseStrategy),
+        textOrNull(contingencyPlan), BindParam::real(costReserve),
+        BindParam::int64(scheduleReserveDays), textOrNull(triggerCondition),
+        textOrNull(earlyWarning), textOrNull(residualRiskLevel),
+        BindParam::int64(escalated?1:0), textOrNull(escalatedTo),
+        textOrNull(links), BindParam::text(notes)
     });
     if (ok) LOG_INFO("Risk saved: " + riskId); else LOG_ERROR("Risk save failed: " + riskId);
     return ok;
@@ -112,6 +108,14 @@ std::vector<std::shared_ptr<Risk>> Risk::loadHighRisks() {
     LOG_INFO("Loaded "+std::to_string(result.size())+" high/critical open risks");
     return result;
 }
+// ------------------------------
+// recalcScore
+//
+// Behavior:
+//   overallRiskScore = probabilityScore × max(impactScoreTime,
+//     impactScoreCost, impactScoreQuality, impactScoreScope)
+//   Sets riskLevel: ≥15→critical ≥9→high ≥4→medium else→low
+// ------------------------------
 void Risk::recalcScore() {
     overallRiskScore = probabilityScore *
         std::max({impactScoreTime, impactScoreCost, impactScoreQuality, impactScoreScope});
@@ -119,10 +123,6 @@ void Risk::recalcScore() {
 }
 bool Risk::reassignOwner(const std::string& id) { ownerId=id; return update(); }
 bool Risk::reassignToProject(const std::string& id) { projectId=id; return update(); }
-std::shared_ptr<TrackableItem> Risk::addTrackable(const std::string& t, const std::string& by) {
-    auto ti=TrackableItem::create("risk",riskId,t,by); ti->save(); trackables.push_back(ti); return ti;
-}
-void Risk::loadTrackables() { trackables=TrackableItem::loadForEntity("risk",riskId); }
 nlohmann::json Risk::toJson() const {
     return {{"riskId",riskId},{"title",title},{"riskLevel",riskLevel},{"status",status},
             {"overallRiskScore",overallRiskScore},{"projectId",projectId}};

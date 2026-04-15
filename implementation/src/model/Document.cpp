@@ -1,15 +1,16 @@
 // Document.cpp
 #include "Document.h"
+#include <cstdlib>
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
+#include "../core/Repository.h"
 #include "../core/FileOps.h"
 #include "../core/Config.h"
 #include <chrono>
 #include <ctime>
 #include <sstream>
 #include <iomanip>
-#include <random>
 #include <algorithm>
 
 namespace Rosenholz {
@@ -17,6 +18,22 @@ namespace Rosenholz {
 
 
 
+// ------------------------------
+// create
+//
+// Parameters:
+//   title                : document title (required)
+//   docType              : report|specification|contract|…
+//   projectId            : owning project (empty = orphan)
+//
+// Behavior:
+//   Generates DDR ID: XV/DOK/{seq}/{year}
+//   Sets dateCreated, status=draft, version=1.0
+//   Does NOT save — caller must call save()
+//
+// Returns:
+//   Shared pointer to in-memory Document
+// ------------------------------
 std::shared_ptr<Document> Document::create(
     const std::string& title_, const std::string& type_, const std::string& pid)
 {
@@ -38,25 +55,25 @@ bool Document::save() const {
         (document_id,workflow_instance_id,workflow_status,workflow_current_state,
          project_id,task_id,author_id,approved_by,doc_type,doc_category,title,version,
          date_created,date_modified,date_approved,date_expires,status,classification,
-         volume_number,page_count,language,format,file_path,file_url,
+         volume_number,page_count,language,format,file_path,file_size,file_hash,file_url,
          external_ref,storage_system,tags,summary,links,notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
-        BindParam::text(documentId), ton(workflowInstanceId),
-        ton(workflowStatus), ton(workflowCurrentState),
-        ton(projectId), ton(taskId),
-        ton(authorId), ton(approvedBy),
-        BindParam::text(docType), ton(docCategory),
-        BindParam::text(title), ton(version),
-        BindParam::text(dateCreated), ton(dateModified),
-        ton(dateApproved), ton(dateExpires),
-        BindParam::text(status), ton(classification),
+        BindParam::text(documentId), textOrNull(workflowInstanceId),
+        textOrNull(workflowStatus), textOrNull(workflowCurrentState),
+        textOrNull(projectId), textOrNull(taskId),
+        textOrNull(authorId), textOrNull(approvedBy),
+        BindParam::text(docType), textOrNull(docCategory),
+        BindParam::text(title), textOrNull(version),
+        BindParam::text(dateCreated), textOrNull(dateModified),
+        textOrNull(dateApproved), textOrNull(dateExpires),
+        BindParam::text(status), textOrNull(classification),
         BindParam::int64(volumeNumber), BindParam::int64(pageCount),
-        BindParam::text(language), ton(format),
-        ton(filePath), ton(fileUrl),
-        ton(externalRef), ton(storageSystem),
-        ton(tags), ton(summary),
-        ton(links), BindParam::text(notes),
+        BindParam::text(language), textOrNull(format),
+        textOrNull(filePath), BindParam::int64(fileSize), textOrNull(fileHash), textOrNull(fileUrl),
+        textOrNull(externalRef), textOrNull(storageSystem),
+        textOrNull(tags), textOrNull(summary),
+        textOrNull(links), BindParam::text(notes),
         BindParam::text(createdAt), BindParam::text(nowIso())
     });
     if (ok) LOG_INFO("Document saved: " + documentId);
@@ -78,6 +95,7 @@ void Document::fromRow(const Row& r) {
     volumeNumber=gi("volume_number"); pageCount=gi("page_count");
     language=g("language"); format=g("format");
     filePath=g("file_path"); fileUrl=g("file_url");
+    { auto sv=g("file_size"); fileSize=sv.empty()?0:std::stoll(sv); } fileHash=g("file_hash");
     externalRef=g("external_ref"); storageSystem=g("storage_system");
     tags=g("tags"); summary=g("summary"); links=g("links"); notes=g("notes");
     createdAt=g("created_at"); updatedAt=g("updated_at");
@@ -196,6 +214,21 @@ std::string Document::archiveWebsite(const std::string& url, const std::string& 
     return FileOps::downloadUrl(url, destDir);
 }
 
+// ------------------------------
+// attachToEntity
+//
+// Parameters:
+//   entityType           : project|task|incident|workflow_instance|…
+//   entityId             : ID of the entity to link to
+//   relationship         : attached|mandatory|reference
+//
+// Behavior:
+//   Inserts into entity_documents table in documents.db
+//   Idempotent: INSERT OR IGNORE prevents duplicates
+//
+// Returns:
+//   true on success
+// ------------------------------
 bool Document::attachToEntity(const std::string& et, const std::string& eid, const std::string& rel) {
     auto* db = DatabasePool::instance().get("documents");
     if (!db) return false;
@@ -209,6 +242,196 @@ bool Document::reassignToTask(const std::string& id) { taskId=id; return update(
 nlohmann::json Document::toJson() const {
     return {{"documentId",documentId},{"title",title},{"docType",docType},
             {"format",format},{"status",status},{"fileUrl",fileUrl}};
+}
+
+// ══════════════════════════════════════════════════════════════
+// DOCUMENT VERSION MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+
+// ── SHA-256 via /usr/bin/sha256sum ───────────────────────────
+static std::string computeSHA256(const std::string& path) {
+    if (!FileOps::fileExists(path)) return "";
+    FILE* pipe = popen(("sha256sum \"" + path + "\" 2>/dev/null").c_str(), "r");
+    if (!pipe) return "";
+    char buf[256] = {};
+    fgets(buf, sizeof(buf), pipe);
+    pclose(pipe);
+    std::string s(buf);
+    // sha256sum output: "hash  filename"
+    size_t sp = s.find(' ');
+    return (sp != std::string::npos) ? s.substr(0, sp) : "";
+}
+
+// ── MFS document directory for this document ─────────────────
+static std::string docMFSDir(const Document& d) {
+    const std::string& mfsRoot = Config::instance().mfsPath();
+    // Primary parent: project or task
+    std::string parent = d.projectId.empty() ? d.taskId : d.projectId;
+    if (parent.empty()) return "";
+    std::string sane = sanitiseRegNr(parent);
+    // mfs/DOK/{parent_sane}/
+    return FileOps::joinPath(mfsRoot, "DOK", sane);
+}
+
+// ── MFS canonical filename for a document version ────────────
+static std::string mfsDocFilename(const Document& d, const std::string& versionSuffix = "") {
+    std::string docSane  = sanitiseRegNr(d.documentId);
+    std::string titleSafe = FileOps::sanitizeFilename(d.title);
+    if (titleSafe.size() > 40) titleSafe = titleSafe.substr(0, 40);
+    std::string ext = d.format.empty() ? "bin" : d.format;
+    // Format: {DOK-ID}_{Titel}_v{Version}.{ext}
+    std::string ver = versionSuffix.empty() ? d.version : versionSuffix;
+    return docSane + "_" + titleSafe + "_v" + ver + "." + ext;
+}
+
+bool Document::importLocalFile(const std::string& srcPath) {
+    if (!FileOps::fileExists(srcPath)) {
+        LOG_ERROR("importLocalFile: not found: " + srcPath);
+        return false;
+    }
+
+    std::string dir = docMFSDir(*this);
+    if (dir.empty()) {
+        LOG_ERROR("importLocalFile: document has no project/task reference");
+        return false;
+    }
+    FileOps::makeDirs(dir);
+
+    // Detect format from extension
+    if (format.empty()) {
+        std::string ext = FileOps::extension(srcPath);
+        if (!ext.empty()) format = ext.substr(1); // strip leading dot
+    }
+
+    std::string destName = mfsDocFilename(*this);
+    std::string destPath = FileOps::joinPath(dir, destName);
+
+    if (!FileOps::copyFile(srcPath, destPath, true)) {
+        LOG_ERROR("importLocalFile: copy failed " + srcPath + " → " + destPath);
+        return false;
+    }
+
+    filePath = destPath;
+    fileSize = FileOps::fileSize(destPath);
+    fileHash = computeSHA256(destPath);
+    LOG_INFO("Document imported to MFS: " + destPath);
+    return update();
+}
+
+bool Document::refreshFromUrl() {
+    if (fileUrl.empty()) {
+        LOG_WARN("refreshFromUrl: no URL set");
+        return false;
+    }
+
+    // Snapshot existing file first
+    if (!filePath.empty() && FileOps::fileExists(filePath))
+        snapshotVersion("Vor URL-Aktualisierung");
+
+    const std::string& base = Config::instance().basePath();
+    std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
+    FileOps::makeDirs(tmpDir);
+
+    // Download
+    std::string downloaded = FileOps::downloadUrl(fileUrl, tmpDir);
+    if (downloaded.empty()) {
+        LOG_ERROR("refreshFromUrl: download failed: " + fileUrl);
+        return false;
+    }
+
+    // Bump version
+    std::string oldVer = version;
+    try {
+        size_t dot = version.rfind('.');
+        if (dot != std::string::npos) {
+            int minor = std::stoi(version.substr(dot+1)) + 1;
+            version = version.substr(0, dot+1) + std::to_string(minor);
+        }
+    } catch(...) { version += ".r"; }
+
+    // Import into MFS
+    bool ok = importLocalFile(downloaded);
+    FileOps::deleteFile(downloaded);
+    if (ok) dateModified = nowIso();
+    return ok;
+}
+
+bool Document::snapshotVersion(const std::string& changeNote, const std::string& createdBy) {
+    // Copy current file to versioned name
+    std::string versionedPath;
+    if (!filePath.empty() && FileOps::fileExists(filePath)) {
+        std::string dir = FileOps::dirName(filePath);
+        std::string versName = mfsDocFilename(*this, version + "-snap");
+        versionedPath = FileOps::joinPath(dir, versName);
+        FileOps::copyFile(filePath, versionedPath, true);
+    }
+
+    auto* db = DatabasePool::instance().get("documents");
+    if (!db) return false;
+    std::string vid = genId("VER");
+    return db->exec(
+        "INSERT INTO document_versions"
+        "(version_id,document_id,version_number,file_path,file_size,file_hash,"
+        " created_by,change_note,created_at) VALUES(?,?,?,?,?,?,?,?,?);",
+        {BindParam::text(vid), BindParam::text(documentId),
+         BindParam::text(version), textOrNull(versionedPath),
+         BindParam::int64(fileSize), textOrNull(fileHash),
+         textOrNull(createdBy), textOrNull(changeNote),
+         BindParam::text(nowIso())});
+}
+
+std::vector<Document::VersionRecord> Document::loadVersions() const {
+    std::vector<VersionRecord> result;
+    auto* db = DatabasePool::instance().get("documents");
+    if (!db) return result;
+    auto rows = db->query(
+        "SELECT * FROM document_versions WHERE document_id=? ORDER BY created_at DESC;",
+        {BindParam::text(documentId)});
+    for (auto& r : rows) {
+        VersionRecord v;
+        v.versionId    = rowGet(r,"version_id");
+        v.versionNumber= rowGet(r,"version_number");
+        v.filePath     = rowGet(r,"file_path");
+        v.fileHash     = rowGet(r,"file_hash");
+        v.fileSize     = std::stoll(rowGet(r,"file_size").empty() ? "0" : rowGet(r,"file_size"));
+        v.createdBy    = rowGet(r,"created_by");
+        v.changeNote   = rowGet(r,"change_note");
+        v.createdAt    = rowGet(r,"created_at");
+        result.push_back(v);
+    }
+    return result;
+}
+
+bool Document::openFile(const std::string& mode) const {
+    if (filePath.empty() || !FileOps::fileExists(filePath)) {
+        LOG_WARN("openFile: no file at " + filePath);
+        return false;
+    }
+
+    std::string pathToOpen = filePath;
+
+    if (mode == "read") {
+        // Temporary read-only copy in /tmp
+        std::string tmpDir = FileOps::joinPath(FileOps::tempDirectory(), "rosenholz_view");
+        FileOps::makeDirs(tmpDir);
+        std::string tmpFile = FileOps::joinPath(tmpDir, FileOps::baseName(filePath));
+        if (!FileOps::copyFile(filePath, tmpFile, true)) return false;
+        pathToOpen = tmpFile;
+        LOG_INFO("openFile (read): tmp copy → " + tmpFile);
+    }
+    // else mode == "edit": open original (already versioned by caller)
+
+    // Open with system default application
+    std::string cmd;
+#ifdef __linux__
+    cmd = "xdg-open \"" + pathToOpen + "\" &";
+#elif __APPLE__
+    cmd = "open \"" + pathToOpen + "\" &";
+#else
+    cmd = "start \"" + pathToOpen + "\"";
+#endif
+    int ret = system(cmd.c_str());
+    return ret == 0;
 }
 
 } // namespace Rosenholz

@@ -1,17 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
-project(Rosenholz VERSION 1.0.0 LANGUAGES CXX)
+project(Rosenholz VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# ── Find SQLite3 ─────────────────────────────────────────────
+# ── Find dependencies ─────────────────────────────────────────
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(SQLITE3 sqlite3)
 endif()
 if(NOT SQLITE3_FOUND)
-    # Fallback: look for system sqlite3
     find_path(SQLITE3_INCLUDE_DIR sqlite3.h)
     find_library(SQLITE3_LIBRARY sqlite3)
     if(SQLITE3_INCLUDE_DIR AND SQLITE3_LIBRARY)
@@ -21,22 +20,44 @@ if(NOT SQLITE3_FOUND)
     endif()
 endif()
 if(NOT SQLITE3_FOUND)
-    message(FATAL_ERROR "SQLite3 not found. Install libsqlite3-dev (Linux) or sqlite3 (Windows).")
+    message(FATAL_ERROR "SQLite3 not found.")
 endif()
 
-# ── Find nlohmann/json ────────────────────────────────────────
 find_package(nlohmann_json QUIET)
 if(NOT nlohmann_json_FOUND)
-    # Try as header-only via FetchContent
     include(FetchContent)
-    FetchContent_Declare(
-        nlohmann_json
-        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-    )
+    FetchContent_Declare(nlohmann_json
+        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
     FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
-# ── Source files ──────────────────────────────────────────────
+# ── Embed SQL schema files via Python (handles all special chars) ─
+set(SQL_DIR "${CMAKE_SOURCE_DIR}/sql")
+set(SCHEMA_GEN "${CMAKE_BINARY_DIR}/generated/SchemaFiles.h")
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+file(GLOB SQL_FILES "${SQL_DIR}/*.sql")
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+# Re-generate whenever any .sql file changes
+add_custom_command(
+    OUTPUT  "${SCHEMA_GEN}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_schema_files.py"
+            "${SQL_DIR}" "${SCHEMA_GEN}"
+    DEPENDS ${SQL_FILES} "${CMAKE_SOURCE_DIR}/scripts/gen_schema_files.py"
+    COMMENT "Embedding SQL schemas into SchemaFiles.h"
+    VERBATIM
+)
+add_custom_target(generate_schemas DEPENDS "${SCHEMA_GEN}")
+
+# Print which files are embedded (done at configure time by the script via stderr)
+foreach(SQL_FILE ${SQL_FILES})
+    get_filename_component(SQL_NAME "${SQL_FILE}" NAME_WE)
+    message(STATUS "Will embed SQL: ${SQL_NAME}.sql")
+endforeach()
+
+# ── Source groups ─────────────────────────────────────────────
 set(CORE_SOURCES
     src/core/Logger.cpp
     src/core/Config.cpp
@@ -44,10 +65,10 @@ set(CORE_SOURCES
     src/core/Database.cpp
     src/core/RegNumber.cpp
     src/core/BackupManager.cpp
+    src/core/Migration.cpp
 )
 
 set(MODEL_SOURCES
-    src/model/Trackable.cpp
     src/model/Person.cpp
     src/model/Team.cpp
     src/model/ProjectF16.cpp
@@ -59,6 +80,10 @@ set(MODEL_SOURCES
     src/model/ReportingModels.cpp
 )
 
+set(WORKFLOW_SOURCES
+    src/workflow/WorkflowEngine.cpp
+)
+
 set(MFS_SOURCES
     src/mfs/MFSWriter.cpp
 )
@@ -67,43 +92,63 @@ set(APP_SOURCES
     src/app/AppController.cpp
 )
 
-# ── Main executable ───────────────────────────────────────────
-add_executable(rosenholz
-    main.cpp
+# ── Shared library: core + model + workflow ───────────────────
+add_library(rosenholz_lib STATIC
     ${CORE_SOURCES}
     ${MODEL_SOURCES}
+    ${WORKFLOW_SOURCES}
     ${MFS_SOURCES}
     ${APP_SOURCES}
 )
+add_dependencies(rosenholz_lib generate_schemas)
 
-target_include_directories(rosenholz PRIVATE
+target_include_directories(rosenholz_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_BINARY_DIR}/generated
     ${SQLITE3_INCLUDE_DIRS}
 )
-
-target_link_libraries(rosenholz PRIVATE
+target_link_libraries(rosenholz_lib PUBLIC
     ${SQLITE3_LIBRARIES}
     nlohmann_json::nlohmann_json
 )
-
-# ── Platform flags ────────────────────────────────────────────
 if(UNIX)
-    target_compile_options(rosenholz PRIVATE -Wall -Wextra -Wpedantic)
-    target_link_libraries(rosenholz PRIVATE pthread)
+    target_compile_options(rosenholz_lib PRIVATE -Wall -Wextra)
+    target_link_libraries(rosenholz_lib PUBLIC pthread)
 endif()
-if(WIN32)
-    target_compile_definitions(rosenholz PRIVATE
-        _WIN32_WINNT=0x0601
-        NOMINMAX
-    )
-    target_link_libraries(rosenholz PRIVATE shlwapi)
-endif()
+
+# ── CLI binary ────────────────────────────────────────────────
+# Gather all CLI source files
+file(GLOB CLI_SOURCES "src/cli/*.cpp")
+
+add_executable(rosenholz_cli
+    src/cli/main_cli.cpp
+    ${CLI_SOURCES}
+)
+target_link_libraries(rosenholz_cli PRIVATE rosenholz_lib)
+target_include_directories(rosenholz_cli PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_BINARY_DIR}/generated
+)
+
+# ── Test binary ───────────────────────────────────────────────
+file(GLOB TEST_SOURCES "tests/*.cpp")
+
+add_executable(rosenholz_test
+    tests/main_test.cpp
+    ${TEST_SOURCES}
+)
+target_link_libraries(rosenholz_test PRIVATE rosenholz_lib)
+target_include_directories(rosenholz_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_BINARY_DIR}/generated
+)
 
 # ── Install ───────────────────────────────────────────────────
-install(TARGETS rosenholz DESTINATION bin)
+install(TARGETS rosenholz_cli DESTINATION bin)
+install(TARGETS rosenholz_test DESTINATION bin)
 install(FILES settings.json DESTINATION bin)
 
-# ── Status output ─────────────────────────────────────────────
+message(STATUS "Rosenholz PM v2.0.0")
 message(STATUS "SQLite3: ${SQLITE3_LIBRARIES}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "SQL schemas embedded: ${SQL_FILES}")

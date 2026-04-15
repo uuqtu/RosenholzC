@@ -3,6 +3,9 @@
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
+  <component name="BackendCodeEditorMiscSettings">
+    <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
+  </component>
   <component name="CMakePresetLoader"><![CDATA[{
   "useNewFormat": true
 }]]></component>
@@ -14,16 +17,53 @@
   </component>
   <component name="CMakeRunConfigurationManager">
     <generated>
-      <config projectName="Rosenholz" targetName="rosenholz" />
+      <config projectName="Rosenholz" targetName="rosenholz_lib" />
+      <config projectName="Rosenholz" targetName="rosenholz_test" />
+      <config projectName="Rosenholz" targetName="rosenholz_cli" />
+      <config projectName="Rosenholz" targetName="generate_schemas" />
     </generated>
   </component>
-  <component name="CMakeSettings">
+  <component name="CMakeSettings" AUTO_RELOAD="true">
     <configurations>
-      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" NO_GENERATOR="true" />
+      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="da1e8b99-39dd-486c-ac89-fbd8dccb43ff" name="Changes" comment="" />
+    <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/settings.json" beforeDir="false" afterPath="$PROJECT_DIR$/settings.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Config.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Config.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Database.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Database.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Database.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Database.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Logger.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Logger.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/RegNumber.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/RegNumber.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Document.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Document.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Document.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Document.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/IncidentF18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/IncidentF18.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/IncidentF18.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/IncidentF18.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Milestone.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Milestone.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Person.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Person.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Person.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Person.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/ProjectF16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/ProjectF16.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/ProjectF16.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/ProjectF16.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/ReportingModels.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/ReportingModels.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/ReportingModels.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/ReportingModels.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Risk.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Risk.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Risk.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Risk.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/TaskF22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/TaskF22.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/TaskF22.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/TaskF22.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Team.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Team.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Team.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Team.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Trackable.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Trackable.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Utils.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Utils.h" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -37,7 +77,7 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
   <component name="MacroExpansionManager">
-    <option name="directoryName" value="Diqe54bR" />
+    <option name="directoryName" value="9fquwaJx" />
   </component>
   <component name="ProjectApplicationVersion">
     <option name="ide" value="CLion" />
@@ -46,27 +86,28 @@
     <option name="productBranch" value="Classic" />
   </component>
   <component name="ProjectColorInfo"><![CDATA[{
+  "customColor": "",
   "associatedIndex": 3
 }]]></component>
-  <component name="ProjectId" id="3CENaTv7DemoFAMwJipLu100j8t" />
+  <component name="ProjectId" id="3CJ0bTzSKvwKHjGR3j1XTIXrKEr" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "CMake Application.rosenholz.executor": "Run",
+    "CMake Application.rosenholz_cli.executor": "Run",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.RadMigrateCodeStyle": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "RunOnceActivity.west.config.association.type.startup.service": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "git-widget-placeholder": "master",
-    "last_opened_file_path": "/home/jeandarq0ne/Documents/Source/QT/Rosenholz/implementation/CMakeLists.txt",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -76,26 +117,47 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
-  <component name="RunManager">
+  <component name="RunManager" selected="CMake Application.rosenholz_cli">
     <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration name="rosenholz" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz">
+    <configuration name="generate_schemas" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="generate_schemas" CONFIG_NAME="Debug">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
+    <configuration name="rosenholz_cli" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_cli" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz_cli">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="rosenholz_lib" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_lib" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="rosenholz_test" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz_test">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="CMake Application.generate_schemas" />
+      <item itemvalue="CMake Application.rosenholz_cli" />
+      <item itemvalue="CMake Application.rosenholz_lib" />
+      <item itemvalue="CMake Application.rosenholz_test" />
+    </list>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="da1e8b99-39dd-486c-ac89-fbd8dccb43ff" name="Changes" comment="" />
-      <created>1775946835138</created>
+      <changelist id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="" />
+      <created>1776088462709</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1775946835138</updated>
-      <workItem from="1775946843015" duration="3420000" />
+      <updated>1776088462709</updated>
+      <workItem from="1776088483018" duration="7721000" />
     </task>
     <servers />
   </component>

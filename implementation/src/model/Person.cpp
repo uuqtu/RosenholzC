@@ -5,12 +5,8 @@
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
+#include "../core/Repository.h"
 #include "../core/RegNumber.h"
-#include <chrono>
-#include <ctime>
-#include <sstream>
-#include <iomanip>
-#include <random>
 
 using json = nlohmann::json;
 namespace Rosenholz {
@@ -55,32 +51,32 @@ bool Person::save() const {
         BindParam::text(regNumber.toString()),
         BindParam::text(lastName),
         BindParam::text(firstName),
-        ton(preferredName),
-        ton(email),
-        ton(phone),
-        ton(orgUnit),
-        ton(department),
-        ton(location),
-        ton(country),
-        ton(roleTitle),
+        textOrNull(preferredName),
+        textOrNull(email),
+        textOrNull(phone),
+        textOrNull(orgUnit),
+        textOrNull(department),
+        textOrNull(location),
+        textOrNull(country),
+        textOrNull(roleTitle),
         BindParam::text(personType),
-        ton(employmentType),
-        ton(seniorityLevel),
-        ton(skills),
-        ton(certifications),
-        ton(languages),
+        textOrNull(employmentType),
+        textOrNull(seniorityLevel),
+        textOrNull(skills),
+        textOrNull(certifications),
+        textOrNull(languages),
         BindParam::real(dayRate),
         BindParam::real(monthlyRate),
         BindParam::real(availabilityPct),
-        ton(availabilityFrom),
-        ton(availabilityTo),
-        ton(managerId),      // soft ref — NULL when empty, never fails FK
+        textOrNull(availabilityFrom),
+        textOrNull(availabilityTo),
+        textOrNull(managerId),      // soft ref — NULL when empty, never fails FK
         BindParam::text(status),
-        ton(onboardDate),
-        ton(offboardDate),
-        ton(clearanceLevel),
-        ton(externalRef),
-        ton(links),
+        textOrNull(onboardDate),
+        textOrNull(offboardDate),
+        textOrNull(clearanceLevel),
+        textOrNull(externalRef),
+        textOrNull(links),
         BindParam::text(notes.empty() ? "{}" : notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())

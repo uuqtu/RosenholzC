@@ -247,6 +247,25 @@ bool MFSWriter::writeIncident(const IncidentF18& i, const std::string& mfsRoot) 
 // DOCUMENT — ALWAYS filed under parent entity's folder
 // Never loose — must have a project or task reference
 // ─────────────────────────────────────────────────────────────
+// ------------------------------
+// writeDocument
+//
+// Parameters:
+//   d       : the Document entity to file
+//   mfsRoot : base MFS path
+//
+// Requirements:
+//   d.projectId or d.taskId must be non-empty.
+//   Orphan documents (neither set) are refused → returns false.
+//
+// Creates:
+//   mfs/DOK/{parent-sane}/{sane-ID}_{safetitle}.txt  (index card)
+//   mfs/DOK/{parent-sane}/{filename}                  (physical copy)
+//
+// Physical copy:
+//   If d.filePath is set and the file exists, it is copied
+//   alongside the index card using its original filename.
+// ------------------------------
 bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
     if (d.projectId.empty() && d.taskId.empty()) {
         LOG_WARN("MFSWriter::writeDocument — document '" + d.title +
@@ -293,6 +312,17 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
             if (!d.filePath.empty()) content << "LOKALER-PFAD     : " << d.filePath  << "\n";
             ok = ownerOnlyWrite(path, content.str());
             LOG_DEBUG("MFS DOK filed under project: " + path);
+
+            // Copy physical file into DOK directory alongside the index card
+            if (!d.filePath.empty() && d.filePath != path &&
+                FileOps::fileExists(d.filePath)) {
+                // Destination: same dir, keep original filename
+                std::string physDest = FileOps::joinPath(
+                    FileOps::dirName(path), FileOps::baseName(d.filePath));
+                if (physDest != d.filePath)
+                    FileOps::copyFile(d.filePath, physDest, /*overwrite=*/true);
+                LOG_DEBUG("MFS DOK physical file copied: " + physDest);
+            }
         }
     }
 
@@ -424,6 +454,21 @@ bool MFSWriter::appendOwnerKey(
 // ─────────────────────────────────────────────────────────────
 // REBUILD ALL
 // ─────────────────────────────────────────────────────────────
+// ------------------------------
+// rebuildAll
+//
+// Parameters:
+//   mfsRoot : base MFS path
+//
+// Behavior:
+//   Iterates all entities in the database and re-writes
+//   their MFS index cards.  Any previously filed cards for
+//   entities that no longer exist are NOT removed —
+//   this is intentional (audit trail preservation).
+//
+// Called from:
+//   main_cli.cpp option 12 ("MFS-Baum aufbauen")
+// ------------------------------
 bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
     LOG_INFO("Rebuilding MFS tree at: " + mfsRoot);
     FileOps::ensureMFSTree(mfsRoot);

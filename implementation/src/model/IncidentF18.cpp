@@ -7,8 +7,8 @@
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
+#include "../core/Repository.h"
 #ifndef _WIN32
-#include <sys/stat.h>
 #endif
 #include "../core/RegNumber.h"
 #include "../core/FileOps.h"
@@ -16,7 +16,6 @@
 #include <ctime>
 #include <sstream>
 #include <iomanip>
-#include <random>
 
 using json = nlohmann::json;
 
@@ -63,35 +62,35 @@ bool IncidentF18::save() const {
         ) VALUES (?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?, ?,?,?, ?,?,?,?,?, ?,?,?,?,?,?)
     )", {
         BindParam::text(incidentId),
-        ton(workflowInstanceId),
-        ton(workflowStatus),
-        ton(workflowCurrentState),
+        textOrNull(workflowInstanceId),
+        textOrNull(workflowStatus),
+        textOrNull(workflowCurrentState),
         BindParam::text(projectId),
-        ton(taskId),
-        ton(riskId),
-        ton(reportedBy),
-        ton(ownerId),
+        textOrNull(taskId),
+        textOrNull(riskId),
+        textOrNull(reportedBy),
+        textOrNull(ownerId),
         BindParam::text(title),
-        ton(description),
-        ton(incidentType),
-        ton(category),
+        textOrNull(description),
+        textOrNull(incidentType),
+        textOrNull(category),
         BindParam::text(severity),
-        ton(impactArea),
+        textOrNull(impactArea),
         BindParam::real(costImpact),
         BindParam::int64(scheduleImpactDays),
-        ton(scopeImpact),
-        ton(qualityImpact),
-        ton(occurredDate),
-        ton(reportedDate),
-        ton(resolvedDate),
+        textOrNull(scopeImpact),
+        textOrNull(qualityImpact),
+        textOrNull(occurredDate),
+        textOrNull(reportedDate),
+        textOrNull(resolvedDate),
         BindParam::text(status),
-        ton(rootCause),
-        ton(immediateAction),
-        ton(correctiveAction),
-        ton(resolution),
+        textOrNull(rootCause),
+        textOrNull(immediateAction),
+        textOrNull(correctiveAction),
+        textOrNull(resolution),
         BindParam::int64(escalated ? 1 : 0),
-        ton(escalatedTo),
-        ton(links),
+        textOrNull(escalatedTo),
+        textOrNull(links),
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
@@ -103,40 +102,38 @@ bool IncidentF18::save() const {
 }
 
 void IncidentF18::fromRow(const Row& r) {
-    auto get = [&](const std::string& k){ auto it=r.find(k); return it!=r.end()?it->second:""; };
-    incidentId           = get("incident_id");
-    workflowInstanceId   = get("workflow_instance_id");
-    projectId            = get("project_id");
-    taskId               = get("task_id");
-    riskId               = get("risk_id");
-    reportedBy           = get("reported_by");
-    ownerId              = get("owner_id");
-    title                = get("title");
-    description          = get("description");
-    incidentType         = get("incident_type");
-    category             = get("category");
-    severity             = get("severity");
-    impactArea           = get("impact_area");
-    auto gd=[&](const std::string& k){ auto v=get(k); return v.empty()?0.0:std::stod(v); };
-    auto gi=[&](const std::string& k){ auto v=get(k); return v.empty()?0:std::stoi(v); };
-    costImpact           = gd("cost_impact");
-    scheduleImpactDays   = gi("schedule_impact_days");
-    scopeImpact          = get("scope_impact");
-    qualityImpact        = get("quality_impact");
-    occurredDate         = get("occurred_date");
-    reportedDate         = get("reported_date");
-    resolvedDate         = get("resolved_date");
-    status               = get("status");
-    rootCause            = get("root_cause");
-    immediateAction      = get("immediate_action");
-    correctiveAction     = get("corrective_action");
-    resolution           = get("resolution");
-    escalated            = get("escalated") == "1";
-    escalatedTo          = get("escalated_to");
-    links                = get("links");
-    notes                = get("notes");
-    createdAt            = get("created_at");
-    updatedAt            = get("updated_at");
+    incidentId           = rowGet(r,"incident_id");
+    workflowInstanceId   = rowGet(r,"workflow_instance_id");
+    projectId            = rowGet(r,"project_id");
+    taskId               = rowGet(r,"task_id");
+    riskId               = rowGet(r,"risk_id");
+    reportedBy           = rowGet(r,"reported_by");
+    ownerId              = rowGet(r,"owner_id");
+    title                = rowGet(r,"title");
+    description          = rowGet(r,"description");
+    incidentType         = rowGet(r,"incident_type");
+    category             = rowGet(r,"category");
+    severity             = rowGet(r,"severity");
+    impactArea           = rowGet(r,"impact_area");
+
+    costImpact           = rowGetDbl(r,"cost_impact");
+    scheduleImpactDays   = rowGetInt(r,"schedule_impact_days");
+    scopeImpact          = rowGet(r,"scope_impact");
+    qualityImpact        = rowGet(r,"quality_impact");
+    occurredDate         = rowGet(r,"occurred_date");
+    reportedDate         = rowGet(r,"reported_date");
+    resolvedDate         = rowGet(r,"resolved_date");
+    status               = rowGet(r,"status");
+    rootCause            = rowGet(r,"root_cause");
+    immediateAction      = rowGet(r,"immediate_action");
+    correctiveAction     = rowGet(r,"corrective_action");
+    resolution           = rowGet(r,"resolution");
+    escalated            = rowGet(r,"escalated") == "1";
+    escalatedTo          = rowGet(r,"escalated_to");
+    links                = rowGet(r,"links");
+    notes                = rowGet(r,"notes");
+    createdAt            = rowGet(r,"created_at");
+    updatedAt            = rowGet(r,"updated_at");
 }
 
 bool IncidentF18::load(const std::string& id) {
@@ -237,14 +234,6 @@ void IncidentF18::loadQTCSLinks() {
     scopeIds   = loadIds("incident_scope",   "scope_id");
 }
 
-// ── Trackable ────────────────────────────────────────────────
-std::shared_ptr<TrackableItem> IncidentF18::addTrackable(
-    const std::string& title_, const std::string& createdBy_) {
-    auto t = TrackableItem::create("incident", incidentId, title_, createdBy_);
-    t->save();
-    trackables.push_back(t);
-    return t;
-}
 
 // ── Reassign ─────────────────────────────────────────────────
 bool IncidentF18::reassignOwner(const std::string& newOwnerId) {

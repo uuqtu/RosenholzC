@@ -1,3 +1,11 @@
+// ============================================================
+// ProjectF16.h  —  Project entity (Vorgangskartei F16)
+//
+// DDR-Aktenzeichen: XV/F16/{seq}/{year}
+// Primary entity: one project per customer engagement
+// Supports: Earned Value (CPI/SPI/VAC), QTCS links,
+//   MFS filing, and workflow attachment
+// ============================================================
 #pragma once
 #include "Utils.h"
 // ============================================================
@@ -15,7 +23,6 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include "Trackable.h"
 #include "../core/Database.h"
 #include "../core/RegNumber.h"
 #include <nlohmann/json.hpp>
@@ -106,8 +113,6 @@ public:
     std::vector<std::string> timeIds;
     std::vector<std::string> scopeIds;
 
-    // ── Trackable items (lazy loaded) ─────────────────────
-    std::vector<std::shared_ptr<TrackableItem>> trackables;
 
     // ── CRUD ──────────────────────────────────────────────
     bool save() const;
@@ -116,6 +121,19 @@ public:
     bool update();
 
     // ── Factory ───────────────────────────────────────────
+    // ------------------------------
+    // Factory: create a new ProjectF16 record (not yet saved).
+    //
+    // Parameters:
+    //   title    : project title (required)
+    //   leadId   : Person-ID of the project lead (optional)
+    //   teamId   : owning team ID (optional)
+    //
+    // Behavior:
+    //   - Generates DDR-style ID: XV/F16/{seq}/{year}
+    //   - Sets status to "planned", dates to today
+    //   - Does NOT save — call save() explicitly
+    // ------------------------------
     static std::shared_ptr<ProjectF16> create(
         const std::string& title,
         const std::string& projectType = "OV",
@@ -137,10 +155,6 @@ public:
     bool removeScope  (const std::string& scopeId);
     void loadQTCSLinks();
 
-    // ── Trackable management ──────────────────────────────
-    std::shared_ptr<TrackableItem> addTrackable(
-        const std::string& title, const std::string& createdBy = "");
-    void loadTrackables();
 
     // ── Earned value calculation ───────────────────────────
     void recalcEarnedValue();

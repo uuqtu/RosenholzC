@@ -7,16 +7,11 @@
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
+#include "../core/Repository.h"
 #ifndef _WIN32
-#include <sys/stat.h>
 #endif
 #include "../core/RegNumber.h"
 #include "../core/FileOps.h"
-#include <chrono>
-#include <ctime>
-#include <sstream>
-#include <iomanip>
-#include <random>
 
 using json = nlohmann::json;
 
@@ -48,6 +43,16 @@ std::shared_ptr<TaskF22> TaskF22::create(
 }
 
 // ── CRUD ─────────────────────────────────────────────────────
+// ------------------------------
+// save
+//
+// Behavior:
+//   INSERT OR REPLACE upsert into projects.db
+//   Does not save child tasks — call save() recursively
+//
+// Returns:
+//   true on success
+// ------------------------------
 bool TaskF22::save() const {
     auto* db = DatabasePool::instance().get("projects");
     if (!db) { LOG_ERROR("TaskF22::save — projects DB not available"); return false; }
@@ -66,37 +71,37 @@ bool TaskF22::save() const {
         ) VALUES (?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?,?,?,?)
     )", {
         BindParam::text(taskId),
-        ton(workflowInstanceId),
-        ton(workflowStatus),
-        ton(workflowCurrentState),
+        textOrNull(workflowInstanceId),
+        textOrNull(workflowStatus),
+        textOrNull(workflowCurrentState),
         BindParam::text(regNumber.toString()),
         BindParam::text(projectId),
-        ton(parentTaskId),
-        ton(assigneeId),
-        ton(assignedBy),
-        ton(taskCode),
+        textOrNull(parentTaskId),
+        textOrNull(assigneeId),
+        textOrNull(assignedBy),
+        textOrNull(taskCode),
         BindParam::text(title),
-        ton(description),
-        ton(taskType),
+        textOrNull(description),
+        textOrNull(taskType),
         BindParam::text(status),
-        ton(priority),
+        textOrNull(priority),
         BindParam::real(effortPlannedHrs),
         BindParam::real(effortActualHrs),
         BindParam::real(effortRemainingHrs),
         BindParam::real(costPlanned),
         BindParam::real(costActual),
-        ton(startDatePlanned),
-        ton(startDateActual),
-        ton(dueDatePlanned),
-        ton(dueDateActual),
+        textOrNull(startDatePlanned),
+        textOrNull(startDateActual),
+        textOrNull(dueDatePlanned),
+        textOrNull(dueDateActual),
         BindParam::int64(scheduleVarianceDays),
         BindParam::int64(percentComplete),
-        ton(qualityCriteria),
-        ton(acceptanceCriteria),
+        textOrNull(qualityCriteria),
+        textOrNull(acceptanceCriteria),
         BindParam::int64(isMilestone ? 1 : 0),
-        ton(wbsCode),
-        ton(sprintOrPhase),
-        ton(links),
+        textOrNull(wbsCode),
+        textOrNull(sprintOrPhase),
+        textOrNull(links),
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
@@ -108,46 +113,41 @@ bool TaskF22::save() const {
 }
 
 void TaskF22::fromRow(const Row& r) {
-    auto get = [&](const std::string& k) {
-        auto it = r.find(k); return it != r.end() ? it->second : "";
-    };
-    taskId               = get("task_id");
-    workflowInstanceId   = get("workflow_instance_id");
-    workflowStatus       = get("workflow_status");
-    workflowCurrentState = get("workflow_current_state");
-    regNumber            = RegNumber::fromString(get("reg_number"));
-    projectId            = get("project_id");
-    parentTaskId         = get("parent_task_id");
-    assigneeId           = get("assignee_id");
-    assignedBy           = get("assigned_by");
-    taskCode             = get("task_code");
-    title                = get("title");
-    description          = get("description");
-    taskType             = get("task_type");
-    status               = get("status");
-    priority             = get("priority");
-    auto gd = [&](const std::string& k){ auto v=get(k); return v.empty()?0.0:std::stod(v); };
-    auto gi = [&](const std::string& k){ auto v=get(k); return v.empty()?0:std::stoi(v); };
-    effortPlannedHrs     = gd("effort_planned_hrs");
-    effortActualHrs      = gd("effort_actual_hrs");
-    effortRemainingHrs   = gd("effort_remaining_hrs");
-    costPlanned          = gd("cost_planned");
-    costActual           = gd("cost_actual");
-    startDatePlanned     = get("start_date_planned");
-    startDateActual      = get("start_date_actual");
-    dueDatePlanned       = get("due_date_planned");
-    dueDateActual        = get("due_date_actual");
-    scheduleVarianceDays = gi("schedule_variance_days");
-    percentComplete      = gi("percent_complete");
-    qualityCriteria      = get("quality_criteria");
-    acceptanceCriteria   = get("acceptance_criteria");
-    isMilestone          = get("is_milestone") == "1";
-    wbsCode              = get("wbs_code");
-    sprintOrPhase        = get("sprint_or_phase");
-    links                = get("links");
-    notes                = get("notes");
-    createdAt            = get("created_at");
-    updatedAt            = get("updated_at");
+    taskId               = rowGet(r,"task_id");
+    workflowInstanceId   = rowGet(r,"workflow_instance_id");
+    workflowStatus       = rowGet(r,"workflow_status");
+    workflowCurrentState = rowGet(r,"workflow_current_state");
+    regNumber            = RegNumber::fromString(rowGet(r,"reg_number"));
+    projectId            = rowGet(r,"project_id");
+    parentTaskId         = rowGet(r,"parent_task_id");
+    assigneeId           = rowGet(r,"assignee_id");
+    assignedBy           = rowGet(r,"assigned_by");
+    taskCode             = rowGet(r,"task_code");
+    title                = rowGet(r,"title");
+    description          = rowGet(r,"description");
+    taskType             = rowGet(r,"task_type");
+    status               = rowGet(r,"status");
+    priority             = rowGet(r,"priority");
+    effortPlannedHrs     = rowGetDbl(r,"effort_planned_hrs");
+    effortActualHrs      = rowGetDbl(r,"effort_actual_hrs");
+    effortRemainingHrs   = rowGetDbl(r,"effort_remaining_hrs");
+    costPlanned          = rowGetDbl(r,"cost_planned");
+    costActual           = rowGetDbl(r,"cost_actual");
+    startDatePlanned     = rowGet(r,"start_date_planned");
+    startDateActual      = rowGet(r,"start_date_actual");
+    dueDatePlanned       = rowGet(r,"due_date_planned");
+    dueDateActual        = rowGet(r,"due_date_actual");
+    scheduleVarianceDays = rowGetInt(r,"schedule_variance_days");
+    percentComplete      = rowGetInt(r,"percent_complete");
+    qualityCriteria      = rowGet(r,"quality_criteria");
+    acceptanceCriteria   = rowGet(r,"acceptance_criteria");
+    isMilestone          = rowGet(r,"is_milestone") == "1";
+    wbsCode              = rowGet(r,"wbs_code");
+    sprintOrPhase        = rowGet(r,"sprint_or_phase");
+    links                = rowGet(r,"links");
+    notes                = rowGet(r,"notes");
+    createdAt            = rowGet(r,"created_at");
+    updatedAt            = rowGet(r,"updated_at");
 }
 
 bool TaskF22::load(const std::string& id) {
@@ -253,17 +253,6 @@ void TaskF22::loadQTCSLinks() {
     scopeIds   = loadIds("task_scope",   "scope_id");
 }
 
-// ── Trackable ────────────────────────────────────────────────
-std::shared_ptr<TrackableItem> TaskF22::addTrackable(
-    const std::string& title_, const std::string& createdBy_) {
-    auto t = TrackableItem::create("task", taskId, title_, createdBy_);
-    t->save();
-    trackables.push_back(t);
-    return t;
-}
-void TaskF22::loadTrackables() {
-    trackables = TrackableItem::loadForEntity("task", taskId);
-}
 
 // ── Reassign ─────────────────────────────────────────────────
 bool TaskF22::reassignTo(const std::string& newAssigneeId) {
@@ -279,6 +268,20 @@ bool TaskF22::reassignParent(const std::string& newParentTaskId) {
 }
 
 // ── Convert to Project ────────────────────────────────────────
+// ------------------------------
+// convertToProject
+//
+// Parameters:
+//   title                : new project title (empty = use task title)
+//
+// Behavior:
+//   Creates a ProjectF16 from this task's metadata
+//   Saves the new project and returns its ID
+//   Does NOT delete the original task
+//
+// Returns:
+//   New project ID, or "" on error
+// ------------------------------
 std::string TaskF22::convertToProject(const std::string& projectType_) {
     LOG_INFO("Promoting TaskF22 " + taskId + " -> ProjectF16");
     auto* db = DatabasePool::instance().get("projects");
@@ -303,10 +306,10 @@ std::string TaskF22::convertToProject(const std::string& projectType_) {
         BindParam::text(title + " [promoted from F22/" + taskId + "]"),
         BindParam::text(projectType_),
         BindParam::text(status),
-        ton(acceptanceCriteria),
+        textOrNull(acceptanceCriteria),
         BindParam::real(costPlanned),
-        ton(startDatePlanned),
-        ton(dueDatePlanned),
+        textOrNull(startDatePlanned),
+        textOrNull(dueDatePlanned),
         BindParam::text(notes),
         BindParam::text(nowIso())
     });

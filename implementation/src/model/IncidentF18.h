@@ -1,3 +1,11 @@
+// ============================================================
+// IncidentF18.h  —  Incident entity (Vorfallskartei F18)
+//
+// DDR-Aktenzeichen: XV/F18/{seq}/{year}
+// Incidents record deviations, issues, and problems
+// Can be linked to a Risk (RSK) via linkToRisk()
+// Supports cost/schedule/scope/quality impact scoring
+// ============================================================
 #pragma once
 #include "Utils.h"
 // ============================================================
@@ -12,7 +20,6 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include "Trackable.h"
 #include "../core/Database.h"
 #include "../core/RegNumber.h"
 #include <nlohmann/json.hpp>
@@ -73,8 +80,6 @@ public:
     std::vector<std::string> timeIds;
     std::vector<std::string> scopeIds;
 
-    // ── Trackable items ───────────────────────────────────
-    std::vector<std::shared_ptr<TrackableItem>> trackables;
 
     // ── External ──────────────────────────────────────────
     std::string links;
@@ -106,9 +111,6 @@ public:
     bool addScope  (const std::string& id);
     void loadQTCSLinks();
 
-    // ── Trackable ────────────────────────────────────────
-    std::shared_ptr<TrackableItem> addTrackable(
-        const std::string& title, const std::string& createdBy = "");
 
     // ── Reassign ─────────────────────────────────────────
     bool reassignOwner(const std::string& newOwnerId);

@@ -1,3 +1,10 @@
+// ============================================================
+// Team.h  —  Team/Diensteinheit entity (DE)
+//
+// Teams are organizational units (squad/chapter/division)
+// Can be hierarchical via parentTeamId
+// TeamMember tracks allocation % per person
+// ============================================================
 #pragma once
 #include "Utils.h"
 // ============================================================

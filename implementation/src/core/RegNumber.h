@@ -1,5 +1,13 @@
 #pragma once
 // ============================================================
+// RegNumber.h  —  DDR-style registration number generator
+//
+// Format: {DE-Kuerzel}/{TypeCode}/{seq:04d}/{year}
+// Example: XV/F16/0042/2026
+// Sequences are per-type, stored in core.db.
+// DE-Kuerzel comes from settings.json registratur block.
+// ============================================================
+// ============================================================
 // RegNumber.h  —  Structured registration number generator
 //
 // Format: DEPT/SEQUENCE/YEAR  e.g. "XV/1234/2024"
