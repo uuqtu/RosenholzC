@@ -93,6 +93,12 @@ struct WorkflowAction {
     bool requiresDecisionLogEntry     { false };
     bool requiresLessonLearnedEntry   { false };
 
+    // Target state to apply to the entity when this End step fires.
+    // For documents: in_work|pre_released|released|locked|closed
+    // For F16/F22/F18: only "released" is valid
+    // Empty = no state transition (default for non-End steps)
+    std::string targetState;
+
     // ── ise-cobra tracking state ────────────────────────────────
     // Status lifecycle: pending → in_progress → approved/rejected/skipped
     // Extended tracking: planned → focused → due → archived

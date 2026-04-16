@@ -445,20 +445,12 @@ std::string FileOps::sanitizeFilename(const std::string& name) {
 // ── MFS tree ─────────────────────────────────────────────────
 bool FileOps::ensureMFSTree(const std::string& mfsRoot) {
     LOG_INFO("Ensuring MFS directory tree at: " + mfsRoot);
-    bool ok = true;
-    // Top-level folders per DDR Ablagesystem
-    // Entity-year subfolders are created on demand when items are filed.
-    for (auto& sub : {
-        "F16",              // Vorgangsakten (Projects)
-        "F22",              // Aufgabenkartei index (Tasks)
-        "F18",              // Vorfallkartei index (Incidents)
-        "PERSONEN",         // Personenkartei
-        "DIENSTEINHEITEN",  // Org units / Teams
-        "RISIKEN",          // Risk register
-        "AU",               // Archivierte Untersuchungsvorgaenge
-    }) {
-        ok &= makeDirs(joinPath(mfsRoot, sub));
-    }
+    // Only F16/ is the top-level filing structure.
+    // All other entities (F22, F18, DOK, Persons) are filed
+    // UNDER their parent F16 Hängeregister — no standalone folders.
+    // Everything is cross-referenced; no folder makes sense alone.
+    bool ok = makeDirs(joinPath(mfsRoot, "F16"));
+    // owner_key.txt is written on demand — it maps all IDs to real names
     return ok;
 }
 

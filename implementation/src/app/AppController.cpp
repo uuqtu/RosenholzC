@@ -5,6 +5,7 @@
 #include "../core/Database.h"
 #include "../core/FileOps.h"
 #include "../core/BackupManager.h"
+#include "../repository/ArchiveStore.h"
 #include <iostream>
 
 namespace Rosenholz {
@@ -48,7 +49,17 @@ bool AppController::init(const std::string& settingsPath,
         return false;
     }
 
-    // 5 ── Run backup if due
+    // 5 ── Initialise LMDB archive store
+    bool archOk = Rosenholz::Archive::ArchiveStore::instance()
+        .init(cfg.basePath());
+    if (!archOk) {
+        LOG_WARN("[AppController] LMDB archive store failed to init — file storage unavailable");
+        // Non-fatal: document metadata works; binary content won't load
+    } else {
+        LOG_INFO("[AppController] LMDB archive store ready");
+    }
+
+    // 6 ── Run backup if due
     if (cfg.backup().enabled) runBackupIfDue();
 
     m_ready = true;

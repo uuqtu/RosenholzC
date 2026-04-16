@@ -92,6 +92,4 @@ std::shared_ptr<Rosenholz::Document> attachDocumentDialog(
 // Team menu
 void teamMenu();
 
-// New menus
-
 } // namespace CLI

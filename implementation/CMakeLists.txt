@@ -9,6 +9,18 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(SQLITE3 sqlite3)
+
+# ── LMDB (file-content archive) ───────────────────────────
+find_path(LMDB_INCLUDE_DIR lmdb.h
+    HINTS /usr/include /usr/local/include)
+find_library(LMDB_LIBRARY NAMES lmdb
+    HINTS /usr/lib /usr/local/lib)
+if(LMDB_INCLUDE_DIR AND LMDB_LIBRARY)
+    message(STATUS "LMDB: ${LMDB_LIBRARY}")
+else()
+    message(FATAL_ERROR "LMDB not found. Install liblmdb-dev.")
+endif()
+
 endif()
 if(NOT SQLITE3_FOUND)
     find_path(SQLITE3_INCLUDE_DIR sqlite3.h)
@@ -81,6 +93,8 @@ set(MODEL_SOURCES
 
 set(WORKFLOW_SOURCES
     src/workflow/WorkflowEngine.cpp
+    src/repository/ArchiveStore.cpp
+    src/repository/DocumentRevision.cpp
 )
 
 set(MFS_SOURCES
@@ -102,17 +116,20 @@ add_library(rosenholz_lib STATIC
 add_dependencies(rosenholz_lib generate_schemas)
 
 target_include_directories(rosenholz_lib PUBLIC
+    ${LMDB_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}/generated
     ${SQLITE3_INCLUDE_DIRS}
 )
 target_link_libraries(rosenholz_lib PUBLIC
+    ${LMDB_LIBRARY}
     ${SQLITE3_LIBRARIES}
     nlohmann_json::nlohmann_json
 )
 if(UNIX)
     target_compile_options(rosenholz_lib PRIVATE -Wall -Wextra)
-    target_link_libraries(rosenholz_lib PUBLIC pthread)
+    target_link_libraries(rosenholz_lib PUBLIC
+    ${LMDB_LIBRARY} pthread)
 endif()
 
 # ── CLI binary ────────────────────────────────────────────────

@@ -105,133 +105,9 @@ std::string fval (const std::string& v) { return v.empty() ? "—" : v; }
 // ─────────────────────────────────────────────────────────────
 // DOCUMENT HELPERS
 // ─────────────────────────────────────────────────────────────
-void printDocument(const Rosenholz::Document& d) {
-    hdr("DOCUMENT  " + d.documentId.substr(0, 16) + "...");
-    auto row = [](const std::string& k, const std::string& v){
-        std::cout << "  | " << std::left << std::setw(22) << k
-                  << std::setw(30) << v << "|\n";
-    };
-    row("ID",           d.documentId);
-    row("Title",        d.title);
-    row("Type",         fval(d.docType));
-    row("Category",     fval(d.docCategory));
-    row("Version",      fval(d.version));
-    row("Status",       fval(d.status));
-    row("Format",       fval(d.format));
-    row("Language",     fval(d.language));
-    row("Classification",fval(d.classification));
-    hr();
-    row("Author-ID",    fval(d.authorId));
-    row("Approved-by",  fval(d.approvedBy));
-    row("Project-ID",   fval(d.projectId));
-    row("Task-ID",      fval(d.taskId));
-    hr();
-    row("Created",      fdate(d.dateCreated));
-    row("Modified",     fdate(d.dateModified));
-    row("Approved",     fdate(d.dateApproved));
-    row("Expires",      fdate(d.dateExpires));
-    hr();
-    row("Storage",      fval(d.storageSystem));
-    row("Pages",        d.pageCount > 0 ? std::to_string(d.pageCount) : "—");
-    if (!d.fileUrl.empty())
-        row("Source URL", d.fileUrl.size() > 29
-            ? d.fileUrl.substr(0,28) + "~" : d.fileUrl);
-    if (!d.filePath.empty()) {
-        row("MFS-Pfad", d.filePath.size() > 29
-            ? "..."+d.filePath.substr(d.filePath.size()-26) : d.filePath);
-        if (d.fileSize > 0)
-            row("Dateigröße", std::to_string(d.fileSize/1024+1) + " KB");
-        if (!d.fileHash.empty())
-            row("SHA-256", d.fileHash.size() > 20 ?
-                d.fileHash.substr(0,18)+"..." : d.fileHash);
-    }
-    if (!d.summary.empty())
-        std::cout << "  | Summary: " << d.summary.substr(0,43) << "|\n";
-    if (!d.tags.empty())
-        row("Tags",      d.tags);
-    std::cout << "  +" << std::string(52,'-') << "+\n\n";
-}
-
-void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Document>>& docs,
-                          const std::string& heading) {
-    if (docs.empty()) { std::cout << "\n  (no documents)\n\n"; return; }
-    hdr(heading);
-    std::cout << "  " << std::left
-              << std::setw(4)  << "#"
-              << std::setw(12) << "Type"
-              << std::setw(26) << "Title"
-              << std::setw(8)  << "Status"
-              << std::setw(7)  << "Format"
-              << "\n";
-    hr();
-    int n = 1;
-    for (auto& d : docs) {
-        std::string title = d->title.size() > 24 ? d->title.substr(0,23)+"~" : d->title;
-        std::cout << "  " << std::left
-                  << std::setw(4)  << n++
-                  << std::setw(12) << fval(d->docType)
-                  << std::setw(26) << title
-                  << std::setw(8)  << fval(d->status)
-                  << std::setw(7)  << fval(d->format)
-                  << "\n";
-    }
-    std::cout << "\n";
-}
-
 // ─────────────────────────────────────────────────────────────
 // DISPLAY HELPERS
 // ─────────────────────────────────────────────────────────────
-void printProject(const Rosenholz::ProjectF16& p) {
-    hdr("PROJECT (F16)  " + p.regNumber.toString());
-    auto row = [](const std::string& k, const std::string& v){
-        std::cout << "  | " << std::left << std::setw(24) << k
-                  << std::setw(28) << v << "|\n";
-    };
-    row("ID",           p.projectId);
-    row("Reg-Nr",       p.regNumber.toString());
-    row("Title",        p.title);
-    row("Codename",     fval(p.codename));
-    row("Type",         fval(p.projectType));
-    row("Size",         fval(p.sizeClass));
-    row("Status",       fval(p.status));
-    row("Phase",        fval(p.phase));
-    row("Priority",     fval(p.priority));
-    row("Complexity",   fval(p.complexity));
-    row("Methodology",  fval(p.methodology));
-    hr();
-    row("Lead-ID",      fval(p.leadId));
-    row("Team-ID",      fval(p.ownerTeamId));
-    row("Sponsor-ID",   fval(p.sponsorId));
-    hr();
-    row("Start planned",fdate(p.startDatePlanned));
-    row("Start actual", fdate(p.startDateActual));
-    row("End planned",  fdate(p.endDatePlanned));
-    row("End actual",   fdate(p.endDateActual));
-    row("Sched.var.(d)",std::to_string(p.scheduleVarianceDays));
-    hr();
-    row("Budget plan",  std::to_string((int)p.budgetPlanned) + " " + p.currency);
-    row("Budget actual",std::to_string((int)p.budgetActual)  + " " + p.currency);
-    row("Cost var.",    std::to_string((int)p.costVariance)  + " " + p.currency);
-    row("CPI",          std::to_string(p.cpi).substr(0,6));
-    row("SPI",          std::to_string(p.spi).substr(0,6));
-    row("EV",           std::to_string((int)p.earnedValue));
-    row("EAC",          std::to_string((int)p.eac));
-    hr();
-    row("Scope ver.",   fval(p.scopeVersion));
-    row("Scope chgs",   std::to_string(p.scopeChangeCount));
-    if (!p.scopeStatement.empty())
-        std::cout << "  | Scope: " << p.scopeStatement.substr(0,46) << "|\n";
-    hr();
-    // QTCS dimension counts
-    std::cout << "  | Quality dims: " << std::left << std::setw(4) << p.qualityIds.size()
-              << "  Cost dims: " << std::setw(4) << p.costIds.size()
-              << "  Time dims: " << std::setw(4) << p.timeIds.size()
-              << "  Scope dims: " << std::setw(4) << p.scopeIds.size() << "|\n";
-    std::cout << "  +" << std::string(52,'-') << "+\n\n";
-}
-
-
-
 void printPerson(const Rosenholz::Person& p) {
     hdr("PERSON  " + p.regNumber.toString());
     auto row = [](const std::string& k, const std::string& v){
@@ -525,6 +401,8 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         if (doc->version.empty()) doc->version = "1.0";
         doc->dateCreated = nowIso();
         if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
+        doc->ensureRevision1();
+        doc->ensureMainWorkflow();
         // Copy to MFS
         if (!doc->importLocalFile(srcPath)) {
             std::cout << "  >> Warnung: MFS-Import fehlgeschlagen.\n";
@@ -543,6 +421,8 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         doc->dateCreated = nowIso();
         std::cout << "  Herunterladen...\n";
         if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
+        doc->ensureRevision1();
+        doc->ensureMainWorkflow();
         // Download and import
         const std::string& base = Config::instance().basePath();
         std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
@@ -573,6 +453,8 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         if (doc->version.empty()) doc->version = "1.0";
         doc->dateCreated = nowIso();
         if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
+        doc->ensureRevision1();
+        doc->ensureMainWorkflow();
 
         // Create empty file in MFS
         const std::string& mfs = Config::instance().mfsPath();
@@ -616,9 +498,15 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
     std::cout << "  >> Titel   : " << doc->title << "\n";
     std::cout << "  >> MFS-Pfad: " << (doc->filePath.empty() ? "(kein)" : doc->filePath) << "\n";
 
+    // Lifecycle: ensure Rev 1 and Main WFI on first creation
+    doc->ensureRevision1();
+    doc->ensureMainWorkflow();
+
     // Write MFS index file (the .txt metadata card)
     MFSWriter::writeDocument(*doc, Config::instance().mfsPath());
 
+    std::cout << "  >> Revision 1 angelegt (in_work)\n";
+    std::cout << "  >> Main Workflow gestartet\n";
     return doc;
 }
 
@@ -940,75 +828,49 @@ std::shared_ptr<Rosenholz::F18Workflow> createF18Wizard(
     using namespace Rosenholz;
     hdr("NEUEN F18 WORKFLOW ANLEGEN");
 
-    // Type selection
-    std::string chosenType = type;
-    if (chosenType.empty()) {
-        std::cout << "  Typ wählen:\n"
-                     "    1.  Incident  (Vorfall)\n"
-                     "    2.  Risk  (Risiko)\n"
-                     "    3.  Measure  (Maßnahme)\n"
-                     "    4.  QualityGate\n"
-                     "    5.  AssumptionConstraint\n"
-                     "    6.  CommunicationPlan\n"
-                     "    7.  LessonsLearned\n"
-                     "    8.  DecisionLog\n"
-                     "    9.  ChangeRequest\n"
-                     "   10.  ChangeObject  (auf bestehendem CR)\n"
-                     "   11.  Generisch\n";
-        int tc = readInt("Typ", 1, 11);
-        static const char* types[] = {
-            "incident","risk","measure","qualityGate",
-            "assumptionConstraint","communicationPlan",
-            "lessonsLearned","decisionLog",
-            "changeRequest","changeObject","generic"};
-        chosenType = types[tc-1];
-    }
-
-    std::string title = readLine("Titel: ");
+    // Step 1: Title
+    std::string title = readLine("Titel des Vorgangs: ");
     if (title.empty()) return nullptr;
 
-    // For ChangeObject: ask for parent CR
-    std::string parentId;
-    if (chosenType == "changeObject") {
-        showRecentItems("F18");
-        parentId = readLine("Basis-ChangeRequest Vorgang-ID: ");
+    // Step 2: Type (ask after title, not upfront)
+    std::string chosenType = type;
+    if (chosenType.empty()) {
+        hdr("TYP WÄHLEN");
+        std::cout
+            << "    1.  Incident         (Vorfall)\n"
+            << "    2.  Risk             (Risiko)\n"
+            << "    3.  Measure          (Maßnahme)\n"
+            << "    4.  QualityGate      (Qualitätsstor)\n"
+            << "    5.  AssumptionConstraint\n"
+            << "    6.  CommunicationPlan\n"
+            << "    7.  LessonsLearned\n"
+            << "    8.  DecisionLog\n"
+            << "    9.  ChangeRequest\n"
+            << "   10.  ChangeObject\n"
+            << "   11.  Generic\n";
+        static const char* types[] = {
+            "incident","risk","measure","qualityGate",
+            "assumptionConstraint","communicationPlan","lessonsLearned",
+            "decisionLog","changeRequest","changeObject","generic"};
+        int t = readInt("Typ",1,11);
+        chosenType = types[t-1];
     }
+    // Wizard: common fields (title was already asked above)
+    std::string owner  = readOpt("Verantwortlich (Person-ID, leer=offen): ");
+    std::string prio   = readOpt("Priorität (low/medium/high/critical, leer=medium): ");
 
-    auto v = F18Workflow::create(projectId, title, chosenType, taskId);
-    if (!v) { std::cout << "  >> Fehler beim Anlegen.\n"; return nullptr; }
-
-    if (!parentId.empty()) { v->parentVorgangId = parentId; v->update(); }
-    v->ownerId  = readOpt("Owner Person-ID (optional): ");
-    v->priority = "medium";
-    {
-        std::cout << "  Priorität: 1.low 2.medium 3.high 4.critical\n";
-        int p = readInt("Priorität",1,4);
-        static const char* ps[]={"low","medium","high","critical"};
-        v->priority = ps[p-1];
+    auto v = Rosenholz::F18Workflow::create(projectId, title, chosenType, taskId);
+    if (!v) {
+        std::cout << "  >> FEHLER: F18 Workflow konnte nicht angelegt werden.\n";
+        return nullptr;
     }
-
-    // Type-specific extra fields
-    if (chosenType == "incident") {
-        v->incidentType = readOpt("Vorfall-Typ (technical|process|security|quality): ");
-        v->severity     = readOpt("Schwere (low|medium|high|critical): ");
-        v->occurredDate = readOpt("Aufgetreten (JJJJ-MM-TT): ");
-    } else if (chosenType == "risk") {
-        v->riskLevel      = readOpt("Risiko-Level (low|medium|high|critical): ");
-        v->responseStrategy = readOpt("Strategie (avoid|mitigate|transfer|accept): ");
-    } else if (chosenType == "measure") {
-        v->measureCategory = readOpt("Kategorie (corrective|preventive|detective): ");
-        v->plannedDate     = readOpt("Geplantes Datum (JJJJ-MM-TT): ");
-    } else if (chosenType == "assumptionConstraint") {
-        std::cout << "  Typ: 1.assumption 2.constraint\n";
-        v->acType = (readInt("Typ",1,2)==1) ? "assumption" : "constraint";
-    } else if (chosenType == "changeRequest") {
-        v->changeType    = readOpt("CR-Typ (general|scope|budget|schedule|quality): ");
-        v->justification = readOpt("Begründung: ");
-    }
-
+    if (!owner.empty()) v->ownerId   = owner;
+    if (!prio.empty())  v->priority  = prio;
+    else                v->priority  = "medium";
     v->update();
-    std::cout << "  >> F18 Workflow angelegt: " << v->vorgangId << "\n";
-    std::cout << "  >> Typ: " << v->vorgangType << "\n";
+
+    std::cout << "  >> F18 Vorgang angelegt: " << v->vorgangId << "\n";
+    std::cout << "  >> Typ: " << v->vorgangType << "  Status: " << v->status << "\n";
     return v;
 }
 

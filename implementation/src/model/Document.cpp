@@ -1,5 +1,7 @@
 // Document.cpp
 #include "Document.h"
+#include "../workflow/WorkflowEngine.h"
+#include "../repository/DocumentRevision.h"
 #include <cstdlib>
 #include "../core/Database.h"
 #include "../core/Logger.h"
@@ -52,15 +54,16 @@ bool Document::save() const {
     if (!db) { LOG_ERROR("Document::save — documents DB unavailable"); return false; }
     bool ok = db->exec(R"(
         INSERT OR REPLACE INTO documents
-        (document_id,workflow_instance_id,workflow_status,workflow_current_state,
+        (document_id,workflow_instance_id,workflow_status,workflow_current_state,main_workflow_id,
          project_id,task_id,author_id,approved_by,doc_type,doc_category,title,version,
          date_created,date_modified,date_approved,date_expires,status,classification,
          volume_number,page_count,language,format,file_path,file_size,file_hash,file_url,
          external_ref,storage_system,tags,summary,links,notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
         BindParam::text(documentId), textOrNull(workflowInstanceId),
         textOrNull(workflowStatus), textOrNull(workflowCurrentState),
+        textOrNull(mainWorkflowId),
         textOrNull(projectId), textOrNull(taskId),
         textOrNull(authorId), textOrNull(approvedBy),
         BindParam::text(docType), textOrNull(docCategory),
@@ -84,6 +87,8 @@ bool Document::save() const {
 void Document::fromRow(const Row& r) {
     auto g=[&](const std::string& k){ auto it=r.find(k); return it!=r.end()?it->second:""; };
     documentId=g("document_id"); workflowInstanceId=g("workflow_instance_id");
+    workflowStatus=g("workflow_status"); workflowCurrentState=g("workflow_current_state");
+    mainWorkflowId=g("main_workflow_id");
     projectId=g("project_id"); taskId=g("task_id");
     authorId=g("author_id"); approvedBy=g("approved_by");
     docType=g("doc_type"); docCategory=g("doc_category");
@@ -254,7 +259,7 @@ static std::string computeSHA256(const std::string& path) {
     FILE* pipe = popen(("sha256sum \"" + path + "\" 2>/dev/null").c_str(), "r");
     if (!pipe) return "";
     char buf[256] = {};
-    fgets(buf, sizeof(buf), pipe);
+    if (!fgets(buf, sizeof(buf), pipe)) buf[0] = '\0';
     pclose(pipe);
     std::string s(buf);
     // sha256sum output: "hash  filename"
@@ -451,6 +456,45 @@ std::vector<std::shared_ptr<Document>> Document::loadRecent(int n) {
         result.push_back(obj);
     }
     return result;
+}
+
+// ── Lifecycle: ensure Main WFI for this document ─────────────
+void Document::ensureMainWorkflow() {
+    if (!mainWorkflowId.empty()) return;
+    auto inst = Rosenholz::WorkflowEngine::createMainWorkflow(
+        "document", documentId, title);
+    if (!inst) return;
+    mainWorkflowId = inst->instanceId;
+    status         = "in_work";
+    auto* db = DatabasePool::instance().get("documents");
+    if (db) db->exec(
+        "UPDATE documents SET main_workflow_id=?, status='in_work', updated_at=? "
+        "WHERE document_id=?;",
+        {BindParam::text(mainWorkflowId),
+         BindParam::text(nowIso()),
+         BindParam::text(documentId)});
+    LOG_INFO("[Document] Main WFI created: " + mainWorkflowId +
+             " for doc " + documentId);
+}
+
+// ── Lifecycle: ensure Revision 1 exists for this document ────
+void Document::ensureRevision1() {
+    // Only create if no revisions exist yet
+    uint32_t latest = DocumentRevision::latestRevNumber(documentId);
+    if (latest > 0) return;
+    auto rev = DocumentRevision::createRevision(documentId, 0, authorId,
+                                                "Revision 1 — Initialzustand");
+    if (rev) {
+        // Sync document status to match revision state (in_work)
+        auto* db = DatabasePool::instance().get("documents");
+        if (db) db->exec(
+            "UPDATE documents SET status='in_work', updated_at=? WHERE document_id=?;",
+            {BindParam::text(nowIso()), BindParam::text(documentId)});
+        status = "in_work";
+        LOG_INFO("[Document] Rev 1 created for " + documentId);
+    } else {
+        LOG_ERROR("[Document] Failed to create Rev 1 for " + documentId);
+    }
 }
 
 } // namespace Rosenholz

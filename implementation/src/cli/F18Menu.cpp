@@ -132,10 +132,13 @@ void f18Menu(std::shared_ptr<F18Workflow> v) {
         printF18Workflow(*v);
         drawF18Chain(v->steps);
 
-        std::cout << "  1.Bearbeiten  2.Schritt hinzufügen  3.Schritt öffnen\n"
-                     "  4.Notiz       5.Communications       6.Dokumente\n"
-                     "  7.Status ändern  0.Zurück\n";
-        int ch = readInt("Wahl",0,7); if (ch==0) break;
+        // Show release status in header
+        bool v_released = (v->status == "released");
+        if (v_released) std::cout << "  ⚠ RELEASED — nur Lesezugriff\n";
+        std::cout << "  1.Bearbeiten     2.Schritt hinzufügen  3.Schritt öffnen\n"
+                     "  4.Notiz          5.Communications       6.Dokumente\n"
+                     "  7.Status ändern  8.Main Workflow        0.Zurück\n";
+        int ch = readInt("Wahl",0,8); if (ch==0) break;
 
         if (ch==1) {
             // Edit common + type-specific fields
@@ -226,6 +229,24 @@ void f18Menu(std::shared_ptr<F18Workflow> v) {
             v->status = ss[s-1];
             v->update();
             std::cout << "  >> Status: " << v->status << "\n";
+        } else if (ch==8) {
+            // Main Workflow
+            hdr("MAIN WORKFLOW — " + v->vorgangId.substr(0,22));
+            std::cout << "  Status: " << v->status << "\n";
+            if (v->mainWorkflowId.empty()) { v->ensureMainWorkflow();
+                auto rv = F18Workflow::loadById(v->vorgangId);
+                if (rv) *v = *rv; }
+            if (!v->mainWorkflowId.empty()) {
+                int blockers=0;
+                Rosenholz::WorkflowEngine::canReleaseEntity(
+                    "f18",v->vorgangId,v->mainWorkflowId,blockers);
+                std::cout << "  Main WFI: " << v->mainWorkflowId.substr(0,36) << "\n";
+                std::cout << (blockers>0 ? "  ⚠ " + std::to_string(blockers)
+                    + " WFI(s) offen\n" : "  ✓ Freigabe möglich\n");
+                std::cout << "  1.Main WFI öffnen  0.Zurück\n";
+                int mch = readInt("Wahl",0,1);
+                if (mch==1) instanceMenu(v->mainWorkflowId);
+            }
         }
     }
 }
@@ -242,33 +263,31 @@ void f18BrowserMenu(const std::string& projectId, const std::string& taskId,
         else
             items = F18Workflow::loadRecent(50);
 
-        hdr("F18 WORKFLOWS (" + std::to_string(items.size()) + ")");
-        int n=1;
-        for (auto& v : items)
-            std::cout << "  " << std::setw(3) << n++ << ". "
-                      << "[" << std::left << std::setw(8) << v->vorgangType.substr(0,7) << "] "
-                      << std::setw(26) << v->title.substr(0,24)
-                      << "  " << v->status << "\n";
+        std::string ctxLabel = typeFilter.empty() ? "alle Typen" : typeFilter;
+        hdr("F18 VORGÄNGE (" + std::to_string(items.size()) + ") — " + ctxLabel);
 
-        std::cout << "\n  1.Neu anlegen  2.Öffnen\n";
-        std::string filterType = readOpt("  Typ-Filter (leer=alle, z.B. risk/incident/...): ");
-        std::cout << "  0.Zurück\n";
+        if (items.empty()) {
+            std::cout << "  (keine F18-Vorgänge)\n\n";
+        } else {
+            int n=1;
+            for (auto& v : items)
+                std::cout << "  " << std::setw(3) << n++ << ". "
+                          << "[" << std::left << std::setw(14) << v->vorgangType.substr(0,13) << "] "
+                          << std::setw(28) << v->title.substr(0,26)
+                          << "  " << v->status << "\n";
+        }
+
+        std::cout << "\n  1.Öffnen  2.Neu anlegen  0.Zurück\n";
         int ch = readInt("Wahl",0,2); if (ch==0) break;
 
         if (ch==1) {
-            auto v = createF18Wizard(projectId, taskId, filterType);
-            if (v) f18Menu(v);
-        } else if (ch==2) {
             if (items.empty()) continue;
-            if (!filterType.empty()) {
-                std::vector<std::shared_ptr<F18Workflow>> filtered;
-                for (auto& v : items)
-                    if (v->vorgangType == filterType) filtered.push_back(v);
-                items = filtered;
-            }
-            if (items.empty()) { std::cout << "  >> Keine Treffer.\n"; continue; }
             int pick = readInt("Nummer",1,(int)items.size());
             f18Menu(items[pick-1]);
+        } else if (ch==2) {
+            // createF18Wizard asks for title then type
+            auto v = createF18Wizard(projectId, taskId, "");
+            if (v) f18Menu(v);
         }
     }
 }

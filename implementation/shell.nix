@@ -41,6 +41,8 @@ pkgs.mkShell {
     # Core dependencies
     sqlite         # libsqlite3 + sqlite3.h
     nlohmann_json  # header-only JSON (nlohmann/json.hpp)
+    lmdb           # Lightning Memory-Mapped Database (file archive store)
+    openssl        # SHA-256 for content-addressed chunk storage
 
     # Download & archiving (used by FileOps + Document)
     curl
@@ -70,6 +72,7 @@ pkgs.mkShell {
     echo "  Compiler : $(g++ --version | head -1)"
     echo "  CMake    : $(cmake --version | head -1)"
     echo "  SQLite   : $(sqlite3 --version)"
+    echo "  LMDB     : available (file archive)"
     echo ""
     echo "  Quick start:"
     echo "    cmake -B build -DCMAKE_BUILD_TYPE=Debug"

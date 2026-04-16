@@ -166,16 +166,6 @@ bool ProjectF16::save() const {
 }
 
 void ProjectF16::fromRow(const Row& r) {
-    auto get = [&](const std::string& k) -> std::string {
-        auto it = r.find(k);
-        return it != r.end() ? it->second : "";
-    };
-    auto getD = [&](const std::string& k) -> double {
-        auto v = get(k); return v.empty() ? 0.0 : std::stod(v);
-    };
-    auto getI = [&](const std::string& k) -> int {
-        auto v = get(k); return v.empty() ? 0 : std::stoi(v);
-    };
 
     projectId            = rowGet(r,"project_id");
     workflowInstanceId   = rowGet(r,"workflow_instance_id");

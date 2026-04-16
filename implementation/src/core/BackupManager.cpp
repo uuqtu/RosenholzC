@@ -110,6 +110,7 @@ bool BackupManager::runFull(
 }
 
 bool BackupManager::isDue(const std::string& backupDest, int intervalHours) {
+    (void)intervalHours;  // TODO: implement full timestamp comparison
     std::string sentinelPath = FileOps::joinPath(backupDest, "last_backup.txt");
     if (!FileOps::fileExists(sentinelPath)) {
         LOG_DEBUG("No backup sentinel found — backup is due");

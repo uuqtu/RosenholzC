@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS documents (
     workflow_instance_id   TEXT,
     workflow_status        TEXT,
     workflow_current_state TEXT,
+    main_workflow_id       TEXT,
     project_id             TEXT,
     task_id                TEXT,
     author_id              TEXT,
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS communication_plans (
     workflow_instance_id   TEXT,
     workflow_status        TEXT,
     workflow_current_state TEXT,
+    main_workflow_id       TEXT,
     project_id             TEXT,
     owner_id               TEXT,
     version                TEXT DEFAULT '1.0',
@@ -106,5 +108,37 @@ CREATE TABLE IF NOT EXISTS document_versions (
 
 CREATE INDEX IF NOT EXISTS idx_doc_versions ON document_versions(document_id, version_number);
 
+
+-- ── Document Revisions ───────────────────────────────────────
+-- Each document has N revisions identified by (document_id, rev).
+-- Exactly one revision per document_id holds superseded = 0 (false).
+-- That revision is the "current active revision".
+--
+-- State machine:
+--   in_work → pre_released, locked, closed
+--   pre_released → released, locked, closed, in_work
+--   released → locked, closed   (immutable)
+--   locked → pre_released (newest only), closed
+--   closed → [terminal]
+CREATE TABLE IF NOT EXISTS document_revisions (
+    document_id     TEXT    NOT NULL,
+    rev             INTEGER NOT NULL DEFAULT 1,
+    parent_rev      INTEGER DEFAULT 0,
+    rev_state       TEXT    NOT NULL DEFAULT 'in_work'
+                            CHECK(rev_state IN ('in_work','pre_released','released','locked','closed')),
+    superseded      INTEGER NOT NULL DEFAULT 1,  -- 0 = current active revision
+    content_hash    TEXT,           -- SHA-256 of chunk in LMDB (empty until committed)
+    content_size    INTEGER DEFAULT 0,
+    created_by      TEXT,
+    change_note     TEXT,
+    created_at      TEXT,
+    updated_at      TEXT,
+    PRIMARY KEY (document_id, rev)
+);
+
+CREATE INDEX IF NOT EXISTS idx_docrev_current
+    ON document_revisions(document_id, superseded);
+CREATE INDEX IF NOT EXISTS idx_docrev_state
+    ON document_revisions(document_id, rev_state);
 -- ── Dokument-Datei-Metadaten ────────────────────────────────────
 -- Ergänzt documents-Tabelle um Datei-spezifische Informationen

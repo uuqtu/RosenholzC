@@ -393,7 +393,9 @@ void testSuiteMFS() {
         CHECK(Rosenholz::FileOps::dirExists(heft), "Project Haengeregister exists");
 
         // Verify German subfolder names
-        for (auto& sub : {"F22","F18","DOK","RSK","MSN","QT","LE","ENT","AEA","ABE","MEI","BSP"}) {
+        // Only F22, F18, DOK — all other old subfolders were removed
+        // as they reflected concepts (risks, milestones, etc.) now handled by F18
+        for (auto& sub : {"F22","F18","DOK"}) {
             CHECK(Rosenholz::FileOps::dirExists(Rosenholz::FileOps::joinPath(heft, sub)),
                   std::string("Haengeregister has ") + sub + "/ subfolder");
         }

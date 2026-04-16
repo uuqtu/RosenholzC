@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS workflow_template_actions (
     is_final        INTEGER DEFAULT 0,     -- 1 = last step (auto-close workflow)
     requires_decision_log_entry INTEGER DEFAULT 0,
     requires_lesson_learned_entry INTEGER DEFAULT 0,
+    target_state                TEXT,  -- state to apply on entity when End fires
     requires_comment INTEGER DEFAULT 0,
     notes           TEXT
 );
@@ -127,6 +128,7 @@ CREATE TABLE IF NOT EXISTS workflow_actions (
     auto_approve        INTEGER DEFAULT 0,
     requires_decision_log_entry  INTEGER DEFAULT 0,
     requires_lesson_learned_entry INTEGER DEFAULT 0,
+    target_state                TEXT,  -- state to apply to entity when End step fires
 
     -- ise-cobra tracking state (replaces TrackableItem)
     tracking_status     TEXT DEFAULT 'planned',

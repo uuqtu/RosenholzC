@@ -2,6 +2,7 @@
 // WorkflowEngine.cpp
 // ============================================================
 #include "WorkflowEngine.h"
+#include "../repository/DocumentRevision.h"
 #include "../model/f18/F18Workflow.h"
 #include "../model/Document.h"
 #include "../model/Utils.h"
@@ -13,7 +14,6 @@ namespace Rosenholz {
 
 static Database* wfDB() { return DatabasePool::instance().get("workflow"); }
 static Database* docDB() { return DatabasePool::instance().get("documents"); }
-static Database* repDB() { return DatabasePool::instance().get("f18"); }  // reporting.db replaced by f18.db
 
 // ═════════════════════════════════════════════════════════════
 // WorkflowAction
@@ -46,6 +46,7 @@ void WorkflowAction::fromRow(const Row& r) {
     autoApprove         = rowGetBool(r,"auto_approve");
     requiresDecisionLogEntry   = rowGetBool(r,"requires_decision_log_entry");
     requiresLessonLearnedEntry = rowGetBool(r,"requires_lesson_learned_entry");
+    targetState                = rowGet(r,"target_state");
     notes               = rowGetOr(r,"notes","{}");
     createdAt           = rowGet(r,"created_at");
     updatedAt           = rowGet(r,"updated_at");
@@ -78,11 +79,11 @@ bool WorkflowAction::save() const {
          assigned_to,required_role,due_date,started_date,completed_date,
          sla_hours,sla_breached,decision,decision_by,decision_date,comment,
          requires_comment,requires_document,auto_approve,
-         requires_decision_log_entry,requires_lesson_learned_entry,
+         requires_decision_log_entry,requires_lesson_learned_entry,target_state,
          tracking_status,planned_date,focus_date,archived_date,
          priority,assigned_to_group,progress_note,percent_complete,
          notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )SQL", {
         BindParam::text(actionId), BindParam::text(instanceId), textOrNull(tplActionId),
         BindParam::text(title), textOrNull(description),
@@ -100,6 +101,7 @@ bool WorkflowAction::save() const {
         BindParam::int64(autoApprove?1:0),
         BindParam::int64(requiresDecisionLogEntry?1:0),
         BindParam::int64(requiresLessonLearnedEntry?1:0),
+        textOrNull(targetState),
         BindParam::text(trackingStatus),
         textOrNull(plannedDate), textOrNull(focusDate), textOrNull(archivedDate),
         BindParam::text(priority.empty()?"medium":priority),
@@ -1259,9 +1261,30 @@ bool WorkflowEngine::syncEntityWorkflowFields(const WorkflowInstance& inst) {
                 isMain = true;
         }
         if (isMain) {
-            releaseEntity(inst.entityType, inst.entityId);
-            LOG_INFO("[Lifecycle] Entity released via Main WFI: " +
-                     inst.entityType + "/" + inst.entityId);
+            // Find the End action's targetState to determine which state to apply
+            std::string targetSt = "released";  // default for F16/F22/F18
+            for (auto& a : inst.actions) {
+                if (a.isFinal && !a.targetState.empty()) {
+                    targetSt = a.targetState;
+                    break;
+                }
+            }
+            // For non-document entities, only "released" is permitted
+            if (inst.entityType != "document") targetSt = "released";
+
+            if (inst.entityType == "document") {
+                // Apply state transition to the current document revision
+                auto cur = Rosenholz::DocumentRevision::currentRevision(inst.entityId);
+                if (cur) {
+                    cur->transitionState(targetSt);
+                    LOG_INFO("[Lifecycle] Document revision transitioned: " +
+                             inst.entityId + " → " + targetSt);
+                }
+            } else {
+                releaseEntity(inst.entityType, inst.entityId);
+                LOG_INFO("[Lifecycle] Entity released via Main WFI: " +
+                         inst.entityType + "/" + inst.entityId);
+            }
         }
     }
 

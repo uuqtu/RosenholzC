@@ -30,7 +30,6 @@ class F18Workflow;  // forward declaration
 class ProjectF16;
 class TaskF22;
 class IncidentF18;
-class Risk;
 class Document;
 class Person;
 class Team;

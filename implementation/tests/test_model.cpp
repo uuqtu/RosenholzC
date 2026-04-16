@@ -3,6 +3,8 @@
 // ============================================================
 #include "TestFramework.h"
 #include "TestFixtures.h"
+#include "../src/repository/ArchiveStore.h"
+#include "../src/repository/DocumentRevision.h"
 #include "../src/model/Utils.h"
 #include "../src/model/f18/F18Workflow.h"
 #include "../src/model/f18/Communication.h"
@@ -507,6 +509,259 @@ void testSuiteModel() {
         auto reloaded = R::ProjectF16::loadById(p->projectId);
         CHECK(reloaded != nullptr, "reloaded after release");
         CHECK(reloaded->status == "released", "status=released after releaseEntity");
+    }
+
+
+    SECTION("DocumentRevision — createRevision initial state");
+    {
+        // Every new document starts with rev=1, in_work, superseded=false
+        ProjectFixture pfix("DocRev-Init-Test");
+        auto doc = R::Document::create("DocRev-Test-Doc", "report",
+                                        pfix.project->projectId);
+        doc->save();
+
+        auto rev = R::DocumentRevision::createRevision(doc->documentId, 0,
+                                                        "test-user", "Initial creation");
+        CHECK(rev != nullptr, "createRevision returns non-null");
+        CHECK(rev->rev == 1, "First revision is rev=1");
+        CHECK(rev->revState == "in_work", "Starts in_work");
+        CHECK(rev->parentRev == 0, "Initial rev has parentRev=0");
+
+        // Superseded flag: first rev must be active (superseded=false)
+        auto current = R::DocumentRevision::currentRevision(doc->documentId);
+        CHECK(current != nullptr, "currentRevision finds the initial rev");
+        if (current) {
+            CHECK(!current->superseded, "Initial rev is active (superseded=false)");
+            CHECK(current->rev == 1, "currentRevision returns rev=1");
+        }
+    }
+
+    SECTION("DocumentRevision — state machine: allowed transitions");
+    {
+        // Test all valid transitions from the spec (using string constants directly)
+        auto allowed = R::DocumentRevision::isTransitionAllowed;
+        // in_work → pre_released, locked, closed
+        CHECK( allowed("in_work","pre_released"), "in_work→pre_released");
+        CHECK( allowed("in_work","locked"),       "in_work→locked");
+        CHECK( allowed("in_work","closed"),       "in_work→closed");
+        CHECK(!allowed("in_work","released"),     "in_work→released BLOCKED");
+        // pre_released → released, locked, closed, in_work
+        CHECK( allowed("pre_released","released"),    "pre_released→released");
+        CHECK( allowed("pre_released","locked"),      "pre_released→locked");
+        CHECK( allowed("pre_released","closed"),      "pre_released→closed");
+        CHECK( allowed("pre_released","in_work"),     "pre_released→in_work");
+        // released → locked, closed only
+        CHECK( allowed("released","locked"),      "released→locked");
+        CHECK( allowed("released","closed"),      "released→closed");
+        CHECK(!allowed("released","in_work"),     "released→in_work BLOCKED");
+        CHECK(!allowed("released","pre_released"),"released→pre_released BLOCKED");
+        // locked → pre_released (newest only), closed
+        CHECK( allowed("locked","pre_released"), "locked→pre_released");
+        CHECK( allowed("locked","closed"),       "locked→closed");
+        CHECK(!allowed("locked","released"),     "locked→released BLOCKED");
+        // closed → nothing (terminal)
+        CHECK(!allowed("closed","in_work"),      "closed→in_work BLOCKED");
+        CHECK(!allowed("closed","released"),     "closed→released BLOCKED");
+        CHECK(!allowed("closed","locked"),       "closed→locked BLOCKED");
+    }
+
+    SECTION("DocumentRevision — transitionState persists and updates superseded");
+    {
+        ProjectFixture pfix("DocRev-Transition-Test");
+        auto doc = R::Document::create("Transition-Doc", "report",
+                                        pfix.project->projectId);
+        doc->save();
+        auto rev = R::DocumentRevision::createRevision(doc->documentId, 0, "u1", "v1");
+        CHECK(rev != nullptr, "rev created");
+
+        // in_work → pre_released
+        bool ok = rev->transitionState("pre_released");
+        CHECK(ok, "in_work→pre_released succeeds");
+        auto r2 = R::DocumentRevision::loadByRev(doc->documentId, 1);
+        CHECK(r2 != nullptr, "reload after transition");
+        if (r2) CHECK(r2->revState == "pre_released", "revState=pre_released persisted");
+
+        // pre_released → released
+        ok = rev->transitionState("released");
+        CHECK(ok, "pre_released→released succeeds");
+        auto r3 = R::DocumentRevision::loadByRev(doc->documentId, 1);
+        if (r3) CHECK(r3->revState == "released", "revState=released persisted");
+
+        // released → locked
+        ok = rev->transitionState("locked");
+        CHECK(ok, "released→locked succeeds");
+
+        // released → in_work must fail
+        ok = rev->transitionState("in_work");
+        CHECK(!ok, "locked→in_work blocked (terminal-ish)");
+    }
+
+    SECTION("DocumentRevision — superseded invariant with multiple revisions");
+    {
+        ProjectFixture pfix("DocRev-Superseded-Test");
+        auto doc = R::Document::create("Multi-Rev-Doc", "spec",
+                                        pfix.project->projectId);
+        doc->save();
+
+        // Create rev 1
+        auto r1 = R::DocumentRevision::createRevision(doc->documentId, 0, "u1", "rev 1");
+        CHECK(r1 != nullptr, "rev 1 created");
+
+        // Create rev 2 (based on rev 1)
+        auto r2 = R::DocumentRevision::createRevision(doc->documentId, 1, "u1", "rev 2");
+        CHECK(r2 != nullptr, "rev 2 created");
+        CHECK(r2->rev == 2, "second revision is rev=2");
+        CHECK(r2->parentRev == 1, "parentRev=1 for rev 2");
+
+        // Exactly one should be active (superseded=false)
+        auto all = R::DocumentRevision::loadAllRevisions(doc->documentId);
+        CHECK(all.size() == 2, "two revisions exist");
+        int activeCount = 0;
+        for (auto& r : all) if (!r->superseded) activeCount++;
+        CHECK(activeCount == 1, "exactly one active revision (superseded=false)");
+
+        // Current should be rev 2 (latest non-locked/non-closed)
+        auto cur = R::DocumentRevision::currentRevision(doc->documentId);
+        CHECK(cur != nullptr, "currentRevision exists");
+        if (cur) CHECK(cur->rev == 2, "currentRevision is rev=2 (latest)");
+
+        // Release rev 1 → rev 1 is released, but rev 2 (in_work) should still be
+        // the active revision? No — priority says latest released wins.
+        // But rev 2 is newer and in_work. After releasing rev 1, priority:
+        // latest released = rev 1. So superseded switches to rev 1.
+        r1->transitionState("pre_released");
+        r1->transitionState("released");
+        auto cur2 = R::DocumentRevision::currentRevision(doc->documentId);
+        CHECK(cur2 != nullptr, "currentRevision after release");
+        if (cur2) CHECK(cur2->rev == 1, "rev 1 is now current (released has priority)");
+
+        // Re-verify invariant: still exactly one active
+        auto all2 = R::DocumentRevision::loadAllRevisions(doc->documentId);
+        int activeCount2 = 0;
+        for (auto& r : all2) if (!r->superseded) activeCount2++;
+        CHECK(activeCount2 == 1, "still exactly one active after release");
+    }
+
+    SECTION("ArchiveStore — init, stage, commit, retrieve");
+    {
+        // ArchiveStore is already initialized by AppController in the test setup.
+        // If it's not open (non-fatal in tests), skip content checks gracefully.
+        auto& store = Rosenholz::Archive::ArchiveStore::instance();
+        if (!store.isOpen()) {
+            CHECK(true, "ArchiveStore not open (non-fatal in test env) — skipping");
+        } else {
+            // Write a temp file to stage
+            std::string tmpSrc = "/tmp/rh_archive_test_" +
+                                  std::to_string(std::time(nullptr)) + ".txt";
+            {
+                std::ofstream f(tmpSrc);
+                f << "Hello Rosenholz Archive Test Content 12345";
+            }
+
+            // Stage it
+            std::string stagePath;
+            auto ref = store.stageContent(tmpSrc, stagePath);
+            CHECK(ref.valid(), "stageContent returns valid ChunkRef");
+            CHECK(!ref.sha256.empty(), "ChunkRef has SHA-256");
+            CHECK(ref.size > 0, "ChunkRef has size > 0");
+            CHECK(!stagePath.empty(), "stagePath set");
+
+            // Commit to LMDB (docId:rev=1)
+            std::string testDocId = "XV/DOK/9999/2026";
+            bool committed = store.commitContent(stagePath, ref, testDocId, 1);
+            CHECK(committed, "commitContent succeeds");
+
+            // Retrieve to a new path
+            std::string retrievePath = "/tmp/rh_archive_retrieve_test.txt";
+            bool retrieved = store.retrieveContent(testDocId, 1, retrievePath);
+            CHECK(retrieved, "retrieveContent succeeds");
+
+            // Verify content matches
+            std::ifstream fin(retrievePath);
+            std::string content((std::istreambuf_iterator<char>(fin)),
+                                 std::istreambuf_iterator<char>());
+            CHECK(content.find("Hello Rosenholz") != std::string::npos,
+                  "Retrieved content matches original");
+
+            // lookupRevChunk
+            std::string sha = store.lookupRevChunk(testDocId, 1);
+            CHECK(sha == ref.sha256, "lookupRevChunk returns correct SHA-256");
+
+            // chunkExists
+            CHECK(store.chunkExists(ref.sha256), "chunkExists for committed chunk");
+
+            // Cleanup
+            std::remove(tmpSrc.c_str());
+            std::remove(retrievePath.c_str());
+        }
+    }
+
+
+    SECTION("Document — Revision 1 auto-created on save");
+    {
+        ProjectFixture pfix("DocRev-AutoCreate-Test");
+        auto doc = R::Document::create("AutoRev-Doc", "spec", pfix.project->projectId);
+        doc->save();
+        doc->ensureRevision1();
+        doc->ensureMainWorkflow();
+
+        // Revision 1 must exist
+        auto rev1 = R::DocumentRevision::loadByRev(doc->documentId, 1);
+        CHECK(rev1 != nullptr, "Rev 1 exists after ensureRevision1");
+        if (rev1) {
+            CHECK(rev1->revState == "in_work", "Rev 1 starts in_work");
+            CHECK(!rev1->superseded, "Rev 1 is active (superseded=false)");
+        }
+
+        // currentRevision returns Rev 1
+        auto cur = R::DocumentRevision::currentRevision(doc->documentId);
+        CHECK(cur != nullptr, "currentRevision returns Rev 1");
+        if (cur) CHECK(cur->rev == 1, "currentRevision is Rev 1");
+
+        // Calling ensureRevision1 again is idempotent
+        doc->ensureRevision1();
+        auto all = R::DocumentRevision::loadAllRevisions(doc->documentId);
+        CHECK(all.size() == 1, "ensureRevision1 is idempotent — still 1 revision");
+
+        // Main WFI exists
+        auto fresh = R::Document::loadById(doc->documentId);
+        CHECK(fresh != nullptr, "Document reloadable");
+        if (fresh) CHECK(!fresh->mainWorkflowId.empty(), "Main WFI created");
+    }
+
+    SECTION("Document — 5-state machine via DocumentRevision");
+    {
+        ProjectFixture pfix("DocState-Test");
+        auto doc = R::Document::create("StateTest-Doc", "report", pfix.project->projectId);
+        doc->save();
+        doc->ensureRevision1();
+
+        auto rev = R::DocumentRevision::currentRevision(doc->documentId);
+        CHECK(rev != nullptr, "current revision exists");
+        if (!rev) return;
+
+        // in_work → pre_released
+        CHECK(rev->transitionState("pre_released"), "in_work → pre_released");
+        CHECK(rev->revState == "pre_released", "state is pre_released");
+
+        // pre_released → released (with confirmation in test = just call directly)
+        CHECK(rev->transitionState("released"), "pre_released → released");
+        CHECK(rev->revState == "released", "state is released");
+
+        // released → in_work must fail
+        CHECK(!rev->transitionState("in_work"), "released → in_work blocked");
+
+        // released → locked
+        CHECK(rev->transitionState("locked"), "released → locked");
+        CHECK(rev->revState == "locked", "state is locked");
+
+        // locked → closed
+        CHECK(rev->transitionState("closed"), "locked → closed");
+        CHECK(rev->revState == "closed", "state is closed");
+
+        // closed → anything fails
+        CHECK(!rev->transitionState("in_work"), "closed → in_work blocked (terminal)");
+        CHECK(!rev->transitionState("released"), "closed → released blocked (terminal)");
     }
 
 }

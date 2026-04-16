@@ -252,6 +252,20 @@ void instanceMenu(const std::string& instanceId) {
             if (inst->actions.empty()) { std::cout << "  Keine Schritte.\n"; continue; }
             int an = readInt("Schritt #", 1, (int)inst->actions.size());
             auto& act = inst->actions[an-1];
+
+            // If this is the End step of a document Main WFI, ask for target state
+            if (act.isFinal && inst->entityType == "document") {
+                std::cout << "  ── END-SCHRITT: Dokument-Zielzustand wählen ──\n"
+                          << "  1.in_work    2.pre_released  3.released\n"
+                          << "  4.locked     5.closed\n";
+                static const char* sts[] = {
+                    "in_work","pre_released","released","locked","closed"};
+                int si = readInt("Zielzustand", 1, 5);
+                act.targetState = sts[si-1];
+                act.save();
+                std::cout << "  >> Zielzustand gesetzt: " << act.targetState << "\n";
+            }
+
             std::cout << "  Entscheidung:  1.Genehmigen  2.Ablehnen  3.Überspringen\n";
             int dec = readInt("Entscheidung", 1, 3);
             static const char* decisions[] = {"approved","rejected","skipped"};

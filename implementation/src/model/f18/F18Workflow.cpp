@@ -265,7 +265,11 @@ std::shared_ptr<F18Workflow> F18Workflow::create(
     initStep->sequenceOrder = 0;
     initStep->isInitialize  = true;
     initStep->autoApprove   = true;
-    initStep->status        = "pending";
+    // Init step is always auto-approved immediately
+    initStep->status        = "approved";
+    initStep->decision      = "approved";
+    initStep->decisionDate  = nowIso();
+    initStep->completedDate = nowIso();
     initStep->createdAt     = nowIso();
     initStep->updatedAt     = nowIso();
     initStep->save();

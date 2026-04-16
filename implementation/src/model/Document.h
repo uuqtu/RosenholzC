@@ -29,6 +29,7 @@ class Document {
 public:
     std::string documentId;
     std::string workflowInstanceId, workflowStatus, workflowCurrentState;
+    std::string mainWorkflowId;    ///< Main WFI controlling this doc lifecycle
     std::string projectId, taskId;
     std::string authorId, approvedBy;
 
@@ -37,7 +38,7 @@ public:
     std::string title;
     std::string version         { "1.0" };
     std::string dateCreated, dateModified, dateApproved, dateExpires;
-    std::string status;         // draft|review|approved|superseded|archived
+    std::string status  { "in_work" }; // in_work|pre_released|released|locked|closed
     std::string classification;
     int         volumeNumber    { 1 };
     int         pageCount       { 0 };
@@ -58,6 +59,8 @@ public:
 
     // ── CRUD ──────────────────────────────────────────────
     bool save() const;
+    void ensureMainWorkflow();  ///< Creates Main WFI on first save
+    void ensureRevision1();     ///< Creates Rev 1 on first save
     bool load(const std::string& id);
     bool remove();
     bool update();
