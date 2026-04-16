@@ -4,13 +4,13 @@
 // ============================================================
 #include "../model/ProjectF16.h"
 #include "../model/TaskF22.h"
-#include "../model/IncidentF18.h"
-#include "../model/Risk.h"
 #include "../model/Document.h"
 #include "../model/Person.h"
 #include "../model/Team.h"
 #include "../model/Milestone.h"
-#include "../model/ReportingModels.h"
+#include "../model/f18/F18Workflow.h"
+#include "../model/f18/F18WorkflowStep.h"
+#include "../model/f18/Communication.h"
 #include "../workflow/WorkflowEngine.h"
 #include <string>
 #include <vector>
@@ -39,6 +39,8 @@ void documentBrowserMenu(const std::string& projectId = "",
 void workflowMenu();
 void instanceMenu(const std::string& instanceId);
 void milestoneMenu(const std::string& projectId);
+void communicationMenu(const std::string& ownerId,
+                       const std::string& ownerType);
 void meetingMenu(const std::string& taskId, const std::string& projectId = "");
 void measureMenu(const std::string& projectId);
 
@@ -61,20 +63,34 @@ void printProject(const Rosenholz::ProjectF16&);
 std::shared_ptr<Rosenholz::Person>      createPersonWizard();
 std::shared_ptr<Rosenholz::ProjectF16>  createProjectWizard();
 std::shared_ptr<Rosenholz::TaskF22>     createTaskWizard(const std::string& projectId);
-std::shared_ptr<Rosenholz::IncidentF18> createIncidentWizard(const std::string& projectId);
+std::shared_ptr<Rosenholz::F18Workflow> createF18Wizard(
+    const std::string& projectId,
+    const std::string& taskId = "",
+    const std::string& type   = "");
 
 // Additional shared display/list functions (defined in Utilities.cpp)
 void listTasks(const std::string& projectId);
-void listIncidents(const std::string& projectId);
-void printIncident(const Rosenholz::IncidentF18&);
 void printTask(const Rosenholz::TaskF22&);
+
+// Global search across all entity categories
+void globalSearch(const std::string& query);
+
+// Show last 20 items across all entity types (for link/attach dialogs)
+void showRecentItems(const std::string& filter = "");
+
+// F18 Workflow display
+void printF18Workflow(const Rosenholz::F18Workflow&);
+
+// F18 Workflow menu
+void f18Menu(std::shared_ptr<Rosenholz::F18Workflow> v);
+void f18BrowserMenu(const std::string& projectId = "",
+                    const std::string& taskId = "");
 
 // Universal document attachment dialog
 std::shared_ptr<Rosenholz::Document> attachDocumentDialog(
     const std::string& projectId = "", const std::string& taskId = "");
 
 // Incident detail
-void incidentDetailMenu(std::shared_ptr<Rosenholz::IncidentF18> inc);
 
 // Team menu
 void teamMenu();

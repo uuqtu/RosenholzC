@@ -140,6 +140,7 @@ public:
         const std::string& sizeClass   = "medium",
         const std::string& createdBy   = "");
 
+    static std::vector<std::shared_ptr<ProjectF16>> loadRecent(int n = 20);
     static std::shared_ptr<ProjectF16> loadById(const std::string& projectId);
     static std::vector<std::shared_ptr<ProjectF16>> loadAll();
     static std::vector<std::shared_ptr<ProjectF16>> loadByStatus(const std::string& status);

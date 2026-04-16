@@ -106,6 +106,7 @@ public:
         const std::string& assigneeId  = "",
         const std::string& parentTaskId = "");
 
+    static std::vector<std::shared_ptr<TaskF22>> loadRecent(int n = 20);
     static std::shared_ptr<TaskF22> loadById(const std::string& taskId);
     static std::vector<std::shared_ptr<TaskF22>> loadForProject(const std::string& projectId);
     static std::vector<std::shared_ptr<TaskF22>> loadChildren(const std::string& parentTaskId);

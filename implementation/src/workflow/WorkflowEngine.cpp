@@ -2,6 +2,7 @@
 // WorkflowEngine.cpp
 // ============================================================
 #include "WorkflowEngine.h"
+#include "../model/f18/F18Workflow.h"
 #include "../model/Document.h"
 #include "../model/Utils.h"
 #include <sstream>
@@ -12,7 +13,7 @@ namespace Rosenholz {
 
 static Database* wfDB() { return DatabasePool::instance().get("workflow"); }
 static Database* docDB() { return DatabasePool::instance().get("documents"); }
-static Database* repDB() { return DatabasePool::instance().get("reporting"); }
+static Database* repDB() { return DatabasePool::instance().get("f18"); }  // reporting.db replaced by f18.db
 
 // ═════════════════════════════════════════════════════════════
 // WorkflowAction
@@ -767,6 +768,29 @@ std::shared_ptr<WorkflowAction> WorkflowEngine::addAction(
     const std::string& dueDate,
     int slaHours)
 {
+    // Guard: End action must never be used as a predecessor.
+    // A step after End would be unreachable — the workflow is already closed.
+    if (!predecessors.empty()) {
+        for (auto& a : inst.actions) {
+            if (a.isFinal) {
+                // Split the predecessor list and check each ID
+                std::istringstream ss(predecessors);
+                std::string tok;
+                while (std::getline(ss, tok, ',')) {
+                    // Trim whitespace
+                    auto s = tok.find_first_not_of(" \t");
+                    auto e = tok.find_last_not_of(" \t");
+                    if (s != std::string::npos) tok = tok.substr(s, e-s+1);
+                    if (tok == a.actionId) {
+                        LOG_ERROR("[WFEngine] addAction rejected: End action (" +
+                                  a.actionId + ") cannot be a predecessor.");
+                        return nullptr;
+                    }
+                }
+            }
+        }
+    }
+
     // Find the End action index BEFORE any vector modification
     // (push_back may reallocate, invalidating pointers)
     int endActIdx = -1;
@@ -874,6 +898,9 @@ bool WorkflowEngine::fireAction(
         return false;
     }
     syncEntityWorkflowFields(inst);
+    // Auto-tick after every action fire so the End bookend can auto-approve
+    // and the instance can transition to "completed" without manual tick calls.
+    tick(inst);
     return true;
 }
 
@@ -908,22 +935,36 @@ bool WorkflowEngine::tick(WorkflowInstance& inst) {
             LOG_INFO("[WFEngine] Action auto-approved: " + a.actionId);
             changed = true;
         }
-        // Auto-approve the End bookend when all its predecessors are complete.
-        // End is a structural marker, not a user approval step — it closes
-        // automatically once all real work is done.
-        if (a.isFinal && a.status == "pending" && a.canStart(inst.actions)) {
-            a.status        = "approved";
-            a.decision      = "approved";
-            a.decisionBy    = "system";
-            a.decisionDate  = nowIso();
-            a.completedDate = nowIso();
-            a.updatedAt     = nowIso();
-            a.save();
-            LOG_INFO("[WFEngine] End action auto-approved — workflow closing: " + a.actionId);
-            changed = true;
+        // Auto-approve the End bookend when all its predecessors are complete
+        // AND there is at least one real mid-step (not just Init→End with no work).
+        // This prevents an empty ad-hoc workflow from auto-completing immediately.
+        if (a.isFinal && (a.status == "pending" || a.status == "in_progress")
+            && a.canStart(inst.actions)) {
+            // Count real work steps (not Init, not End)
+            int midSteps = 0;
+            int midDone  = 0;
+            for (auto& x : inst.actions) {
+                if (!x.isInitialize && !x.isFinal) {
+                    midSteps++;
+                    if (x.isComplete()) midDone++;
+                }
+            }
+            // Only auto-approve End if there are mid-steps and all are done
+            if (midSteps > 0 && midDone == midSteps) {
+                a.status        = "approved";
+                a.decision      = "approved";
+                a.decisionBy    = "system";
+                a.decisionDate  = nowIso();
+                a.completedDate = nowIso();
+                a.updatedAt     = nowIso();
+                a.save();
+                LOG_INFO("[WFEngine] End action auto-approved — workflow closing: " + a.actionId);
+                changed = true;
+            }
         }
-        // Mark in_progress for ready actions
-        if (a.status == "pending" && a.canStart(inst.actions) && !a.autoApprove) {
+        // Mark in_progress for ready actions (never for the End bookend)
+        if (a.status == "pending" && a.canStart(inst.actions) &&
+            !a.autoApprove && !a.isFinal) {
             a.status      = "in_progress";
             a.startedDate = nowIso();
             a.updatedAt   = nowIso();
@@ -1029,8 +1070,21 @@ bool WorkflowEngine::attachDocumentToInstance(
     const std::string& relationship,
     const std::string& notes)
 {
+    if (instanceId.empty() || documentId.empty()) {
+        LOG_WARN("[WFEngine] attachDocumentToInstance: empty id");
+        return false;
+    }
     auto* db = docDB();
-    if (!db) return false;
+    if (!db) {
+        LOG_ERROR("[WFEngine] attachDocumentToInstance: no documents db");
+        return false;
+    }
+    // Verify document actually exists before linking
+    auto doc = Document::loadById(documentId);
+    if (!doc) {
+        LOG_WARN("[WFEngine] attachDocumentToInstance: document not found: " + documentId);
+        return false;
+    }
     std::string linkId = genId("DOK");
     bool ok = db->exec(R"SQL(
         INSERT OR IGNORE INTO entity_documents
@@ -1040,12 +1094,13 @@ bool WorkflowEngine::attachDocumentToInstance(
         BindParam::text("workflow_instance"),
         BindParam::text(instanceId),
         BindParam::text(documentId),
-        BindParam::text(relationship),
+        BindParam::text(relationship.empty() ? "reference" : relationship),
         textOrNull(notes),
         BindParam::text(nowIso())
     });
     if (ok) LOG_INFO("[WFEngine] Document attached to instance: " + instanceId +
                      " doc=" + documentId);
+    else     LOG_WARN("[WFEngine] attachDocumentToInstance failed for: " + instanceId);
     return ok;
 }
 
@@ -1096,76 +1151,48 @@ std::vector<std::shared_ptr<Document>> WorkflowEngine::loadDocumentsForAction(
 }
 
 bool WorkflowEngine::createDecisionLogEntry(
-    const std::string& actionId,
-    const std::string& entityType, const std::string& entityId,
-    const std::string& title, const std::string& rationale)
+    const std::string& /*actionId*/,
+    const std::string& entityType,
+    const std::string& entityId,
+    const std::string& title,
+    const std::string& rationale)
 {
-    auto* db = repDB();
+    // DecisionLog is now an F18Workflow (vorgangType="decisionLog").
+    // Create or append to a decisionLog F18 for this entity.
+    auto* db = DatabasePool::instance().get("f18");
     if (!db) return false;
-
-    // Get or create header
-    std::string headerId = db->queryScalar(
-        "SELECT dl_header_id FROM decision_log_header WHERE entity_type=? AND entity_id=?;",
-        {BindParam::text(entityType), BindParam::text(entityId)});
-
-    if (headerId.empty()) {
-        headerId = genId("DLH");
-        db->exec(R"SQL(
-            INSERT INTO decision_log_header(dl_header_id,entity_type,entity_id,created_at)
-            VALUES(?,?,?,?)
-        )SQL", {
-            BindParam::text(headerId), BindParam::text(entityType),
-            BindParam::text(entityId), BindParam::text(nowIso())
-        });
-    }
-
-    std::string entryId = genId("DLE");
-    return db->exec(R"SQL(
-        INSERT INTO decision_log_entries
-        (entry_id,dl_header_id,title,rationale,status,decision_date,created_at)
-        VALUES(?,?,?,?,'open',?,?)
-    )SQL", {
-        BindParam::text(entryId), BindParam::text(headerId),
-        BindParam::text(title), textOrNull(rationale),
-        BindParam::text(nowIso()), BindParam::text(nowIso())
-    });
+    // Find existing decisionLog for entity
+    std::string parentId = entityType == "project" ? entityId : "";
+    std::string taskId   = entityType == "task"    ? entityId : "";
+    auto f18 = F18Workflow::create(parentId, title, F18VorgangType::DECISION_LOG, taskId);
+    if (!f18) return false;
+    f18->decisionType = "workflow-decision";
+    f18->rationale    = rationale;
+    f18->update();
+    LOG_INFO("[WFEngine] DecisionLog F18 created: " + f18->vorgangId);
+    return true;
 }
+
 
 bool WorkflowEngine::createLessonLearnedEntry(
-    const std::string& actionId,
-    const std::string& entityType, const std::string& entityId,
-    const std::string& title, const std::string& description)
+    const std::string& /*actionId*/,
+    const std::string& entityType,
+    const std::string& entityId,
+    const std::string& title,
+    const std::string& lesson)
 {
-    auto* db = repDB();
-    if (!db) return false;
-
-    // Get or create header
-    std::string headerId = db->queryScalar(
-        "SELECT ll_header_id FROM lessons_learned_header WHERE entity_type=? AND entity_id=?;",
-        {BindParam::text(entityType), BindParam::text(entityId)});
-
-    if (headerId.empty()) {
-        headerId = genId("LLH");
-        db->exec(R"SQL(
-            INSERT INTO lessons_learned_header(ll_header_id,entity_type,entity_id,created_at)
-            VALUES(?,?,?,?)
-        )SQL", {
-            BindParam::text(headerId), BindParam::text(entityType),
-            BindParam::text(entityId), BindParam::text(nowIso())
-        });
-    }
-
-    std::string entryId = genId("LLE");
-    return db->exec(R"SQL(
-        INSERT INTO lessons_learned_entries
-        (entry_id,ll_header_id,title,description,status,identified_date,created_at)
-        VALUES(?,?,?,?,'draft',?,?)
-    )SQL", {
-        BindParam::text(entryId), BindParam::text(headerId),
-        BindParam::text(title), textOrNull(description),
-        BindParam::text(nowIso()), BindParam::text(nowIso())
-    });
+    // LessonsLearned is now an F18Workflow (vorgangType="lessonsLearned").
+    std::string parentId = entityType == "project" ? entityId : "";
+    std::string taskId   = entityType == "task"    ? entityId : "";
+    auto f18 = F18Workflow::create(parentId, title, F18VorgangType::LESSONS_LEARNED, taskId);
+    if (!f18) return false;
+    f18->lessonType     = "observation";
+    f18->recommendation = lesson;
+    f18->update();
+    LOG_INFO("[WFEngine] LessonsLearned F18 created: " + f18->vorgangId);
+    return true;
 }
+
 
 bool WorkflowEngine::syncEntityWorkflowFields(const WorkflowInstance& inst) {
     // Find the most recent in_progress or last approved action
@@ -1204,8 +1231,8 @@ bool WorkflowEngine::syncEntityWorkflowFields(const WorkflowInstance& inst) {
     auto* ddb = DatabasePool::instance().get("documents");
     if (inst.entityType == "document") updateEntity(ddb, "documents", "document_id");
 
-    auto* rdb = DatabasePool::instance().get("reporting");
-    if (inst.entityType == "risk") updateEntity(rdb, "risks", "risk_id");
+    auto* f18db = DatabasePool::instance().get("f18");
+    if (inst.entityType == "risk") updateEntity(f18db, "f18_workflows", "vorgang_id");
 
     return true;
 }
@@ -1323,6 +1350,66 @@ void WorkflowEngine::createStandardTemplates() {
 
     tpl2->save();
     LOG_INFO("[WFEngine] Closure template created: " + tpl2->templateId);
+}
+
+// ------------------------------
+// searchInstances
+// Filter workflow instances by multiple criteria.
+// See WorkflowEngine.h for parameter documentation.
+// ------------------------------
+std::vector<std::shared_ptr<WorkflowInstance>> WorkflowEngine::searchInstances(
+    const std::string& entityType,
+    const std::string& status,
+    const std::string& nameContains,
+    bool slaOnly)
+{
+    std::vector<std::shared_ptr<WorkflowInstance>> result;
+
+    // Load instances — when no status filter, load ALL; otherwise filter by status
+    auto* db = wfDB();
+    std::vector<std::shared_ptr<WorkflowInstance>> all;
+    if (!db) return result;
+
+    if (status.empty()) {
+        // Load all instances regardless of status
+        auto rows = db->query(
+            "SELECT * FROM workflow_instances ORDER BY created_at DESC LIMIT 500;");
+        for (auto& r : rows) {
+            auto inst = std::make_shared<WorkflowInstance>();
+            inst->fromRow(r);
+            inst->loadActions();
+            inst->loadParticipants();
+            all.push_back(inst);
+        }
+    } else {
+        // Load only instances with the requested status
+        auto rows = db->query(
+            "SELECT * FROM workflow_instances WHERE status=? ORDER BY created_at DESC;",
+            {BindParam::text(status)});
+        for (auto& r : rows) {
+            auto inst = std::make_shared<WorkflowInstance>();
+            inst->fromRow(r);
+            inst->loadActions();
+            inst->loadParticipants();
+            all.push_back(inst);
+        }
+    }
+
+    for (auto& inst : all) {
+        if (!entityType.empty() && inst->entityType != entityType) continue;
+        if (!status.empty()     && inst->status     != status)     continue;
+        if (slaOnly && !inst->slaBreached)                         continue;
+        if (!nameContains.empty()) {
+            std::string lname = inst->name;
+            std::string lsub  = nameContains;
+            // Case-insensitive substring
+            for (char& c : lname) c = (char)std::tolower(c);
+            for (char& c : lsub)  c = (char)std::tolower(c);
+            if (lname.find(lsub) == std::string::npos) continue;
+        }
+        result.push_back(inst);
+    }
+    return result;
 }
 
 } // namespace Rosenholz

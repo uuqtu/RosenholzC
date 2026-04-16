@@ -73,11 +73,11 @@ set(MODEL_SOURCES
     src/model/Team.cpp
     src/model/ProjectF16.cpp
     src/model/TaskF22.cpp
-    src/model/IncidentF18.cpp
-    src/model/Risk.cpp
     src/model/Document.cpp
     src/model/Milestone.cpp
-    src/model/ReportingModels.cpp
+    src/model/f18/F18Workflow.cpp
+    src/model/f18/F18WorkflowStep.cpp
+    src/model/f18/Communication.cpp
 )
 
 set(WORKFLOW_SOURCES

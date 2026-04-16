@@ -277,4 +277,23 @@ bool IncidentF18::writeMFSFile(const std::string& mfsRoot) const {
     return MFSWriter::writeIncident(*this, mfsRoot);
 }
 
+// ------------------------------
+// loadRecent
+// Returns the n most recently created IncidentF18 records.
+// Parameters:
+//   n : maximum number of results (default 20)
+// ------------------------------
+std::vector<std::shared_ptr<IncidentF18>> IncidentF18::loadRecent(int n) {
+    std::vector<std::shared_ptr<IncidentF18>> result;
+    auto* db = DatabasePool::instance().get("projects");
+    if (!db) return result;
+    auto rows = db->query("SELECT * FROM incidents ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
+    for (auto& r : rows) {
+        auto obj = std::make_shared<IncidentF18>();
+        obj->fromRow(r);
+        result.push_back(obj);
+    }
+    return result;
+}
+
 } // namespace Rosenholz

@@ -100,6 +100,7 @@ public:
         const std::string& severity    = "medium",
         const std::string& reportedBy  = "");
 
+    static std::vector<std::shared_ptr<IncidentF18>> loadRecent(int n = 20);
     static std::shared_ptr<IncidentF18> loadById(const std::string& id);
     static std::vector<std::shared_ptr<IncidentF18>> loadForProject(const std::string& projectId);
     static std::vector<std::shared_ptr<IncidentF18>> loadOpenIncidents();

@@ -346,4 +346,23 @@ bool TaskF22::writeMFSFile(const std::string& mfsRoot) const {
     return MFSWriter::writeTask(*this, mfsRoot);
 }
 
+// ------------------------------
+// loadRecent
+// Returns the n most recently created TaskF22 records.
+// Parameters:
+//   n : maximum number of results (default 20)
+// ------------------------------
+std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
+    std::vector<std::shared_ptr<TaskF22>> result;
+    auto* db = DatabasePool::instance().get("projects");
+    if (!db) return result;
+    auto rows = db->query("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
+    for (auto& r : rows) {
+        auto obj = std::make_shared<TaskF22>();
+        obj->fromRow(r);
+        result.push_back(obj);
+    }
+    return result;
+}
+
 } // namespace Rosenholz

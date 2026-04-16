@@ -50,6 +50,7 @@ public:
 
     static std::shared_ptr<Risk> create(const std::string& projectId,
         const std::string& title, const std::string& riskLevel = "medium");
+    static std::vector<std::shared_ptr<Risk>> loadRecent(int n = 20);
     static std::shared_ptr<Risk> loadById(const std::string& id);
     static std::vector<std::shared_ptr<Risk>> loadForProject(const std::string& projectId);
     static std::vector<std::shared_ptr<Risk>> loadHighRisks();

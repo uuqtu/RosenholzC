@@ -159,11 +159,13 @@ void projectMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
             listTasks(p->projectId);
         }
         else if (ch == 12) {
-            auto inc = createIncidentWizard(p->projectId);
-            if (inc) incidentDetailMenu(inc);
+            {
+                auto v = createF18Wizard(p->projectId, "", "incident");
+                if (v) f18Menu(v);
+            }
         }
         else if (ch == 13) {
-            listIncidents(p->projectId);
+            f18BrowserMenu(p->projectId, "");
         }
         else if (ch == 14) {
             std::string parentPid = readLine("Parent project-ID to attach task to: ");
@@ -187,11 +189,11 @@ void projectMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
             else { workflowMenu(); }
         }
         else if (ch == 18) { milestoneMenu(p->projectId); }
-        else if (ch == 19) { meetingMenu("", p->projectId); }
-        else if (ch == 20) { measureMenu(p->projectId); }
-        else if (ch == 21) { qualityGateMenu(p->projectId); }
-        else if (ch == 22) { riskMenu(p->projectId); }
-        else if (ch == 23) { changeRequestMenu(p->projectId); }
+        else if (ch == 19) { communicationMenu(p->projectId, "project"); }
+        else if (ch == 20) { f18BrowserMenu(p->projectId, ""); }
+        else if (ch == 21) { f18BrowserMenu(p->projectId, ""); }
+        else if (ch == 22) { f18BrowserMenu(p->projectId, ""); }
+        else if (ch == 23) { f18BrowserMenu(p->projectId, ""); }
         else if (ch == 24) {
             std::cout << "  Workflow:  1.Neue Instanz starten  2.Instanzen anzeigen\n";
             int wch = CLI::readInt("Wahl",1,2);

@@ -9,6 +9,10 @@
 // createPersonWizard()           : new person wizard
 // ============================================================
 #include "cli_common.h"
+#include "../workflow/WorkflowEngine.h"
+#include "../model/Document.h"
+#include "../model/TaskF22.h"
+#include "../model/ProjectF16.h"
 #include "../mfs/MFSWriter.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
@@ -226,39 +230,7 @@ void printProject(const Rosenholz::ProjectF16& p) {
     std::cout << "  +" << std::string(52,'-') << "+\n\n";
 }
 
-void printIncident(const Rosenholz::IncidentF18& i) {
-    hdr("INCIDENT (F18)  " + i.regNumber.toString());
-    auto row = [](const std::string& k, const std::string& v){
-        std::cout << "  | " << std::left << std::setw(24) << k
-                  << std::setw(28) << v << "|\n";
-    };
-    row("ID",             i.incidentId);
-    row("Reg-Nr",         i.regNumber.toString());
-    row("Title",          i.title);
-    row("Project-ID",     fval(i.projectId));
-    row("Status",         fval(i.status));
-    row("Severity",       fval(i.severity));
-    row("Type",           fval(i.incidentType));
-    row("Category",       fval(i.category));
-    row("Owner-ID",       fval(i.ownerId));
-    row("Reported-by",    fval(i.reportedBy));
-    hr();
-    row("Occurred",       fdate(i.occurredDate));
-    row("Reported",       fdate(i.reportedDate));
-    row("Resolved",       fdate(i.resolvedDate));
-    hr();
-    row("Cost impact",    std::to_string((int)i.costImpact));
-    row("Sched.impact(d)",std::to_string(i.scheduleImpactDays));
-    row("Scope impact",   fval(i.scopeImpact));
-    row("Quality impact", fval(i.qualityImpact));
-    hr();
-    row("Root cause",     i.rootCause.empty() ? "—" : i.rootCause.substr(0,27));
-    row("Immed.action",   i.immediateAction.empty() ? "—" : i.immediateAction.substr(0,27));
-    row("Resolution",     i.resolution.empty() ? "—" : i.resolution.substr(0,27));
-    row("Escalated",      i.escalated ? "YES -> " + i.escalatedTo : "no");
-    row("Linked Risk",    fval(i.riskId));
-    std::cout << "  +" << std::string(52,'-') << "+\n\n";
-}
+
 
 void printPerson(const Rosenholz::Person& p) {
     hdr("PERSON  " + p.regNumber.toString());
@@ -338,20 +310,7 @@ void listTasks(const std::string& projectId) {
     std::cout << "\n";
 }
 
-void listIncidents(const std::string& projectId) {
-    auto incs = Rosenholz::IncidentF18::loadForProject(projectId);
-    if (incs.empty()) { std::cout << "\n  (no incidents)\n\n"; return; }
-    hdr("INCIDENTS FOR PROJECT");
-    int n = 1;
-    for (auto& i : incs) {
-        std::cout << "  " << std::setw(3) << n++ << ". ["
-                  << i->regNumber.toString() << "]  "
-                  << std::left << std::setw(26) << i->title
-                  << "  sev=" << i->severity
-                  << "  status=" << i->status << "\n";
-    }
-    std::cout << "\n";
-}
+
 
 void listPersons() {
     auto all = Rosenholz::Person::loadAll();
@@ -457,44 +416,7 @@ std::shared_ptr<Rosenholz::TaskF22> createTaskWizard(const std::string& projectI
     }
 }
 
-std::shared_ptr<Rosenholz::IncidentF18> createIncidentWizard(const std::string& projectId) {
-    hdr("CREATE INCIDENT (F18)");
-    std::string title    = readLine("Title: ");
-    std::string desc     = readOpt("Description (optional): ");
-    std::cout << "  Severity:\n"
-              << "    1. critical  2. high  3. medium  4. low\n";
-    int sc = readInt("Choose severity", 1, 4);
-    static const char* sevs[] = {"critical","high","medium","low"};
-    std::string sev = sevs[sc-1];
 
-    std::string type     = readOpt("Incident type (financial/technical/schedule/quality, optional): ");
-    std::string occurred = readOpt("Occurred date (YYYY-MM-DD, optional): ");
-    std::string reporter = readOpt("Reported-by person-ID (optional): ");
-    std::string cause    = readOpt("Root cause (optional): ");
-    std::string action   = readOpt("Immediate action taken (optional): ");
-    std::string costStr  = readOpt("Cost impact EUR (optional): ");
-    double cost = 0.0;
-    if (!costStr.empty()) try { cost = std::stod(costStr); } catch(...) {}
-
-    auto i = Rosenholz::IncidentF18::create(projectId, title, sev, reporter);
-    i->description    = desc;
-    i->incidentType   = type;
-    i->occurredDate   = occurred;
-    i->rootCause      = cause;
-    i->immediateAction= action;
-    i->costImpact     = cost;
-
-    if (i->save()) {
-        std::cout << "\n  >> Incident created: " << i->regNumber.toString()
-                  << " (" << i->incidentId << ")\n\n";
-        auto& cfg = Rosenholz::Config::instance();
-        if (cfg.mfs().enabled) i->writeMFSFile(cfg.mfsPath());
-        return i;
-    } else {
-        std::cout << "\n  >> ERROR: Incident could not be saved.\n\n";
-        return nullptr;
-    }
-}
 
 std::shared_ptr<Rosenholz::Person> createPersonWizard() {
     hdr("CREATE PERSON");
@@ -755,6 +677,337 @@ std::shared_ptr<Rosenholz::Document> attachDocumentDialog(
     }
     std::cout << "  Gefunden: " << doc->title << " [" << doc->status << "]\n";
     return doc;
+}
+
+// ------------------------------
+// showRecentItems
+//
+// Displays the 20 most recently created items across ALL entity types.
+// Used before any ID-entry prompt so the user can pick from a list.
+//
+// Parameters:
+//   types : bitmask or comma-sep list of which types to include
+//           (empty = all types)
+//
+// Format:
+//   [F16] XV/F16/0001/2026   Projektname         2026-04-01
+//   [F22] XV/F22/0003/2026   Aufgabentitel        2026-04-02
+//   ...
+// ------------------------------
+void showRecentItems(const std::string& filter) {
+    using namespace Rosenholz;
+    hdr("ZULETZT ANGELEGT (letzte 20 je Typ)");
+
+    bool all = filter.empty();
+
+    if (all || filter.find("F16") != std::string::npos) {
+        auto items = ProjectF16::loadRecent(20);
+        if (!items.empty()) {
+            std::cout << "  [F16] Projekte:\n";
+            for (auto& p : items)
+                std::cout << "    [F16] " << std::left << std::setw(28)
+                          << p->projectId.substr(0,26)
+                          << "  " << std::setw(28) << p->title.substr(0,26)
+                          << "  " << p->status << "\n";
+        }
+    }
+    if (all || filter.find("F22") != std::string::npos) {
+        auto items = TaskF22::loadRecent(20);
+        if (!items.empty()) {
+            std::cout << "  [F22] Aufgaben:\n";
+            for (auto& t : items)
+                std::cout << "    [F22] " << std::left << std::setw(28)
+                          << t->taskId.substr(0,26)
+                          << "  " << std::setw(28) << t->title.substr(0,26)
+                          << "  " << t->status << "\n";
+        }
+    }
+    if (all || filter.find("F18") != std::string::npos) {
+        auto items = Rosenholz::F18Workflow::loadRecent(20);
+        if (!items.empty()) {
+            std::cout << "  [F18] Workflows:\n";
+            for (auto& v : items)
+                std::cout << "    [F18] " << std::left << std::setw(28)
+                          << v->vorgangId.substr(0,26)
+                          << "  " << std::setw(20) << v->title.substr(0,18)
+                          << "  [" << v->vorgangType.substr(0,12) << "]\n";
+        }
+    }
+
+    if (all || filter.find("DOK") != std::string::npos) {
+        auto items = Document::loadRecent(20);
+        if (!items.empty()) {
+            std::cout << "  [DOK] Dokumente:\n";
+            for (auto& d : items)
+                std::cout << "    [DOK] " << std::left << std::setw(28)
+                          << d->documentId.substr(0,26)
+                          << "  " << std::setw(28) << d->title.substr(0,26)
+                          << "  v" << d->version << "\n";
+        }
+    }
+    std::cout << "\n";
+}
+
+// ------------------------------
+// globalSearch
+//
+// Search across ALL entity categories by keyword.
+// Shows results grouped by type. Offers to jump to the entity.
+//
+// Parameters:
+//   query : substring matched case-insensitively against title/name/ID
+//
+// Categories searched:
+//   F16 Projects, F22 Tasks, F18 Incidents, RSK Risks,
+//   DOK Documents, PER Persons, WFI Workflow Instances
+// ------------------------------
+void globalSearch(const std::string& query) {
+    using namespace Rosenholz;
+    if (query.empty()) return;
+
+    std::string lq = query;
+    for (char& c : lq) c = (char)std::tolower(c);
+
+    auto match = [&](const std::string& s) {
+        std::string ls = s;
+        for (char& c : ls) c = (char)std::tolower(c);
+        return ls.find(lq) != std::string::npos;
+    };
+
+    hdr("GLOBALE SUCHE: \"" + query + "\"");
+
+    struct Hit { std::string typeCode; std::string id; std::string label; std::string sub; };
+    std::vector<Hit> hits;
+
+    // F16 Projects
+    auto projs = ProjectF16::loadRecent(200);
+    for (auto& p : projs)
+        if (match(p->title) || match(p->projectId) || match(p->codename))
+            hits.push_back({"F16", p->projectId, p->title, p->status});
+
+    // F22 Tasks
+    auto tasks = TaskF22::loadRecent(200);
+    for (auto& t : tasks)
+        if (match(t->title) || match(t->taskId))
+            hits.push_back({"F22", t->taskId, t->title, t->status});
+
+    // F18 Workflows (all types)
+    auto vorgaenge = Rosenholz::F18Workflow::loadRecent(200);
+    for (auto& v : vorgaenge)
+        if (match(v->title) || match(v->vorgangId))
+            hits.push_back({"F18", v->vorgangId, v->title,
+                            v->vorgangType + "|" + v->status});
+
+    // DOK Documents
+    auto docs = Document::loadRecent(200);
+    for (auto& d : docs)
+        if (match(d->title) || match(d->documentId) || match(d->tags))
+            hits.push_back({"DOK", d->documentId, d->title, "v"+d->version});
+
+    // WFI Workflow Instances
+    auto wfis = WorkflowEngine::searchInstances("", "", query, false);
+    for (auto& w : wfis)
+        hits.push_back({"WFI", w->instanceId, w->name, w->status});
+
+    if (hits.empty()) {
+        std::cout << "  (keine Treffer für \"" << query << "\")\n\n";
+        return;
+    }
+
+    // Display
+    int n = 1;
+    for (auto& h : hits) {
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << "[" << std::left << std::setw(4) << h.typeCode << "] "
+                  << std::setw(26) << h.id.substr(0,24)
+                  << "  " << std::setw(28) << h.label.substr(0,26)
+                  << "  " << h.sub.substr(0,14) << "\n";
+    }
+    std::cout << "\n  " << hits.size() << " Treffer gefunden.\n";
+
+    // Jump to entity
+    std::cout << "  Nummer zum Öffnen (leer=zurück): ";
+    std::string pick; std::getline(std::cin, pick);
+    if (pick.empty()) return;
+
+    int idx = 0;
+    try { idx = std::stoi(pick)-1; } catch(...) { return; }
+    if (idx < 0 || idx >= (int)hits.size()) return;
+
+    auto& h = hits[idx];
+    if (h.typeCode == "F16") {
+        auto p = ProjectF16::loadById(h.id);
+        if (p) { p->loadQTCSLinks(); projectMenu(p); }
+    } else if (h.typeCode == "F22") {
+        auto t = TaskF22::loadById(h.id);
+        if (t) taskMenu(t);
+    } else if (h.typeCode == "F18") {
+        auto v = Rosenholz::F18Workflow::loadById(h.id);
+        if (v) f18Menu(v);
+    } else if (h.typeCode == "DOK") {
+        auto d = Document::loadById(h.id);
+        if (d) documentMenu(d);
+    } else if (h.typeCode == "WFI") {
+        instanceMenu(h.id);
+    }
+}
+
+
+// ------------------------------
+// printF18Workflow — Display an F18Workflow entity in a structured box.
+// Shows common fields plus type-specific fields.
+// ------------------------------
+void printF18Workflow(const Rosenholz::F18Workflow& v) {
+    using namespace Rosenholz;
+    hdr("F18 WORKFLOW  " + v.vorgangId.substr(0, 22));
+    auto row = [](const std::string& k, const std::string& val) {
+        std::cout << "  | " << std::left << std::setw(22) << k
+                  << std::setw(30) << val.substr(0,29) << "|\n";
+    };
+    auto hr = []() { std::cout << "  +" << std::string(52,'-') << "+\n"; };
+    row("ID",          v.vorgangId);
+    row("Typ",         v.vorgangType);
+    row("Titel",       v.title);
+    row("Status",      v.status);
+    row("Priorität",   v.priority);
+    row("Owner-ID",    fval(v.ownerId));
+    if (!v.projectId.empty()) row("Projekt-ID", v.projectId);
+    if (!v.taskId.empty())    row("Aufgabe-ID", v.taskId);
+    hr();
+    // Type-specific fields
+    if (v.vorgangType == "incident") {
+        row("Vorfall-Typ",   fval(v.incidentType));
+        row("Schwere",       fval(v.severity));
+        row("Aufgetreten",   fdate(v.occurredDate));
+        row("Gelöst",        fdate(v.resolvedDate));
+        row("Ursache",       fval(v.rootCause));
+    } else if (v.vorgangType == "risk") {
+        row("Risiko-Level",  v.riskLevel);
+        row("W-Score",       std::to_string(v.probabilityScore));
+        row("Ges.Score",     std::to_string(v.overallRiskScore));
+        row("Strategie",     fval(v.responseStrategy));
+    } else if (v.vorgangType == "measure") {
+        row("Kategorie",     fval(v.measureCategory));
+        row("Geplant",       fdate(v.plannedDate));
+        row("Ist",           fdate(v.actualDate));
+        row("Wirksamkeit",   fval(v.effectiveness));
+    } else if (v.vorgangType == "qualityGate") {
+        row("Phase",         fval(v.phase));
+        row("Ergebnis",      fval(v.gateResult));
+        row("Entscheidung",  fval(v.gateDecision));
+    } else if (v.vorgangType == "changeRequest") {
+        row("CR-Typ",        fval(v.changeType));
+        row("Begründung",    fval(v.justification));
+        row("Entscheidung",  fval(v.crDecisionDate));
+    } else if (v.vorgangType == "changeObject") {
+        row("Basis-CR",      fval(v.parentVorgangId));
+        row("Ausgeführt von",fval(v.executedBy));
+        row("Ausf.-Datum",   fdate(v.executionDate));
+    } else if (v.vorgangType == "lessonsLearned") {
+        row("Typ",           fval(v.lessonType));
+        row("Empfehlung",    fval(v.recommendation));
+    } else if (v.vorgangType == "decisionLog") {
+        row("Entsch.-Typ",   fval(v.decisionType));
+        row("Rationale",     fval(v.rationale));
+        row("Datum",         fdate(v.decisionDate));
+    } else if (v.vorgangType == "assumptionConstraint") {
+        row("AC-Typ",        fval(v.acType));
+        row("Auswirkung",    fval(v.impact));
+    } else if (v.vorgangType == "communicationPlan") {
+        row("Zielgruppe",    fval(v.audience));
+        row("Häufigkeit",    fval(v.frequency));
+        row("Kanal",         fval(v.channel));
+    }
+    hr();
+}
+
+
+// ------------------------------
+// createF18Wizard — Interactive wizard to create a new F18Workflow.
+//
+// Parameters:
+//   projectId : owning F16 project ID
+//   taskId    : owning F22 task ID (optional)
+//   type      : pre-selected vorgangType (optional, prompted if empty)
+// ------------------------------
+std::shared_ptr<Rosenholz::F18Workflow> createF18Wizard(
+    const std::string& projectId,
+    const std::string& taskId,
+    const std::string& type)
+{
+    using namespace Rosenholz;
+    hdr("NEUEN F18 WORKFLOW ANLEGEN");
+
+    // Type selection
+    std::string chosenType = type;
+    if (chosenType.empty()) {
+        std::cout << "  Typ wählen:\n"
+                     "    1.  Incident  (Vorfall)\n"
+                     "    2.  Risk  (Risiko)\n"
+                     "    3.  Measure  (Maßnahme)\n"
+                     "    4.  QualityGate\n"
+                     "    5.  AssumptionConstraint\n"
+                     "    6.  CommunicationPlan\n"
+                     "    7.  LessonsLearned\n"
+                     "    8.  DecisionLog\n"
+                     "    9.  ChangeRequest\n"
+                     "   10.  ChangeObject  (auf bestehendem CR)\n"
+                     "   11.  Generisch\n";
+        int tc = readInt("Typ", 1, 11);
+        static const char* types[] = {
+            "incident","risk","measure","qualityGate",
+            "assumptionConstraint","communicationPlan",
+            "lessonsLearned","decisionLog",
+            "changeRequest","changeObject","generic"};
+        chosenType = types[tc-1];
+    }
+
+    std::string title = readLine("Titel: ");
+    if (title.empty()) return nullptr;
+
+    // For ChangeObject: ask for parent CR
+    std::string parentId;
+    if (chosenType == "changeObject") {
+        showRecentItems("F18");
+        parentId = readLine("Basis-ChangeRequest Vorgang-ID: ");
+    }
+
+    auto v = F18Workflow::create(projectId, title, chosenType, taskId);
+    if (!v) { std::cout << "  >> Fehler beim Anlegen.\n"; return nullptr; }
+
+    if (!parentId.empty()) { v->parentVorgangId = parentId; v->update(); }
+    v->ownerId  = readOpt("Owner Person-ID (optional): ");
+    v->priority = "medium";
+    {
+        std::cout << "  Priorität: 1.low 2.medium 3.high 4.critical\n";
+        int p = readInt("Priorität",1,4);
+        static const char* ps[]={"low","medium","high","critical"};
+        v->priority = ps[p-1];
+    }
+
+    // Type-specific extra fields
+    if (chosenType == "incident") {
+        v->incidentType = readOpt("Vorfall-Typ (technical|process|security|quality): ");
+        v->severity     = readOpt("Schwere (low|medium|high|critical): ");
+        v->occurredDate = readOpt("Aufgetreten (JJJJ-MM-TT): ");
+    } else if (chosenType == "risk") {
+        v->riskLevel      = readOpt("Risiko-Level (low|medium|high|critical): ");
+        v->responseStrategy = readOpt("Strategie (avoid|mitigate|transfer|accept): ");
+    } else if (chosenType == "measure") {
+        v->measureCategory = readOpt("Kategorie (corrective|preventive|detective): ");
+        v->plannedDate     = readOpt("Geplantes Datum (JJJJ-MM-TT): ");
+    } else if (chosenType == "assumptionConstraint") {
+        std::cout << "  Typ: 1.assumption 2.constraint\n";
+        v->acType = (readInt("Typ",1,2)==1) ? "assumption" : "constraint";
+    } else if (chosenType == "changeRequest") {
+        v->changeType    = readOpt("CR-Typ (general|scope|budget|schedule|quality): ");
+        v->justification = readOpt("Begründung: ");
+    }
+
+    v->update();
+    std::cout << "  >> F18 Workflow angelegt: " << v->vorgangId << "\n";
+    std::cout << "  >> Typ: " << v->vorgangType << "\n";
+    return v;
 }
 
 } // namespace CLI

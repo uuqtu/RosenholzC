@@ -35,9 +35,8 @@
 #include "../core/Config.h"
 #include "../model/ProjectF16.h"
 #include "../model/TaskF22.h"
-#include "../model/IncidentF18.h"
-#include "../model/Risk.h"
 #include "../model/Document.h"
+#include "../model/f18/F18Workflow.h"
 #include "../model/Person.h"
 #include "../model/Team.h"
 #include "../model/Utils.h"
@@ -206,42 +205,6 @@ bool MFSWriter::writeTask(const TaskF22& t, const std::string& mfsRoot) {
 // ─────────────────────────────────────────────────────────────
 // INCIDENT (F18) — filed under parent project Hängeregister
 // ─────────────────────────────────────────────────────────────
-bool MFSWriter::writeIncident(const IncidentF18& i, const std::string& mfsRoot) {
-    if (i.regNumber.toString().empty() || i.regNumber.sequence == 0) {
-        LOG_WARN("writeIncident: incident has no valid regNumber, skipping MFS filing");
-        return false;
-    }
-    std::string sane = sanitiseRegNr(i.regNumber.toString());
-    std::string de   = deCode();
-    std::string year = std::to_string(i.regNumber.year);
-
-    // Standalone index
-    std::string idxFile = FileOps::joinPath(FileOps::joinPath(FileOps::joinPath(FileOps::joinPath(mfsRoot, "F18"), de), year), sane + ".txt");
-    std::ostringstream idx;
-    idx << "REGISTRIERNUMMER : " << i.regNumber.toString() << "\n"
-        << "VORGANG-REF      : " << i.projectId            << "\n"
-        << "SCHWERE          : " << i.severity             << "\n"
-        << "STATUS           : " << i.status               << "\n"
-        << "GEMELDET         : " << i.reportedDate         << "\n"
-        << "GELOEST          : " << i.resolvedDate         << "\n";
-    if (!i.riskId.empty()) idx << "RISIKO-REF       : " << i.riskId << "\n";
-    ownerOnlyWrite(idxFile, idx.str());
-
-    // Filed under project
-    auto proj = ProjectF16::loadById(i.projectId);
-    if (proj) {
-        std::string filed = FileOps::joinPath(
-            projectHeft(mfsRoot, proj->regNumber.toString()), "F18",
-            sane + ".txt");
-        ownerOnlyWrite(filed, idx.str());
-    }
-
-    std::map<std::string,std::string> conn;
-    conn["VORGANG"]  = i.projectId;
-    conn["EIGENTUM"] = i.ownerId;
-    appendOwnerKey(i.regNumber.toString(), i.title, conn, mfsRoot);
-    return true;
-}
 
 // ─────────────────────────────────────────────────────────────
 // DOCUMENT — ALWAYS filed under parent entity's folder
@@ -355,40 +318,6 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
 // RISK — filed under project RISIKEN subfolder (if we had it)
 // but stored in reporting.db; write to mfs/RISIKEN standalone
 // ─────────────────────────────────────────────────────────────
-bool MFSWriter::writeRisk(const Risk& r, const std::string& mfsRoot) {
-    std::string sane = sanitiseRegNr(r.riskId);
-    std::string riskDir = FileOps::joinPath(mfsRoot, "RISIKEN");
-    FileOps::makeDirs(riskDir);
-    std::string path = FileOps::joinPath(riskDir, "RISK_" + sane + ".txt");
-
-    std::ostringstream oss;
-    oss << "RISIKO-ID        : " << r.riskId           << "\n"
-        << "VORGANG-REF      : " << r.projectId        << "\n"
-        << "RISIKONIVEAU     : " << r.riskLevel        << "\n"
-        << "GESAMTSCORE      : " << r.overallRiskScore << "\n"
-        << "STRATEGIE        : " << r.responseStrategy << "\n"
-        << "STATUS           : " << r.status           << "\n";
-
-    bool ok = ownerOnlyWrite(path, oss.str());
-
-    // Also file under project
-    if (!r.projectId.empty()) {
-        auto proj = ProjectF16::loadById(r.projectId);
-        if (proj) {
-            // Create RISIKEN subfolder inside Hängeregister
-            std::string rDir = FileOps::joinPath(
-                projectHeft(mfsRoot, proj->regNumber.toString()), "RISIKEN");
-            FileOps::makeDirs(rDir);
-            ownerOnlyWrite(FileOps::joinPath(rDir, "RISK_" + sane + ".txt"), oss.str());
-        }
-    }
-
-    std::map<std::string,std::string> conn;
-    conn["VORGANG"]  = r.projectId;
-    conn["EIGENTUM"] = r.ownerId;
-    appendOwnerKey(r.riskId, r.title, conn, mfsRoot);
-    return ok;
-}
 
 // ─────────────────────────────────────────────────────────────
 // PERSON
@@ -484,12 +413,8 @@ bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
         // Write all tasks under each project
         auto tasks = TaskF22::loadForProject(p->projectId);
         for (auto& t : tasks) ok &= writeTask(*t, mfsRoot);
-        // Incidents — skip any with uninitialized regNumbers gracefully
-        auto incidents = IncidentF18::loadForProject(p->projectId);
-        for (auto& i : incidents) {
-            if (i->regNumber.sequence == 0) continue;  // not yet registered
-            ok &= writeIncident(*i, mfsRoot);
-        }
+        // Incidents/Risks/Measures: now F18Workflow — written via writeF18
+
     }
 
     LOG_INFO("MFS rebuild complete. OK=" + std::string(ok?"yes":"NO"));

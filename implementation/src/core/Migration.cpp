@@ -42,7 +42,7 @@ std::map<std::string, int> MigrationEngine::targetVersionMap() {
         {"workflow",  SchemaVersions::workflow},
         {"documents", SchemaVersions::documents},
         {"tracking",  SchemaVersions::tracking},
-        {"reporting", SchemaVersions::reporting},
+        {"f18",       SchemaVersions::f18},
     };
 }
 

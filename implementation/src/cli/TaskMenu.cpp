@@ -107,7 +107,8 @@ void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
         }
         else if (ch == 7) {
             // Progress note on the task's active workflow instance (replaces VBF)
-            auto insts = Rosenholz::WorkflowInstance::loadForEntity("task", t->taskId);
+            // Progress notes now go on F18Workflow steps
+            auto insts = Rosenholz::F18Workflow::loadForTask(t->taskId);
             if (insts.empty()) {
                 std::cout << "  >> Kein aktiver Workflow auf dieser Aufgabe.\n"
                           << "  Tipp: Workflow starten (Opt. 11), dann Notizen hinzufügen.\n";
@@ -119,8 +120,8 @@ void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
                 int nt = readInt("Typ", 1, 4);
                 static const char* ntypes[] = {"general","decision","action","blocker"};
                 type = ntypes[nt-1];
-                if (insts[0]->addNote(by.empty()?"system":by, note, type))
-                    std::cout << "  >> Notiz gespeichert (WFI " << insts[0]->instanceId.substr(0,20) << ").\n";
+                if (!insts.empty() && insts[0]->addNote(by.empty()?"system":by, note))
+                    std::cout << "  >> Notiz gespeichert (WFI " << insts[0]->vorgangId.substr(0,20) << ").\n";
                 else
                     std::cout << "  >> Fehler beim Speichern.\n";
             }
@@ -148,7 +149,7 @@ void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
                 listWfInstances("task", t->taskId);
             }
         }
-        else if (ch == 12) { meetingMenu(t->taskId, t->projectId); }
+        else if (ch == 12) { communicationMenu(t->taskId, "task"); }
     }
 }
 

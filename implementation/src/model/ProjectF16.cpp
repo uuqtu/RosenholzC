@@ -467,4 +467,23 @@ bool ProjectF16::writeMFSFile(const std::string& mfsRoot) const {
     return MFSWriter::writeProject(*this, mfsRoot);
 }
 
+// ------------------------------
+// loadRecent
+// Returns the n most recently created ProjectF16 records.
+// Parameters:
+//   n : maximum number of results (default 20)
+// ------------------------------
+std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadRecent(int n) {
+    std::vector<std::shared_ptr<ProjectF16>> result;
+    auto* db = DatabasePool::instance().get("projects");
+    if (!db) return result;
+    auto rows = db->query("SELECT * FROM projects ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
+    for (auto& r : rows) {
+        auto obj = std::make_shared<ProjectF16>();
+        obj->fromRow(r);
+        result.push_back(obj);
+    }
+    return result;
+}
+
 } // namespace Rosenholz

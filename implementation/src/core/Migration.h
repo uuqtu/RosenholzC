@@ -25,10 +25,10 @@ namespace Rosenholz {
 struct SchemaVersions {
     static constexpr int core      = 1;
     static constexpr int projects  = 1;
-    static constexpr int workflow  = 2;  // bumped: added template_actions
-    static constexpr int documents = 1;
+    static constexpr int workflow  = 3;  // v3: ise-cobra fields
+    static constexpr int documents = 2;  // v2: versions + file hash
     static constexpr int tracking  = 1;
-    static constexpr int reporting = 1;
+    static constexpr int f18       = 1;  // v1: unified F18 schema
 };
 
 /// A single migration step

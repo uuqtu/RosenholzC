@@ -434,4 +434,23 @@ bool Document::openFile(const std::string& mode) const {
     return ret == 0;
 }
 
+// ------------------------------
+// loadRecent
+// Returns the n most recently created Document records.
+// Parameters:
+//   n : maximum number of results (default 20)
+// ------------------------------
+std::vector<std::shared_ptr<Document>> Document::loadRecent(int n) {
+    std::vector<std::shared_ptr<Document>> result;
+    auto* db = DatabasePool::instance().get("documents");
+    if (!db) return result;
+    auto rows = db->query("SELECT * FROM documents ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
+    for (auto& r : rows) {
+        auto obj = std::make_shared<Document>();
+        obj->fromRow(r);
+        result.push_back(obj);
+    }
+    return result;
+}
+
 } // namespace Rosenholz

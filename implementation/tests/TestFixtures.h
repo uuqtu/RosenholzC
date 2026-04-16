@@ -9,11 +9,10 @@
 #include "../src/model/Team.h"
 #include "../src/model/ProjectF16.h"
 #include "../src/model/TaskF22.h"
-#include "../src/model/IncidentF18.h"
-#include "../src/model/Risk.h"
 #include "../src/model/Document.h"
 #include "../src/model/Milestone.h"
-#include "../src/model/ReportingModels.h"
+#include "../src/model/f18/F18Workflow.h"
+#include "../src/model/f18/F18WorkflowStep.h"
 #include "../src/workflow/WorkflowEngine.h"
 #include <memory>
 #include <vector>
@@ -133,8 +132,8 @@ struct FullProjectFixture : Fixture {
     std::shared_ptr<TaskF22>     task1;
     std::shared_ptr<TaskF22>     task2;
     std::shared_ptr<TaskF22>     childTask;
-    std::shared_ptr<IncidentF18> incident;
-    std::shared_ptr<Risk>        risk;
+    std::shared_ptr<Rosenholz::F18Workflow> incident;  // vorgangType=incident
+    std::shared_ptr<Rosenholz::F18Workflow> risk;      // vorgangType=risk
 
     FullProjectFixture() {
         lead    = Person::create("Full","Leiter","fl@fixture.de","internal");
@@ -173,14 +172,18 @@ struct FullProjectFixture : Fixture {
         childTask->wbsCode="1.2.1"; childTask->save();
         trackId(childTask->taskId);
 
-        incident = IncidentF18::create(project->projectId,
-                                       "Fixture-Vorfall","high",member2->personId);
-        incident->save();
-        trackId(incident->incidentId);
+        incident = Rosenholz::F18Workflow::create(
+            project->projectId, "Fixture-Vorfall",
+            Rosenholz::F18VorgangType::INCIDENT);
+        if (incident) { incident->severity="high"; incident->ownerId=member2->personId;
+                         incident->update(); trackId(incident->vorgangId); }
 
-        risk = Risk::create(project->projectId,"Fixture-Risiko");
-        risk->probabilityScore=3; risk->impactScoreTime=4; risk->impactScoreCost=4; risk->recalcScore(); risk->save();
-        trackId(risk->riskId);
+        risk = Rosenholz::F18Workflow::create(
+            project->projectId, "Fixture-Risiko",
+            Rosenholz::F18VorgangType::RISK);
+        if (risk) { risk->probabilityScore=3; risk->impactScoreTime=4;
+                     risk->impactScoreCost=4; risk->recalcRiskScore();
+                     trackId(risk->vorgangId); }
     }
 };
 

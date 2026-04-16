@@ -23,6 +23,8 @@
 #include <map>
 
 namespace Rosenholz {
+class F18Workflow;  // forward declaration
+
 
 // Forward declarations — avoids pulling in all model headers
 class ProjectF16;
@@ -47,8 +49,6 @@ public:
     // ------------------------------
     static bool writeProject (const ProjectF16&   p,   const std::string& mfsRoot);
     static bool writeTask    (const TaskF22&       t,   const std::string& mfsRoot);
-    static bool writeIncident(const IncidentF18&   i,   const std::string& mfsRoot);
-    static bool writeRisk    (const Risk&           r,   const std::string& mfsRoot);
     // ------------------------------
     // Write a plaintext index card for a document into MFS.
     //
@@ -61,6 +61,7 @@ public:
     // directory if the file exists on disk.
     // ------------------------------
     static bool writeDocument(const Document&       d,   const std::string& mfsRoot);
+    static bool writeF18     (const F18Workflow&    v,   const std::string& mfsRoot);
     static bool writePerson  (const Person&         p,   const std::string& mfsRoot);
     static bool writeTeam    (const Team&           t,   const std::string& mfsRoot);
 

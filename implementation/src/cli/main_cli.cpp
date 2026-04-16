@@ -54,10 +54,11 @@ void run() {
                   << "   15.  ID abbreviation table\n"
                   << "   16.  Set log verbosity\n"
                   << "   17.  Diensteinheiten (Teams)\n"
+                  << "   18.  Globale Suche\n"
                   << "\n    0.  Exit\n";
         hr();
 
-        int ch = readInt("Choice", 0, 17);
+        int ch = readInt("Choice", 0, 18);
 
         if (ch == 0) {
             std::cout << "\n  Auf Wiedersehen.\n\n";
@@ -262,6 +263,10 @@ void run() {
         // ── LOG VERBOSITY ─────────────────────────────────────
         else if (ch == 17) {
             teamMenu();
+        }
+        else if (ch == 18) {
+            std::string q = readLine("Suchbegriff: ");
+            globalSearch(q);
         }
 
         else if (ch == 16) {

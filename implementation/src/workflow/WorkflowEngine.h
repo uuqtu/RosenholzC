@@ -508,6 +508,24 @@ public:
     /// Sync entity's workflow fields (current state etc.)
     static bool syncEntityWorkflowFields(const WorkflowInstance& inst);
 
+    // ------------------------------
+    // searchInstances
+    //
+    // Filter workflow instances by multiple criteria.
+    // Parameters:
+    //   entityType   : entity type filter (empty = all)
+    //   status       : "active"|"completed"|"cancelled"|"" = all
+    //   nameContains : case-insensitive substring match on name
+    //   slaOnly      : true = only SLA-breached instances
+    // Returns:
+    //   Matching instances, ordered newest first.
+    // ------------------------------
+    static std::vector<std::shared_ptr<WorkflowInstance>> searchInstances(
+        const std::string& entityType   = "",
+        const std::string& status       = "",
+        const std::string& nameContains = "",
+        bool slaOnly = false);
+
 private:
     static std::shared_ptr<WorkflowAction> createInitializeAction(
         const std::string& instanceId);

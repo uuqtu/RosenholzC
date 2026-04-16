@@ -88,13 +88,13 @@ void documentMenu(std::shared_ptr<Rosenholz::Document> doc) {
             std::cout << "  >> " << (ok ? "Attached." : "Failed.") << "\n";
         }
         else if (ch == 7) {
-            // URL erneuern — snapshot aktuelle Version, dann neu herunterladen
+            // URL erneuern — Snapshot der aktuellen Version, dann neu herunterladen
             if (doc->fileUrl.empty()) {
                 doc->fileUrl = readLine("URL eingeben: ");
                 doc->update();
             }
             if (doc->fileUrl.empty()) { std::cout << "  >> Keine URL.\n"; continue; }
-            std::cout << "  Snapshot der aktuellen Version...\n";
+            std::cout << "  Snapshot der aktuellen Version wird gespeichert...\n";
             doc->snapshotVersion("Vor URL-Aktualisierung");
             std::cout << "  Herunterladen: " << doc->fileUrl << "\n";
             if (doc->refreshFromUrl()) {
@@ -141,19 +141,9 @@ void documentMenu(std::shared_ptr<Rosenholz::Document> doc) {
                 std::string note = readOpt("Änderungsnotiz (optional): ");
                 std::string by   = readOpt("Geändert von Person-ID (leer=system): ");
                 std::string oldVer = doc->version;
-                // Bump minor version
-                try {
-                    size_t dot = doc->version.rfind('.');
-                    if (dot != std::string::npos) {
-                        int minor = std::stoi(doc->version.substr(dot+1)) + 1;
-                        doc->version = doc->version.substr(0, dot+1) + std::to_string(minor);
-                    }
-                } catch(...) { doc->version += ".1"; }
-                // Snapshot
                 doc->snapshotVersion(note.empty() ? "Vor Bearbeitung" : note, by);
-                doc->importLocalFile(doc->filePath); // update hash + size
-                std::cout << "  Snapshot v" << oldVer << " gespeichert. Neue Version: "
-                          << doc->version << "\n";
+                doc->importLocalFile(doc->filePath);
+                std::cout << "  Snapshot v" << oldVer << " gespeichert.\n";
                 if (doc->openFile("edit"))
                     std::cout << "  >> Datei geöffnet. Änderungen werden direkt im MFS gespeichert.\n";
                 else

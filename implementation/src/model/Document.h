@@ -81,6 +81,7 @@ public:
         const std::string& docType   = "report",
         const std::string& projectId = "");
 
+    static std::vector<std::shared_ptr<Document>> loadRecent(int n = 20);
     static std::shared_ptr<Document> loadById(const std::string& id);
     static std::vector<std::shared_ptr<Document>> loadForProject(const std::string& projectId);
     static std::vector<std::shared_ptr<Document>> loadForEntity(

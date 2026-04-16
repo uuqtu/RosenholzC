@@ -556,7 +556,17 @@ std::string startWfInstanceWizard(const std::string& entityType,
 {
     hdr("NEUEN WORKFLOW STARTEN");
     std::string effType = entityType.empty() ? readLine("Entitätstyp (project/task/document/incident): ") : entityType;
-    std::string effId   = entityId.empty()   ? readLine("Entitäts-ID: ") : entityId;
+    std::string effId;
+    if (entityId.empty()) {
+        // Show recent items to help the user pick an ID
+        showRecentItems(effType == "project" ? "F16" :
+                        effType == "task"    ? "F22" :
+                        effType == "incident"? "F18" :
+                        effType == "risk"    ? "RSK" : "");
+        effId = readLine("Entitäts-ID: ");
+    } else {
+        effId = entityId;
+    }
 
     // Offer templates
     auto templates = WorkflowTemplate::loadForEntityType(effType);
@@ -687,9 +697,10 @@ void workflowMenu() {
                      "    4. Alle aktiven Instanzen\n"
                      "    5. Instanz per ID öffnen\n"
                      "    6. Instanz starten (ad-hoc)\n"
-                     "    7. Verfallene SLAs anzeigen\n\n"
+                     "    7. Verfallene SLAs anzeigen\n"
+                     "    8. Workflow suchen / filtern\n\n"
                      "    0. Zurück\n";
-        int ch = readInt("Wahl", 0, 7); if (ch==0) break;
+        int ch = readInt("Wahl", 0, 8); if (ch==0) break;
 
         else if (ch==1) {
             auto templates = WorkflowTemplate::loadAll();
@@ -728,27 +739,8 @@ void workflowMenu() {
         }
 
         else if (ch==4) {
-            auto insts = WorkflowInstance::loadActive();
-            hdr("AKTIVE INSTANZEN (" + std::to_string(insts.size()) + ")");
-            if (insts.empty()) std::cout << "  (keine)\n\n";
-            int n=1;
-            for (auto& i : insts) {
-                int done = 0;
-                for (auto& a : i->actions) if (a.isComplete()) done++;
-                std::cout << "  " << std::setw(3) << n++
-                          << ". " << std::left << std::setw(26) << i->name.substr(0,24)
-                          << "  " << i->entityType.substr(0,8)
-                          << "  " << done << "/" << i->actions.size()
-                          << (i->slaBreached?" [SLA!]":"") << "\n";
-            }
-            if (!insts.empty()) {
-                std::string pick = readOpt("Nummer zum Öffnen (leer=zurück): ");
-                if (!pick.empty()) {
-                    int idx = std::stoi(pick)-1;
-                    if (idx>=0 && idx<(int)insts.size())
-                        instanceMenu(insts[idx]->instanceId);
-                }
-            }
+            hdr("AKTIVE INSTANZEN");
+            listWfInstances("", "");
         }
 
         else if (ch==5) {
@@ -765,10 +757,48 @@ void workflowMenu() {
             auto breached = WorkflowInstance::loadBreached();
             hdr("VERFALLENE SLAs (" + std::to_string(breached.size()) + ")");
             if (breached.empty()) { std::cout << "  (keine)\n\n"; continue; }
-            for (auto& i : breached)
-                std::cout << "  " << std::left << std::setw(28) << i->name.substr(0,26)
+            for (auto& i : breached) {
+                std::cout << "  [SLA!] " << std::left << std::setw(26)
+                          << i->name.substr(0,24)
+                          << "  " << i->entityType << "/" << i->entityId.substr(0,18)
                           << "  Fällig: " << fdate(i->dueDate) << "\n";
-            std::cout << "\n";
+                drawChain(i->actions, /*compact=*/true);
+            }
+        }
+
+        else if (ch==8) {
+            // ── Workflow suchen / filtern ────────────────────
+            hdr("WORKFLOW SUCHEN");
+            std::string fType = readOpt("Entitätstyp (project/task/risk/…, leer=alle): ");
+            std::string fStat = readOpt("Status (active/completed/cancelled, leer=alle): ");
+            std::string fName = readOpt("Name enthält (leer=alle): ");
+            std::cout << "  Nur SLA-Verletzungen? (j/n): ";
+            std::string fSla; std::getline(std::cin, fSla);
+            bool slaOnly = (!fSla.empty() && (fSla[0]=='j'||fSla[0]=='y'));
+
+            auto results = WorkflowEngine::searchInstances(fType, fStat, fName, slaOnly);
+            hdr("SUCHERGEBNISSE (" + std::to_string(results.size()) + ")");
+            if (results.empty()) {
+                std::cout << "  (keine Treffer)\n\n";
+                continue;
+            }
+            int n=1;
+            for (auto& inst : results) {
+                std::string sm = inst->status=="completed"?"[✓]":
+                                 inst->status=="active"   ?"[→]":"[ ]";
+                std::cout << "  " << std::setw(3) << n++ << ". " << sm << " "
+                          << std::left << std::setw(26) << inst->name.substr(0,24)
+                          << "  " << inst->entityType
+                          << (inst->slaBreached?"  [SLA!]":"") << "\n";
+                drawChain(inst->actions, /*compact=*/true);
+            }
+            std::string pick = readOpt("Nummer öffnen (leer=zurück): ");
+            if (!pick.empty()) {
+                int idx=0;
+                try { idx=std::stoi(pick)-1; } catch(...) {}
+                if (idx>=0 && idx<(int)results.size())
+                    instanceMenu(results[idx]->instanceId);
+            }
         }
     }
 }

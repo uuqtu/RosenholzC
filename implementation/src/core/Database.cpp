@@ -256,7 +256,7 @@ bool DatabasePool::initAll(const std::string& basePath, bool walMode, int cacheS
         {"workflow",  "workflow.db"},
         {"documents", "documents.db"},
         {"tracking",  "tracking.db"},
-        {"reporting", "reporting.db"},
+        {"f18",       "f18.db"},
     };
 
     bool ok = true;

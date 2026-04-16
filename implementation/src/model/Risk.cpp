@@ -127,4 +127,23 @@ nlohmann::json Risk::toJson() const {
     return {{"riskId",riskId},{"title",title},{"riskLevel",riskLevel},{"status",status},
             {"overallRiskScore",overallRiskScore},{"projectId",projectId}};
 }
+// ------------------------------
+// loadRecent
+// Returns the n most recently created Risk records.
+// Parameters:
+//   n : maximum number of results (default 20)
+// ------------------------------
+std::vector<std::shared_ptr<Risk>> Risk::loadRecent(int n) {
+    std::vector<std::shared_ptr<Risk>> result;
+    auto* db = DatabasePool::instance().get("reporting");
+    if (!db) return result;
+    auto rows = db->query("SELECT * FROM risks ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
+    for (auto& r : rows) {
+        auto obj = std::make_shared<Risk>();
+        obj->fromRow(r);
+        result.push_back(obj);
+    }
+    return result;
+}
+
 } // namespace Rosenholz
