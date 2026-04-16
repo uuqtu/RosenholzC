@@ -31,30 +31,6 @@
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/f18.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/f18.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/projects.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/projects.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/workflow.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/workflow.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/F18Menu.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/F18Menu.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/ProjectMenu.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/ProjectMenu.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/ReportingMenu.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/ReportingMenu.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/TaskMenu.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/TaskMenu.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/Utilities.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/Utilities.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/main_cli.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Migration.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Migration.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/ProjectF16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/ProjectF16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/ProjectF16.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/ProjectF16.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/TaskF22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/TaskF22.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/TaskF22.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/TaskF22.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Workflow.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Workflow.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Workflow.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/workflow/WorkflowEngine.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/WorkflowEngine.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/workflow/WorkflowEngine.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/WorkflowEngine.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_core.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_core.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_model.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_model.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_workflow.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -111,9 +87,9 @@
   }
 }</component>
   <component name="RunManager" selected="CMake Application.rosenholz_cli">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="generate_schemas" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="generate_schemas" CONFIG_NAME="Debug">
@@ -154,6 +130,7 @@
       <workItem from="1776285552619" duration="1232000" />
       <workItem from="1776368491642" duration="1550000" />
       <workItem from="1776370527712" duration="654000" />
+      <workItem from="1776372307167" duration="1048000" />
     </task>
     <servers />
   </component>
