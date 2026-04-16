@@ -74,7 +74,6 @@ set(MODEL_SOURCES
     src/model/ProjectF16.cpp
     src/model/TaskF22.cpp
     src/model/Document.cpp
-    src/model/Milestone.cpp
     src/model/f18/F18Workflow.cpp
     src/model/f18/F18WorkflowStep.cpp
     src/model/f18/Communication.cpp

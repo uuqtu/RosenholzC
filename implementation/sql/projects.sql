@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS projects (
     workflow_instance_id        TEXT,
     workflow_status             TEXT,
     workflow_current_state      TEXT,
+    main_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS projects (
     classification              TEXT,
     external_ref                TEXT,
     links                       TEXT,
+    milestones                  TEXT,
     notes                       TEXT    DEFAULT '{}',
     created_at                  TEXT,
     updated_at                  TEXT
@@ -81,6 +83,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     workflow_instance_id        TEXT,
     workflow_status             TEXT,
     workflow_current_state      TEXT,
+    main_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,
@@ -108,11 +111,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     cost_actual                 REAL    DEFAULT 0,
     wbs_code                    TEXT,
     sprint_or_phase             TEXT,
-    is_milestone                INTEGER DEFAULT 0,
     quality_criteria            TEXT,
     acceptance_criteria         TEXT,
     external_ref                TEXT,
     links                       TEXT,
+    milestones                  TEXT,
     notes                       TEXT    DEFAULT '{}',
     created_at                  TEXT,
     updated_at                  TEXT
@@ -124,6 +127,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     workflow_instance_id        TEXT,
     workflow_status             TEXT,
     workflow_current_state      TEXT,
+    main_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,
@@ -154,6 +158,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     escalated                   INTEGER DEFAULT 0,
     escalated_to                TEXT,
     links                       TEXT,
+    milestones                  TEXT,
     notes                       TEXT    DEFAULT '{}',
     created_at                  TEXT,
     updated_at                  TEXT

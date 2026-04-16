@@ -208,7 +208,7 @@ void run() {
             }
             auto* prdb = Rosenholz::DatabasePool::instance().get("projects");
             if (prdb) {
-                std::cout << "    Meilensteine: " << prdb->rowCount("milestones") << "\n"
+                std::cout << "    Projekte: " << prdb->rowCount("projects") << "\n"
                           << "    Besprechungen: " << prdb->rowCount("meetings") << "\n";
             }
             auto* wfdb = Rosenholz::DatabasePool::instance().get("workflow");

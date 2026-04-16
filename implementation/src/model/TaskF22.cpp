@@ -4,6 +4,7 @@
 
 #include "../mfs/MFSWriter.h"
 #include "TaskF22.h"
+#include "../workflow/WorkflowEngine.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
@@ -34,7 +35,7 @@ std::shared_ptr<TaskF22> TaskF22::create(
     t->title         = title_;
     t->assigneeId    = assigneeId_;
     t->parentTaskId  = parentTaskId_;
-    t->status        = "draft";
+    t->status        = "in_work";
     t->createdAt     = nowIso();
     t->updatedAt     = t->createdAt;
     t->notes         = "{}";
@@ -59,21 +60,22 @@ bool TaskF22::save() const {
 
     bool ok = db->exec(R"(
         INSERT OR REPLACE INTO tasks (
-            task_id, workflow_instance_id, workflow_status, workflow_current_state,
+            task_id, workflow_instance_id, workflow_status, workflow_current_state, main_workflow_id,
             reg_number, project_id, parent_task_id, assignee_id, assigned_by,
             task_code, title, description, task_type, status, priority,
             effort_planned_hrs, effort_actual_hrs, effort_remaining_hrs,
             cost_planned, cost_actual,
             start_date_planned, start_date_actual, due_date_planned, due_date_actual,
             schedule_variance_days, percent_complete,
-            quality_criteria, acceptance_criteria, is_milestone,
+            quality_criteria, acceptance_criteria, milestones,
             wbs_code, sprint_or_phase, links, notes, created_at, updated_at
-        ) VALUES (?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?,?,?,?)
     )", {
         BindParam::text(taskId),
         textOrNull(workflowInstanceId),
         textOrNull(workflowStatus),
         textOrNull(workflowCurrentState),
+        textOrNull(mainWorkflowId),
         BindParam::text(regNumber.toString()),
         BindParam::text(projectId),
         textOrNull(parentTaskId),
@@ -98,7 +100,7 @@ bool TaskF22::save() const {
         BindParam::int64(percentComplete),
         textOrNull(qualityCriteria),
         textOrNull(acceptanceCriteria),
-        BindParam::int64(isMilestone ? 1 : 0),
+        textOrNull(milestones),
         textOrNull(wbsCode),
         textOrNull(sprintOrPhase),
         textOrNull(links),
@@ -115,6 +117,7 @@ bool TaskF22::save() const {
 void TaskF22::fromRow(const Row& r) {
     taskId               = rowGet(r,"task_id");
     workflowInstanceId   = rowGet(r,"workflow_instance_id");
+    mainWorkflowId       = rowGet(r,"main_workflow_id");
     workflowStatus       = rowGet(r,"workflow_status");
     workflowCurrentState = rowGet(r,"workflow_current_state");
     regNumber            = RegNumber::fromString(rowGet(r,"reg_number"));
@@ -141,7 +144,7 @@ void TaskF22::fromRow(const Row& r) {
     percentComplete      = rowGetInt(r,"percent_complete");
     qualityCriteria      = rowGet(r,"quality_criteria");
     acceptanceCriteria   = rowGet(r,"acceptance_criteria");
-    isMilestone          = rowGet(r,"is_milestone") == "1";
+    milestones           = rowGet(r,"milestones");
     wbsCode              = rowGet(r,"wbs_code");
     sprintOrPhase        = rowGet(r,"sprint_or_phase");
     links                = rowGet(r,"links");
@@ -363,6 +366,23 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
         result.push_back(obj);
     }
     return result;
+}
+
+
+void TaskF22::ensureMainWorkflow() {
+    if (!mainWorkflowId.empty()) return;
+    auto inst = Rosenholz::WorkflowEngine::createMainWorkflow("task", taskId, title);
+    if (!inst) return;
+    mainWorkflowId = inst->instanceId;
+    status         = "in_work";
+    auto* db = DatabasePool::instance().get("projects");
+    if (db) db->exec(
+        "UPDATE tasks SET main_workflow_id=?, status='in_work', updated_at=? "
+        "WHERE task_id=?;",
+        {BindParam::text(mainWorkflowId), BindParam::text(nowIso()),
+         BindParam::text(taskId)});
+    LOG_INFO("[Lifecycle] Main WFI ensured for F22: " + taskId +
+             " wfi=" + mainWorkflowId);
 }
 
 } // namespace Rosenholz

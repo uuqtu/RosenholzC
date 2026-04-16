@@ -52,7 +52,8 @@ public:
     std::string sponsorId;         ///< FK -> persons
 
     // ── Status / phase ────────────────────────────────────
-    std::string status;            ///< draft|active|on-hold|closed|archived
+    std::string status      { "in_work" }; ///< in_work → released (only via Main WFI End step)
+    std::string mainWorkflowId;    ///< WFI ID of the controlling Main Workflow
     std::string phase;
     std::string methodology;       ///< agile|waterfall|kanban
     std::string classification;
@@ -103,6 +104,7 @@ public:
     std::string externalRef;
     std::string links;
     std::string notes;             ///< JSON
+    std::string milestones; ///< Free-text milestone notes (maintainable string)
     std::string createdAt;
     std::string updatedAt;
 
@@ -116,6 +118,7 @@ public:
 
     // ── CRUD ──────────────────────────────────────────────
     bool save() const;
+    void ensureMainWorkflow();  ///< Creates Main WFI on first save
     bool load(const std::string& id);
     bool remove();
     bool update();

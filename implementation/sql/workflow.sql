@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS workflow_instances (
     execution_type  TEXT NOT NULL DEFAULT 'sequential'
                          CHECK(execution_type IN ('sequential','parallel','free')),
     status          TEXT NOT NULL DEFAULT 'active'
-                         CHECK(status IN ('active','completed','cancelled','on_hold')),
+                         CHECK(status IN ('active','completed','cancelled','on_hold','locked')),
     initiated_by    TEXT,
     initiated_date  TEXT,
     due_date        TEXT,

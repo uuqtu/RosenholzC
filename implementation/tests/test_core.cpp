@@ -76,7 +76,7 @@ void testSuiteCore() {
         CHECK(wfVer >= 1, "workflow schema version >= 1");
 
         int f18Ver = R::MigrationEngine::currentVersion("f18");
-        CHECK(f18Ver >= 1, "f18 schema version >= 1");
+        CHECK(f18Ver >= 2, "f18 schema version >= 2 (v2 baseline)");
     }
 
     SECTION("Version — compile-time info");

@@ -63,7 +63,8 @@ public:
     // ── Common fields (all types) ─────────────────────────────
     std::string title;
     std::string description;
-    std::string status          { "draft" };  // draft|active|completed|archived
+    std::string status          { "in_work" }; // in_work → released (only via Main WFI End step)
+    std::string mainWorkflowId;               // WFI ID of the controlling Main Workflow
     std::string ownerId;                      // → Person
     std::string priority        { "medium" }; // low|medium|high|critical
     std::string createdAt;
@@ -161,6 +162,7 @@ public:
 
     // ── CRUD ──────────────────────────────────────────────────
     bool save()   const;
+    void ensureMainWorkflow();  ///< Called after first save to create Main WFI
     bool update();
     bool remove() const;
     bool load(const std::string& id);

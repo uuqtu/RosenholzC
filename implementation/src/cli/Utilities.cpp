@@ -370,6 +370,7 @@ std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
     p->budgetPlanned   = budget;
 
     if (p->save()) {
+        p->ensureMainWorkflow();
         std::cout << "\n  >> Project created: " << p->regNumber.toString()
                   << " (" << p->projectId << ")\n\n";
         // write MFS file
@@ -405,6 +406,7 @@ std::shared_ptr<Rosenholz::TaskF22> createTaskWizard(const std::string& projectI
     t->effortPlannedHrs = effort;
 
     if (t->save()) {
+        t->ensureMainWorkflow();
         std::cout << "\n  >> Task created: " << t->regNumber.toString()
                   << " (" << t->taskId << ")\n\n";
         auto& cfg = Rosenholz::Config::instance();

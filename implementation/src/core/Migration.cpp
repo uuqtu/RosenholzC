@@ -29,11 +29,13 @@ std::string nowIsoMig() {
 // ------------------------------
 // targetVersionMap
 //
-// Returns the canonical target schema version for each database.
-// Used by runAll() to determine which deltas need to run.
+// Returns the canonical target (= minimum required) schema version
+// per database. runAll() applies any registry() deltas that bring
+// currentVersion up to targetVersion.
 //
-// Increment a version here AND add the corresponding delta
-// in registry() when changing a database schema.
+// v2 baseline: all databases start here on a fresh install.
+// To evolve the schema: (1) bump the version in SchemaVersions,
+// (2) add a delta in registry(), (3) update the SQL file.
 // ------------------------------
 std::map<std::string, int> MigrationEngine::targetVersionMap() {
     return {
@@ -65,78 +67,25 @@ std::map<std::string, int> MigrationEngine::targetVersionMap() {
 //     deltas handle ALTER TABLE for existing databases only
 // ------------------------------
 std::vector<Migration> MigrationEngine::registry() {
+    // ── v2 Baseline: no historical deltas ─────────────────────
+    //
+    // This codebase establishes version 2 as the clean starting point.
+    // All databases are created fresh at v2 via their SQL schema files.
+    // No backwards compatibility with pre-v2 databases is provided or needed.
+    //
+    // Add future deltas here as the schema evolves beyond v2.
+    // Each delta increments the version in SchemaVersions (Migration.h)
+    // and has a matching entry here so runFor() can apply it automatically.
+    //
+    // Example (future delta for workflow v3):
+    //   {
+    //       "workflow", 3,
+    //       "Add xyz column to workflow_steps",
+    //       R"SQL( ALTER TABLE f18_workflow_steps ADD COLUMN xyz TEXT; )SQL"
+    //   },
+    //
     return {
-        // ── core v1 (initial) ────────────────────────────────
-        // No delta needed — schema applied fresh via .sql files
-
-        // ── workflow v2 ──────────────────────────────────────
-        // Added workflow_template_actions table (was missing in v1)
-        {
-            "workflow", 2,
-            "Add workflow_template_actions table",
-            R"SQL(
-                CREATE TABLE IF NOT EXISTS workflow_template_actions (
-                    tpl_action_id   TEXT PRIMARY KEY,
-                    template_id     TEXT NOT NULL,
-                    title           TEXT NOT NULL,
-                    description     TEXT,
-                    sequence_order  INTEGER DEFAULT 0,
-                    execution_type  TEXT DEFAULT 'sequential',
-                    predecessor_ids TEXT,
-                    required_role   TEXT,
-                    sla_hours       INTEGER DEFAULT 0,
-                    auto_approve    INTEGER DEFAULT 0,
-                    is_initialize   INTEGER DEFAULT 0,
-                    is_final        INTEGER DEFAULT 0,
-                    requires_decision_log_entry INTEGER DEFAULT 0,
-                    requires_lesson_learned_entry INTEGER DEFAULT 0,
-                    requires_comment INTEGER DEFAULT 0,
-                    notes           TEXT
-                );
-            )SQL"
-        },
-
-    
-        // ── documents v2 ────────────────────────────────────
-        // Added document_versions table + file_size/file_hash columns
-        {
-            "documents", 2,
-            "Add document_versions table and file metadata",
-            R"SQL(
-                CREATE TABLE IF NOT EXISTS document_versions (
-                    version_id      TEXT PRIMARY KEY,
-                    document_id     TEXT NOT NULL,
-                    version_number  TEXT NOT NULL,
-                    file_path       TEXT,
-                    file_size       INTEGER DEFAULT 0,
-                    file_hash       TEXT,
-                    created_by      TEXT,
-                    change_note     TEXT,
-                    created_at      TEXT
-                );
-                CREATE INDEX IF NOT EXISTS idx_doc_versions
-                    ON document_versions(document_id, version_number);
-                -- Add columns to documents (SQLite ignores if already exists)
-                ALTER TABLE documents ADD COLUMN file_size INTEGER DEFAULT 0;
-                ALTER TABLE documents ADD COLUMN file_hash TEXT;
-            )SQL"
-        },
-        // ── workflow v3 ──────────────────────────────────────
-        // Added ise-cobra tracking fields to workflow_actions
-        {
-            "workflow", 3,
-            "Add ise-cobra tracking state to workflow_actions",
-            R"SQL(
-                ALTER TABLE workflow_actions ADD COLUMN tracking_status TEXT DEFAULT 'planned';
-                ALTER TABLE workflow_actions ADD COLUMN planned_date TEXT;
-                ALTER TABLE workflow_actions ADD COLUMN focus_date TEXT;
-                ALTER TABLE workflow_actions ADD COLUMN archived_date TEXT;
-                ALTER TABLE workflow_actions ADD COLUMN priority TEXT DEFAULT 'medium';
-                ALTER TABLE workflow_actions ADD COLUMN assigned_to_group TEXT;
-                ALTER TABLE workflow_actions ADD COLUMN progress_note TEXT;
-                ALTER TABLE workflow_actions ADD COLUMN percent_complete INTEGER DEFAULT 0;
-            )SQL"
-        },
+        // (empty — no historical deltas; fresh installs start at v2)
     }; // end registry
 }
 
@@ -157,10 +106,15 @@ bool MigrationEngine::ensureSchemaVersionTable(Database* db, const std::string& 
         {BindParam::text(dbName)});
 
     if (cur.empty()) {
+        // Fresh database — stamp it at the current target version directly.
+        // No deltas need to run: the schema file already reflects v2 baseline.
+        int tv = targetVersion(dbName);
         db->exec(
             "INSERT INTO schema_version(db_name, version, applied_at, description) "
-            "VALUES(?, 1, ?, 'initial schema');",
-            {BindParam::text(dbName), BindParam::text(nowIsoMig())});
+            "VALUES(?, ?, ?, 'v2 baseline — initial install');",
+            {BindParam::text(dbName),
+             BindParam::int64(tv),
+             BindParam::text(nowIsoMig())});
     }
     return true;
 }

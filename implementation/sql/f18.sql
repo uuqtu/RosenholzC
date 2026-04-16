@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS f18_workflows (
     project_id          TEXT,           -- → F16
     task_id             TEXT,           -- → F22
     parent_vorgang_id   TEXT,           -- → F18 (CO only, → ChangeRequest)
+    main_workflow_id    TEXT,           -- WFI ID of controlling Main Workflow
     title               TEXT NOT NULL,
     description         TEXT,
     status              TEXT NOT NULL DEFAULT 'draft',

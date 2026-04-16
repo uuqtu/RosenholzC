@@ -22,13 +22,18 @@
 namespace Rosenholz {
 
 /// Current schema versions — bump these when adding migrations
+// ── Schema baseline v2 ────────────────────────────────────────
+// This codebase IS the v2 baseline. No backwards compatibility.
+// Fresh databases are created at v2 directly via SQL files.
+// Increment a version here AND add a delta in registry() for
+// future schema changes going forward from this baseline.
 struct SchemaVersions {
-    static constexpr int core      = 1;
-    static constexpr int projects  = 1;
-    static constexpr int workflow  = 3;  // v3: ise-cobra fields
-    static constexpr int documents = 2;  // v2: versions + file hash
-    static constexpr int tracking  = 1;
-    static constexpr int f18       = 1;  // v1: unified F18 schema
+    static constexpr int core      = 2;  // v2 baseline
+    static constexpr int projects  = 2;  // v2 baseline
+    static constexpr int workflow  = 2;  // v2 baseline (replaces v1–v3 history)
+    static constexpr int documents = 2;  // v2 baseline
+    static constexpr int tracking  = 2;  // v2 baseline
+    static constexpr int f18       = 2;  // v2 baseline (unified F18 schema)
 };
 
 /// A single migration step

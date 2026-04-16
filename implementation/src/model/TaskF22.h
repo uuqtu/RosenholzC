@@ -46,7 +46,8 @@ public:
     std::string assignedBy;
 
     // ── Status / workflow ─────────────────────────────────
-    std::string status;            ///< draft|active|in-review|done|blocked
+    std::string status      { "in_work" }; ///< in_work → released (only via Main WFI End step)
+    std::string mainWorkflowId;    ///< WFI ID of the controlling Main Workflow
     std::string priority;
     std::string workflowInstanceId;
     std::string workflowStatus;
@@ -70,7 +71,7 @@ public:
     // ── Quality / Scope (QTCS) ────────────────────────────
     std::string qualityCriteria;
     std::string acceptanceCriteria;
-    bool        isMilestone { false };
+    std::string milestones; ///< Free-text milestone notes
     std::string wbsCode;
     std::string sprintOrPhase;
 
@@ -95,6 +96,7 @@ public:
 
     // ── CRUD ──────────────────────────────────────────────
     bool save() const;
+    void ensureMainWorkflow();  ///< Creates Main WFI on first save
     bool load(const std::string& id);
     bool remove();
     bool update();

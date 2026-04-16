@@ -2,6 +2,7 @@
 // F18Workflow.cpp  —  Implementation of the unified F18Workflow entity
 // ============================================================
 #include "F18Workflow.h"
+#include "../../workflow/WorkflowEngine.h"
 #include "F18WorkflowStep.h"
 #include "../../core/Database.h"
 #include "../../core/Logger.h"
@@ -33,6 +34,7 @@ void F18Workflow::fromRow(const Row& r) {
     projectId          = g("project_id");
     taskId             = g("task_id");
     parentVorgangId    = g("parent_vorgang_id");
+    mainWorkflowId     = g("main_workflow_id");
     title              = g("title");
     description        = g("description");
     status             = g("status");
@@ -136,7 +138,7 @@ bool F18Workflow::save() const {
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f18_workflows
-        (vorgang_id, vorgang_type, project_id, task_id, parent_vorgang_id,
+        (vorgang_id, vorgang_type, project_id, task_id, parent_vorgang_id, main_workflow_id,
          title, description, status, owner_id, priority,
          incident_type, severity, occurred_date, resolved_date,
          root_cause, immediate_action, resolution,
@@ -156,7 +158,7 @@ bool F18Workflow::save() const {
          cr_decision_date, cr_decision_rationale, cr_schedule_impact_days,
          executed_by, execution_date,
          notes, links, created_at, updated_at)
-        VALUES(?,?,?,?,?, ?,?,?,?,?,
+        VALUES(?,?,?,?,?,?, ?,?,?,?,?,
                ?,?,?,?, ?,?,?, ?,?,?,?,
                ?,?, ?,?,?,?, ?,?,?, ?,?,?,?,
                ?,?,?,?, ?,?,?,
@@ -169,7 +171,7 @@ bool F18Workflow::save() const {
                ?,?,
                ?,?,?,?)
     )SQL", {
-        t(vorgangId), t(vorgangType), n(projectId), n(taskId), n(parentVorgangId),
+        t(vorgangId), t(vorgangType), n(projectId), n(taskId), n(parentVorgangId), n(mainWorkflowId),
         t(title), n(description), t(status), n(ownerId), t(priority),
         // incident
         n(incidentType), n(severity), n(occurredDate), n(resolvedDate),
@@ -286,6 +288,8 @@ std::shared_ptr<F18Workflow> F18Workflow::create(
     v->steps.push_back(*initStep);
     v->steps.push_back(*endStep);
     LOG_INFO("[F18Workflow] Created: " + v->vorgangId + " type=" + type);
+    // Auto-create the Main WFI that controls this F18Workflow's lifecycle
+    v->ensureMainWorkflow();
     return v;
 }
 
@@ -423,6 +427,23 @@ bool F18Workflow::addNote(const std::string& authorId,
         notes = "[" + entry + "]";
     }
     return update();
+}
+
+
+void F18Workflow::ensureMainWorkflow() {
+    if (!mainWorkflowId.empty()) return;
+    auto inst = Rosenholz::WorkflowEngine::createMainWorkflow("f18", vorgangId, title);
+    if (!inst) return;
+    mainWorkflowId = inst->instanceId;
+    status         = "in_work";
+    auto* db = F18Workflow::db();
+    if (db) db->exec(
+        "UPDATE f18_workflows SET main_workflow_id=?, status='in_work', updated_at=? "
+        "WHERE vorgang_id=?;",
+        {BindParam::text(mainWorkflowId), BindParam::text(nowIso()),
+         BindParam::text(vorgangId)});
+    LOG_INFO("[Lifecycle] Main WFI ensured for F18: " + vorgangId +
+             " wfi=" + mainWorkflowId);
 }
 
 } // namespace Rosenholz

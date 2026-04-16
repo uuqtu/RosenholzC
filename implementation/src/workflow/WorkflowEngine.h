@@ -508,6 +508,79 @@ public:
     /// Sync entity's workflow fields (current state etc.)
     static bool syncEntityWorkflowFields(const WorkflowInstance& inst);
 
+    // ── Entity Lifecycle ─────────────────────────────────────────
+    // ------------------------------
+    // createMainWorkflow
+    //
+    // Creates and starts the controlling Main WorkflowInstance for an entity.
+    // Called automatically by F16/F22/F18 create factories.
+    // Sets entity.mainWorkflowId and entity.status = "in_work".
+    //
+    // Parameters:
+    //   entityType  : "project" | "task" | "f18"
+    //   entityId    : the entity's primary key
+    //   entityTitle : used as the WFI name
+    // Returns: the new WorkflowInstance (already saved)
+    // ------------------------------
+    static std::shared_ptr<WorkflowInstance> createMainWorkflow(
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& entityTitle);
+
+    // ------------------------------
+    // canReleaseEntity
+    //
+    // Returns true if all WorkflowInstances attached to the entity
+    // are either completed or locked (no pending/active/in_progress WFIs).
+    // The Main WFI itself is excluded from the check.
+    //
+    // Parameters:
+    //   entityType    : "project" | "task" | "f18"
+    //   entityId      : the entity's primary key
+    //   mainWfiId     : the Main WFI ID to exclude from the check
+    //   blockerCount  : set to number of blocking WFIs (out param)
+    // ------------------------------
+    static bool canReleaseEntity(
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& mainWfiId,
+        int& blockerCount);
+
+    // ------------------------------
+    // lockAllOpenWorkflows
+    //
+    // Force-transitions all non-completed WFIs on an entity to "locked".
+    // Requires explicit confirmation (confirmLock must be true).
+    // Used as a precondition for releasing an entity whose sub-WFIs are still open.
+    //
+    // Parameters:
+    //   entityType  : "project" | "task" | "f18"
+    //   entityId    : the entity's primary key
+    //   mainWfiId   : the Main WFI ID to skip
+    //   confirmLock : must be true (caller must ask the user)
+    // Returns: number of WFIs locked, or -1 on error
+    // ------------------------------
+    static int lockAllOpenWorkflows(
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& mainWfiId,
+        bool confirmLock);
+
+    // ------------------------------
+    // releaseEntity
+    //
+    // Sets an entity's status to "released" in the database.
+    // Called automatically when the Main WFI's End step is fired.
+    // Released entities: no new WFIs, no new child objects.
+    //
+    // Parameters:
+    //   entityType : "project" | "task" | "f18"
+    //   entityId   : the entity's primary key
+    // ------------------------------
+    static bool releaseEntity(
+        const std::string& entityType,
+        const std::string& entityId);
+
     // ------------------------------
     // searchInstances
     //

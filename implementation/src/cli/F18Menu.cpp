@@ -231,13 +231,14 @@ void f18Menu(std::shared_ptr<F18Workflow> v) {
 }
 
 // ── F18 browser menu ─────────────────────────────────────────
-void f18BrowserMenu(const std::string& projectId, const std::string& taskId) {
+void f18BrowserMenu(const std::string& projectId, const std::string& taskId,
+                    const std::string& typeFilter) {
     while (true) {
         std::vector<std::shared_ptr<F18Workflow>> items;
         if (!taskId.empty())
-            items = F18Workflow::loadForTask(taskId);
+            items = F18Workflow::loadForTask(taskId, typeFilter);
         else if (!projectId.empty())
-            items = F18Workflow::loadForProject(projectId);
+            items = F18Workflow::loadForProject(projectId, typeFilter);
         else
             items = F18Workflow::loadRecent(50);
 

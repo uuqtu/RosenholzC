@@ -1233,6 +1233,37 @@ bool WorkflowEngine::syncEntityWorkflowFields(const WorkflowInstance& inst) {
 
     auto* f18db = DatabasePool::instance().get("f18");
     if (inst.entityType == "risk") updateEntity(f18db, "f18_workflows", "vorgang_id");
+    if (inst.entityType == "f18")  updateEntity(f18db, "f18_workflows", "vorgang_id");
+
+    // If this WFI is completed AND it is the Main WFI for the entity → release it
+    if (inst.status == "completed") {
+        // Check if this is the Main WFI by querying the entity record
+        bool isMain = false;
+        if (inst.entityType == "project" && pdb) {
+            auto rows = pdb->query(
+                "SELECT main_workflow_id FROM projects WHERE project_id=?;",
+                {BindParam::text(inst.entityId)});
+            if (!rows.empty() && rowGet(rows[0],"main_workflow_id") == inst.instanceId)
+                isMain = true;
+        } else if (inst.entityType == "task" && pdb) {
+            auto rows = pdb->query(
+                "SELECT main_workflow_id FROM tasks WHERE task_id=?;",
+                {BindParam::text(inst.entityId)});
+            if (!rows.empty() && rowGet(rows[0],"main_workflow_id") == inst.instanceId)
+                isMain = true;
+        } else if ((inst.entityType == "f18" || inst.entityType == "risk") && f18db) {
+            auto rows = f18db->query(
+                "SELECT main_workflow_id FROM f18_workflows WHERE vorgang_id=?;",
+                {BindParam::text(inst.entityId)});
+            if (!rows.empty() && rowGet(rows[0],"main_workflow_id") == inst.instanceId)
+                isMain = true;
+        }
+        if (isMain) {
+            releaseEntity(inst.entityType, inst.entityId);
+            LOG_INFO("[Lifecycle] Entity released via Main WFI: " +
+                     inst.entityType + "/" + inst.entityId);
+        }
+    }
 
     return true;
 }
@@ -1410,6 +1441,132 @@ std::vector<std::shared_ptr<WorkflowInstance>> WorkflowEngine::searchInstances(
         result.push_back(inst);
     }
     return result;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Entity Lifecycle — Main Workflow + Release Logic
+// ══════════════════════════════════════════════════════════════
+
+// ------------------------------
+// createMainWorkflow
+//
+// Creates the controlling WorkflowInstance for an entity.
+// The Main WFI has a single work step "Freigabe vorbereiten" between
+// Init and End. End can only be fired when all other WFIs are closed.
+// ------------------------------
+std::shared_ptr<WorkflowInstance> WorkflowEngine::createMainWorkflow(
+    const std::string& entityType,
+    const std::string& entityId,
+    const std::string& entityTitle)
+{
+    auto inst = startAdHoc(entityType, entityId,
+                           "Main — " + entityTitle.substr(0, 30),
+                           "sequential", "system");
+    if (!inst) {
+        LOG_ERROR("[Lifecycle] createMainWorkflow failed for " + entityType + "/" + entityId);
+        return nullptr;
+    }
+    // Add a single mid-step: "Freigabe vorbereiten" — must be explicitly approved
+    // before End can fire. This is the gate for the release decision.
+    addAction(*inst, "Freigabe vorbereiten", "sequential", 1,
+              inst->actions.empty() ? "" : inst->actions[0].actionId,
+              "", "", 0);
+    LOG_INFO("[Lifecycle] Main WFI created: " + inst->instanceId +
+             " for " + entityType + "/" + entityId);
+    return inst;
+}
+
+// ------------------------------
+// canReleaseEntity
+//
+// Checks whether all WFIs (except the Main WFI) are completed or locked.
+// Returns true = release is allowed.
+// blockerCount = number of WFIs still blocking.
+// ------------------------------
+bool WorkflowEngine::canReleaseEntity(
+    const std::string& entityType,
+    const std::string& entityId,
+    const std::string& mainWfiId,
+    int& blockerCount)
+{
+    blockerCount = 0;
+    auto* db = wfDB();
+    if (!db) return false;
+
+    auto rows = db->query(
+        "SELECT instance_id, status FROM workflow_instances "
+        "WHERE entity_type=? AND entity_id=? AND instance_id!=? "
+        "AND status NOT IN ('completed','locked','cancelled');",
+        {BindParam::text(entityType),
+         BindParam::text(entityId),
+         BindParam::text(mainWfiId)});
+    blockerCount = (int)rows.size();
+    return blockerCount == 0;
+}
+
+// ------------------------------
+// lockAllOpenWorkflows
+//
+// Force-transitions all blocking WFIs to "locked".
+// confirmLock must be true (caller must confirm with user).
+// Returns: count locked, or -1 on error / not confirmed.
+// ------------------------------
+int WorkflowEngine::lockAllOpenWorkflows(
+    const std::string& entityType,
+    const std::string& entityId,
+    const std::string& mainWfiId,
+    bool confirmLock)
+{
+    if (!confirmLock) return -1;
+    auto* db = wfDB();
+    if (!db) return -1;
+
+    auto rows = db->query(
+        "SELECT instance_id FROM workflow_instances "
+        "WHERE entity_type=? AND entity_id=? AND instance_id!=? "
+        "AND status NOT IN ('completed','locked','cancelled');",
+        {BindParam::text(entityType),
+         BindParam::text(entityId),
+         BindParam::text(mainWfiId)});
+    int count = 0;
+    for (auto& r : rows) {
+        std::string iid = rowGet(r, "instance_id");
+        bool ok = db->exec(
+            "UPDATE workflow_instances SET status='locked', updated_at=? WHERE instance_id=?;",
+            {BindParam::text(nowIso()), BindParam::text(iid)});
+        if (ok) {
+            count++;
+            LOG_INFO("[Lifecycle] WFI locked: " + iid);
+        }
+    }
+    return count;
+}
+
+// ------------------------------
+// releaseEntity
+//
+// Sets the entity status to "released" in the DB.
+// Called automatically from syncEntityWorkflowFields when the Main WFI completes.
+// ------------------------------
+bool WorkflowEngine::releaseEntity(
+    const std::string& entityType,
+    const std::string& entityId)
+{
+    LOG_INFO("[Lifecycle] Releasing entity: " + entityType + "/" + entityId);
+    auto* pdb = DatabasePool::instance().get("projects");
+    auto* f18db = DatabasePool::instance().get("f18");
+
+    auto upd = [&](Database* db, const std::string& table, const std::string& idCol) {
+        if (!db) return false;
+        return db->exec("UPDATE " + table + " SET status='released', updated_at=? "
+                        "WHERE " + idCol + "=?;",
+                        {BindParam::text(nowIso()), BindParam::text(entityId)});
+    };
+
+    if (entityType == "project") return upd(pdb, "projects", "project_id");
+    if (entityType == "task")    return upd(pdb, "tasks",    "task_id");
+    if (entityType == "f18")     return upd(f18db, "f18_workflows", "vorgang_id");
+    return false;
 }
 
 } // namespace Rosenholz

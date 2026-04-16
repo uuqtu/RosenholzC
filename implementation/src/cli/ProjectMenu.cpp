@@ -41,7 +41,6 @@ void printTask(const Rosenholz::TaskF22& t) {
     row("Due planned",   fdate(t.dueDatePlanned));
     row("Due actual",    fdate(t.dueDateActual));
     row("Sched.var.(d)", std::to_string(t.scheduleVarianceDays));
-    row("Is milestone",  t.isMilestone ? "YES" : "no");
     std::cout << "  +" << std::string(52,'-') << "+\n\n";
 }
 
@@ -72,13 +71,19 @@ void projectMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
                   << "   16. Documents (create / list / open)\n"
                   << "   17. Workflow (start / view instances)\n"
                   << "\n  REPORTING & TRACKING\n"
-                  << "   18. Milestones\n"
-                  << "   19. Meetings (via project)\n"
-                  << "   20. Maßnahmen [MSN]\n"
-                  << "   21. Quality Gates [QT]\n"
-                  << "   22. Workflow starten / anzeigen [WFI]\n"
+                  << "\n  F18 WORKFLOWS\n"
+                  << "   18. Neuen F18 Workflow anlegen\n"
+                  << "   19. F18 Workflows anzeigen / öffnen\n"
+                  << "   20. Incidents anzeigen\n"
+                  << "   21. Risiken anzeigen\n"
+                  << "   22. Maßnahmen anzeigen\n"
+                  << "   23. Change Requests anzeigen\n"
+                  << "\n  KOMMUNIKATION\n"
+                  << "   24. Communications (Meetings, Calls, ...)\n"
+                  << "\n  MEILENSTEINE\n"
+                  << "   25. Meilenstein-Notizen bearbeiten\n"
                   << "    0. Back\n";
-        int ch = readInt("Choice", 0, 24);
+        int ch = readInt("Choice", 0, 25);
 
         if (ch == 0) break;
 
@@ -188,12 +193,43 @@ void projectMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
             else if (wch == 2) { listWfInstances("project", p->projectId); }
             else { workflowMenu(); }
         }
-        else if (ch == 18) { milestoneMenu(p->projectId); }
-        else if (ch == 19) { communicationMenu(p->projectId, "project"); }
-        else if (ch == 20) { f18BrowserMenu(p->projectId, ""); }
-        else if (ch == 21) { f18BrowserMenu(p->projectId, ""); }
-        else if (ch == 22) { f18BrowserMenu(p->projectId, ""); }
-        else if (ch == 23) { f18BrowserMenu(p->projectId, ""); }
+        else if (ch == 18) {
+            // Create new F18 Workflow
+            auto v = createF18Wizard(p->projectId, "");
+            if (v) f18Menu(v);
+        }
+        else if (ch == 19) { f18BrowserMenu(p->projectId, ""); }
+        else if (ch == 20) { f18BrowserMenu(p->projectId, "", "incident"); }
+        else if (ch == 21) { f18BrowserMenu(p->projectId, "", "risk"); }
+        else if (ch == 22) { f18BrowserMenu(p->projectId, "", "measure"); }
+        else if (ch == 23) { f18BrowserMenu(p->projectId, "", "changeRequest"); }
+        else if (ch == 24) { communicationMenu(p->projectId, "project"); }
+        else if (ch == 25) {
+            // Meilenstein-Notizen (free-text field on F16)
+            hdr("MEILENSTEIN-NOTIZEN — " + p->projectId.substr(0,20));
+            if (!p->milestones.empty())
+                std::cout << "  Aktuelle Notizen:\n" << p->milestones << "\n\n";
+            else
+                std::cout << "  (keine Notizen)\n\n";
+            std::cout << "  1.Bearbeiten  2.Anfügen  0.Zurück\n";
+            int ms = readInt("Wahl",0,2);
+            if (ms==1) {
+                std::cout << "  Notizen eingeben (leere Zeile = fertig):\n";
+                std::string all, line;
+                while (std::getline(std::cin, line) && !line.empty())
+                    all += line + "\n";
+                p->milestones = all;
+                p->update();
+                std::cout << "  >> Meilenstein-Notizen gespeichert.\n";
+            } else if (ms==2) {
+                std::string add = readLine("Notiz anfügen: ");
+                if (!add.empty()) {
+                    p->milestones += (p->milestones.empty() ? "" : "\n") + add;
+                    p->update();
+                    std::cout << "  >> Angefügt.\n";
+                }
+            }
+        }
         else if (ch == 24) {
             std::cout << "  Workflow:  1.Neue Instanz starten  2.Instanzen anzeigen\n";
             int wch = CLI::readInt("Wahl",1,2);

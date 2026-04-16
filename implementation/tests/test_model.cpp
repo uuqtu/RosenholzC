@@ -92,8 +92,8 @@ void testSuiteModel() {
 
         auto all = R::ProjectF16::loadAll();
         CHECK(!all.empty(), "loadAll returns results");
-        auto byStatus = R::ProjectF16::loadByStatus("draft");
-        CHECK(!byStatus.empty(), "loadByStatus(draft) returns results");
+        auto byStatus = R::ProjectF16::loadByStatus("in_work");
+        CHECK(!byStatus.empty(), "loadByStatus(in_work) returns results");
     }
 
     // ── TaskF22 ─────────────────────────────────────────────
@@ -219,24 +219,17 @@ void testSuiteModel() {
     }
 
     // ── Milestone ───────────────────────────────────────────
-    SECTION("Milestone — create, achieve, overdue");
+    SECTION("ProjectF16 — milestones free-text field");
     {
-        ProjectFixture pfix;
-        auto m = R::Milestone::create(pfix.project->projectId,
-                                       "Phase-1-Gate","2025-03-31");
-        m->milestoneType   = "phase-gate";
-        m->contractual     = true;
-        m->paymentTrigger  = false;
-        CHECK(m->save(), "Milestone::save()");
-        CHECK(m->milestoneId.find("/MEI/") != std::string::npos,
-              "Milestone ID contains /MEI/");
-
-        auto list = R::Milestone::loadForProject(pfix.project->projectId);
-        CHECK(!list.empty(), "loadForProject returns milestones");
-
-        CHECK(m->markAchieved("2025-03-29"), "Milestone::markAchieved");
-        auto ach = R::Milestone::loadById(m->milestoneId);
-        CHECK(ach && ach->status == "achieved", "status=achieved after markAchieved");
+        ProjectFixture pfix("Milestone-Text-Test");
+        // Milestone tracking is now a free-text field on F16
+        pfix.project->milestones = "2026-06-01: Kick-off abgeschlossen\n2026-08-01: Design-Freeze";
+        pfix.project->update();
+        auto reloaded = R::ProjectF16::loadById(pfix.project->projectId);
+        CHECK(reloaded != nullptr, "Project reloadable");
+        CHECK(!reloaded->milestones.empty(), "milestones field persisted");
+        CHECK(reloaded->milestones.find("Kick-off") != std::string::npos,
+              "milestones content correct");
     }
 
     // ── Trackable ────────────────────────────────────────────
@@ -405,6 +398,115 @@ void testSuiteModel() {
         CHECK(f22v->taskId == task->taskId, "taskId set correctly");
         auto byTask = R::F18Workflow::loadForTask(task->taskId);
         CHECK(!byTask.empty(), "loadForTask returns F18 linked to F22");
+    }
+
+
+    SECTION("Lifecycle — F16 gets Main WFI on creation");
+    {
+        ProjectFixture pfix("Lifecycle-F16-Test");
+        auto p = pfix.project;
+        p->ensureMainWorkflow();  // wizard calls this; test must call explicitly
+        CHECK(!p->mainWorkflowId.empty(), "F16 has mainWorkflowId after ensureMainWorkflow");
+        CHECK(p->status == "in_work", "F16 status=in_work");
+        auto inst = R::WorkflowInstance::loadById(p->mainWorkflowId);
+        CHECK(inst != nullptr, "Main WFI loadable");
+        if (inst) {
+            CHECK(inst->name.find("Main") != std::string::npos, "Main WFI name contains Main");
+            CHECK(inst->entityType == "project", "Main WFI entityType=project");
+            CHECK(inst->entityId == p->projectId, "Main WFI entityId=projectId");
+        }
+    }
+
+    SECTION("Lifecycle — F22 gets Main WFI on creation");
+    {
+        ProjectFixture pfix("Lifecycle-F22-Test");
+        auto task = R::TaskF22::create(pfix.project->projectId, "Lifecycle-Task", "", "");
+        task->save();
+        task->ensureMainWorkflow();
+        CHECK(!task->mainWorkflowId.empty(), "F22 has mainWorkflowId");
+        CHECK(task->status == "in_work", "F22 status=in_work");
+        auto inst = R::WorkflowInstance::loadById(task->mainWorkflowId);
+        CHECK(inst != nullptr, "F22 Main WFI loadable");
+        if (inst) CHECK(inst->entityType == "task", "F22 Main WFI entityType=task");
+    }
+
+    SECTION("Lifecycle — F18Workflow gets Main WFI on creation");
+    {
+        ProjectFixture pfix("Lifecycle-F18-Test");
+        // F18Workflow::create calls ensureMainWorkflow() automatically
+        auto v = R::F18Workflow::create(pfix.project->projectId, "Lifecycle-Vorgang",
+                                         R::F18VorgangType::RISK);
+        CHECK(v != nullptr, "F18Workflow created");
+        CHECK(!v->mainWorkflowId.empty(), "F18 has mainWorkflowId (auto from create)");
+        CHECK(v->status == "in_work", "F18 status=in_work");
+        auto inst = R::WorkflowInstance::loadById(v->mainWorkflowId);
+        CHECK(inst != nullptr, "F18 Main WFI loadable");
+        if (inst) CHECK(inst->entityType == "f18", "F18 Main WFI entityType=f18");
+    }
+
+    SECTION("Lifecycle — canReleaseEntity blocks when WFIs open");
+    {
+        ProjectFixture pfix("Release-Block-Test");
+        auto p = pfix.project;
+        // Start an additional WFI on the project
+        auto extra = R::WorkflowEngine::startAdHoc(
+            "project", p->projectId, "Extra-WF");
+        CHECK(extra != nullptr, "Extra WFI created");
+        // canReleaseEntity should report 1 blocker
+        int blockers = 0;
+        bool canRelease = R::WorkflowEngine::canReleaseEntity(
+            "project", p->projectId, p->mainWorkflowId, blockers);
+        CHECK(!canRelease, "canReleaseEntity=false with open extra WFI");
+        CHECK(blockers == 1, "1 blocker counted");
+    }
+
+    SECTION("Lifecycle — lockAllOpenWorkflows enables release");
+    {
+        ProjectFixture pfix("Lock-Test");
+        auto p = pfix.project;
+        p->ensureMainWorkflow();
+
+        // Start two WFIs with a mid-step so they stay "active" (don't auto-complete)
+        auto wf1 = R::WorkflowEngine::startAdHoc("project", p->projectId, "Sub-WF-1");
+        auto wf2 = R::WorkflowEngine::startAdHoc("project", p->projectId, "Sub-WF-2");
+        // Add mid-steps so End can't auto-approve (WFIs stay active)
+        if (wf1) {
+            std::string initId1;
+            for (auto& a : wf1->actions) if (a.isInitialize) initId1 = a.actionId;
+            R::WorkflowEngine::addAction(*wf1, "Pending-Step-1", "sequential", 1, initId1);
+        }
+        if (wf2) {
+            std::string initId2;
+            for (auto& a : wf2->actions) if (a.isInitialize) initId2 = a.actionId;
+            R::WorkflowEngine::addAction(*wf2, "Pending-Step-2", "sequential", 1, initId2);
+        }
+        // Both WFIs are now active with pending mid-steps
+        int blockers = 0;
+        R::WorkflowEngine::canReleaseEntity(
+            "project", p->projectId, p->mainWorkflowId, blockers);
+        CHECK(blockers == 2, "2 blockers before lock");
+        // Lock all open WFIs (requires explicit confirmation)
+        int locked = R::WorkflowEngine::lockAllOpenWorkflows(
+            "project", p->projectId, p->mainWorkflowId, true);
+        CHECK(locked == 2, "2 WFIs locked");
+        // Now canReleaseEntity should return true
+        int blockers2 = 0;
+        bool canNow = R::WorkflowEngine::canReleaseEntity(
+            "project", p->projectId, p->mainWorkflowId, blockers2);
+        CHECK(canNow, "canReleaseEntity=true after locking all");
+        CHECK(blockers2 == 0, "0 blockers after lock");
+    }
+
+    SECTION("Lifecycle — releaseEntity sets status=released");
+    {
+        ProjectFixture pfix("Release-Test");
+        auto p = pfix.project;
+        CHECK(p->status == "in_work", "starts in_work");
+        bool ok = R::WorkflowEngine::releaseEntity("project", p->projectId);
+        CHECK(ok, "releaseEntity succeeds");
+        auto reloaded = R::ProjectF16::loadById(p->projectId);
+        CHECK(reloaded != nullptr, "reloaded after release");
+        CHECK(reloaded->status == "released", "status=released after releaseEntity");
     }
 
 }

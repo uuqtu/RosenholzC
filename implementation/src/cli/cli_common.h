@@ -7,7 +7,6 @@
 #include "../model/Document.h"
 #include "../model/Person.h"
 #include "../model/Team.h"
-#include "../model/Milestone.h"
 #include "../model/f18/F18Workflow.h"
 #include "../model/f18/F18WorkflowStep.h"
 #include "../model/f18/Communication.h"
@@ -38,11 +37,8 @@ void documentBrowserMenu(const std::string& projectId = "",
                          const std::string& taskId    = "");
 void workflowMenu();
 void instanceMenu(const std::string& instanceId);
-void milestoneMenu(const std::string& projectId);
 void communicationMenu(const std::string& ownerId,
                        const std::string& ownerType);
-void meetingMenu(const std::string& taskId, const std::string& projectId = "");
-void measureMenu(const std::string& projectId);
 
 std::shared_ptr<Rosenholz::Document> createDocumentWizard(
     const std::string& projectId = "",
@@ -84,7 +80,8 @@ void printF18Workflow(const Rosenholz::F18Workflow&);
 // F18 Workflow menu
 void f18Menu(std::shared_ptr<Rosenholz::F18Workflow> v);
 void f18BrowserMenu(const std::string& projectId = "",
-                    const std::string& taskId = "");
+                    const std::string& taskId    = "",
+                    const std::string& typeFilter = "");
 
 // Universal document attachment dialog
 std::shared_ptr<Rosenholz::Document> attachDocumentDialog(
@@ -96,8 +93,5 @@ std::shared_ptr<Rosenholz::Document> attachDocumentDialog(
 void teamMenu();
 
 // New menus
-void changeRequestMenu(const std::string& projectId);
-void riskMenu(const std::string& projectId);
-void qualityGateMenu(const std::string& projectId);
 
 } // namespace CLI

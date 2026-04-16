@@ -509,12 +509,12 @@ void testSuiteMigration() {
 
     SECTION("Migration — schema versions");
     {
-        int coreVer = R::MigrationEngine::currentVersion("core");
-        CHECK(coreVer >= 1, "core schema version >= 1");
-        int wfVer = R::MigrationEngine::currentVersion("workflow");
-        CHECK(wfVer >= 1, "workflow schema version >= 1");
-        int f18Ver = R::MigrationEngine::currentVersion("f18");
-        CHECK(f18Ver >= 1, "f18 schema version >= 1");
+        // v2 baseline: all schemas start at version 2
+        std::vector<std::string> allDbs = {"core","projects","workflow","documents","tracking","f18"};
+        for (auto& name : allDbs) {
+            int ver = R::MigrationEngine::currentVersion(name);
+            CHECK(ver >= 2, "schema version >= 2 for db: " + name);
+        }
     }
 
     SECTION("Migration — idempotent re-run");

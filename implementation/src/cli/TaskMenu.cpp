@@ -25,20 +25,31 @@ namespace CLI {
 void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
     while (true) {
         printTask(*t);
-        std::cout << "  Task actions:\n"
-                  << "    1. Edit title / description\n"
-                  << "    2. Edit status / priority / % complete\n"
-                  << "    3. Edit dates\n"
-                  << "    4. Edit effort / cost\n"
-                  << "    5. Reassign to person\n"
-                  << "    6. Add note\n"
-                  << "    8. Create child task\n"
-                  << "    9. Convert task -> project\n"
-                  << "   10. Documents (create / list / open)\n"
-                  << "   11. Workflow (start / view instances)\n"
-                  << "   12. Meetings\n"
-                  << "    0. Back\n";
-        int ch = readInt("Choice", 0, 12);
+        std::cout << "  Aufgaben-Aktionen:\n"
+                  << "    1. Titel / Beschreibung bearbeiten\n"
+                  << "    2. Status / Priorität / % bearbeiten\n"
+                  << "    3. Termine bearbeiten\n"
+                  << "    4. Aufwand / Kosten bearbeiten\n"
+                  << "    5. Person zuweisen\n"
+                  << "    6. Notiz hinzufügen\n"
+                  << "    7. Teilaufgabe anlegen\n"
+                  << "    8. Als Projekt konvertieren\n"
+                  << "\n  DOKUMENTE & WORKFLOW\n"
+                  << "    9. Dokumente (anlegen / anzeigen / öffnen)\n"
+                  << "   10. Workflow (starten / anzeigen)\n"
+                  << "\n  F18 VORGÄNGE\n"
+                  << "   11. Neuen F18 Vorgang anlegen\n"
+                  << "   12. F18 Vorgänge anzeigen\n"
+                  << "   13. Incidents\n"
+                  << "   14. Risiken\n"
+                  << "   15. Assumptions & Constraints (max. 1)\n"
+                  << "   16. Lessons Learned (max. 1)\n"
+                  << "   17. Decision Log (max. 1)\n"
+                  << "   18. Change Requests\n"
+                  << "\n  KOMMUNIKATION\n"
+                  << "   19. Communications (Meetings, Calls, ...)\n"
+                  << "    0. Zurück\n";
+        int ch = readInt("Choice", 0, 19);
         if (ch == 0) break;
 
         else if (ch == 1) {
@@ -126,20 +137,20 @@ void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
                     std::cout << "  >> Fehler beim Speichern.\n";
             }
         }
-        else if (ch == 8) {
+        else if (ch ==  7) {
             createTaskWizard(t->projectId);
         }
-        else if (ch == 9) {
+        else if (ch ==  8) {
             std::cout << "  Type: OV/IM/OPK/GMS/AU/SVG\n";
             std::string ptype = readLine("Project type: ");
             std::string newPid = t->convertToProject(ptype);
             if (!newPid.empty())
                 std::cout << "  >> Project created: " << newPid << "\n";
         }
-        else if (ch == 10) {
+        else if (ch ==  9) {
             documentBrowserMenu("", t->taskId);
         }
-        else if (ch == 11) {
+        else if (ch == 10) {
             std::cout << "  1. Start instance  2. List instances\n";
             int wch = readInt("Choice", 1, 2);
             if (wch == 1) {
@@ -149,7 +160,19 @@ void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
                 listWfInstances("task", t->taskId);
             }
         }
-        else if (ch == 12) { communicationMenu(t->taskId, "task"); }
+        else if (ch == 11) {
+            // New F18 Workflow for this task
+            auto v = createF18Wizard(t->projectId, t->taskId);
+            if (v) f18Menu(v);
+        }
+        else if (ch == 12) { f18BrowserMenu("", t->taskId); }
+        else if (ch == 13) { f18BrowserMenu("", t->taskId, "incident"); }
+        else if (ch == 14) { f18BrowserMenu("", t->taskId, "risk"); }
+        else if (ch == 15) { f18BrowserMenu("", t->taskId, "assumptionConstraint"); }
+        else if (ch == 16) { f18BrowserMenu("", t->taskId, "lessonsLearned"); }
+        else if (ch == 17) { f18BrowserMenu("", t->taskId, "decisionLog"); }
+        else if (ch == 18) { f18BrowserMenu("", t->taskId, "changeRequest"); }
+        else if (ch == 19) { communicationMenu(t->taskId, "task"); }
     }
 }
 

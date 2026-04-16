@@ -4,6 +4,7 @@
 
 #include "../mfs/MFSWriter.h"
 #include "ProjectF16.h"
+#include "../workflow/WorkflowEngine.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
@@ -40,7 +41,7 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
     p->title       = title_;
     p->projectType = projectType_;
     p->sizeClass   = sizeClass_;
-    p->status      = "draft";
+    p->status      = "in_work";
     p->currency    = "EUR";
     p->createdAt   = nowIso();
     p->updatedAt   = p->createdAt;
@@ -72,7 +73,7 @@ bool ProjectF16::save() const {
 
     bool ok = db->exec(R"(
         INSERT OR REPLACE INTO projects (
-            project_id, workflow_instance_id, workflow_status, workflow_current_state,
+            project_id, workflow_instance_id, workflow_status, workflow_current_state, main_workflow_id,
             reg_number, reg_dept, reg_sequence, reg_year,
             title, codename, project_type, size_class,
             owner_team_id, lead_id, sponsor_id, status, phase,
@@ -86,19 +87,20 @@ bool ProjectF16::save() const {
             scope_change_reason, scope_change_count,
             priority, complexity, strategic_alignment,
             quality_gate_id, communication_plan_id,
-            currency, external_ref, methodology, classification, links, notes,
+            currency, external_ref, methodology, classification, links, milestones, notes,
             created_at, updated_at
         ) VALUES (
-            ?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?,?,?,
+            ?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,
             ?,?,?,?, ?,?,?, ?,?,?,?, ?,?,?, ?,?,?,
-            ?,?,?, ?,?,?,?,?, ?,?,?,
-            ?,?,?,?, ?,?,?,?, ?,?
+            ?,?,?, ?,?,?,?,?, ?,?,
+            ?,?,?,?, ?,?,?,?, ?,?,?
         )
     )", {
         BindParam::text(projectId),
         textOrNull(workflowInstanceId),
         textOrNull(workflowStatus),
         textOrNull(workflowCurrentState),
+        textOrNull(mainWorkflowId),
         BindParam::text(regNumber.toString()),
         BindParam::text(regNumber.dept),
         BindParam::int64(regNumber.sequence),
@@ -147,6 +149,7 @@ bool ProjectF16::save() const {
         textOrNull(methodology),
         textOrNull(classification),
         textOrNull(links),
+        textOrNull(milestones),
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
@@ -176,6 +179,7 @@ void ProjectF16::fromRow(const Row& r) {
 
     projectId            = rowGet(r,"project_id");
     workflowInstanceId   = rowGet(r,"workflow_instance_id");
+    mainWorkflowId       = rowGet(r,"main_workflow_id");
     workflowStatus       = rowGet(r,"workflow_status");
     workflowCurrentState = rowGet(r,"workflow_current_state");
     regNumber.dept       = rowGet(r,"reg_dept");
@@ -225,6 +229,7 @@ void ProjectF16::fromRow(const Row& r) {
     methodology          = rowGet(r,"methodology");
     classification       = rowGet(r,"classification");
     links                = rowGet(r,"links");
+    milestones         = rowGet(r,"milestones");
     notes                = rowGet(r,"notes");
     createdAt            = rowGet(r,"created_at");
     updatedAt            = rowGet(r,"updated_at");
@@ -484,6 +489,23 @@ std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadRecent(int n) {
         result.push_back(obj);
     }
     return result;
+}
+
+
+void ProjectF16::ensureMainWorkflow() {
+    if (!mainWorkflowId.empty()) return;
+    auto inst = Rosenholz::WorkflowEngine::createMainWorkflow("project", projectId, title);
+    if (!inst) return;
+    mainWorkflowId = inst->instanceId;
+    status         = "in_work";
+    auto* db = DatabasePool::instance().get("projects");
+    if (db) db->exec(
+        "UPDATE projects SET main_workflow_id=?, status='in_work', updated_at=? "
+        "WHERE project_id=?;",
+        {BindParam::text(mainWorkflowId), BindParam::text(nowIso()),
+         BindParam::text(projectId)});
+    LOG_INFO("[Lifecycle] Main WFI ensured for F16: " + projectId +
+             " wfi=" + mainWorkflowId);
 }
 
 } // namespace Rosenholz
