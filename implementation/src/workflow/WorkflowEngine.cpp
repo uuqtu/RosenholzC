@@ -3,8 +3,8 @@
 // ============================================================
 #include "WorkflowEngine.h"
 #include "../repository/DocumentRevision.h"
-#include "../model/f18/F18Workflow.h"
-#include "../model/Document.h"
+#include "../model/f18/F18Operation.h"
+#include "../model/dok/Document.h"
 #include "../model/Utils.h"
 #include <sstream>
 #include <map>
@@ -12,8 +12,8 @@
 
 namespace Rosenholz {
 
-static Database* wfDB() { return DatabasePool::instance().get("workflow"); }
-static Database* docDB() { return DatabasePool::instance().get("documents"); }
+static Database* wfDB() { return DatabasePool::instance().get("f77"); }
+static Database* docDB() { return DatabasePool::instance().get("dok"); }
 
 // ═════════════════════════════════════════════════════════════
 // WorkflowAction
@@ -1159,14 +1159,14 @@ bool WorkflowEngine::createDecisionLogEntry(
     const std::string& title,
     const std::string& rationale)
 {
-    // DecisionLog is now an F18Workflow (vorgangType="decisionLog").
+    // DecisionLog is now an F18Operation (vorgangType="decisionLog").
     // Create or append to a decisionLog F18 for this entity.
     auto* db = DatabasePool::instance().get("f18");
     if (!db) return false;
     // Find existing decisionLog for entity
-    std::string parentId = entityType == "project" ? entityId : "";
-    std::string taskId   = entityType == "task"    ? entityId : "";
-    auto f18 = F18Workflow::create(parentId, title, F18VorgangType::DECISION_LOG, taskId);
+    std::string parentId = entityType == "f16" ? entityId : "";
+    std::string taskId   = entityType == "f22"    ? entityId : "";
+    auto f18 = F18Operation::create(parentId, title, F18OperationType::DECISION_LOG, taskId);
     if (!f18) return false;
     f18->decisionType = "workflow-decision";
     f18->rationale    = rationale;
@@ -1183,10 +1183,10 @@ bool WorkflowEngine::createLessonLearnedEntry(
     const std::string& title,
     const std::string& lesson)
 {
-    // LessonsLearned is now an F18Workflow (vorgangType="lessonsLearned").
-    std::string parentId = entityType == "project" ? entityId : "";
-    std::string taskId   = entityType == "task"    ? entityId : "";
-    auto f18 = F18Workflow::create(parentId, title, F18VorgangType::LESSONS_LEARNED, taskId);
+    // LessonsLearned is now an F18Operation (vorgangType="lessonsLearned").
+    std::string parentId = entityType == "f16" ? entityId : "";
+    std::string taskId   = entityType == "f22"    ? entityId : "";
+    auto f18 = F18Operation::create(parentId, title, F18OperationType::LESSONS_LEARNED, taskId);
     if (!f18) return false;
     f18->lessonType     = "observation";
     f18->recommendation = lesson;
@@ -1225,39 +1225,39 @@ bool WorkflowEngine::syncEntityWorkflowFields(const WorkflowInstance& inst) {
              BindParam::text(inst.entityId)});
     };
 
-    auto* pdb = DatabasePool::instance().get("projects");
-    if      (inst.entityType == "project")  updateEntity(pdb, "projects",  "project_id");
-    else if (inst.entityType == "task")     updateEntity(pdb, "tasks",     "task_id");
+    auto* pdb = DatabasePool::instance().get("f16");
+    if      (inst.entityType == "f16")  updateEntity(pdb, "projects",  "project_id");
+    else if (inst.entityType == "f22")     updateEntity(pdb, "tasks",     "task_id");
     else if (inst.entityType == "incident") updateEntity(pdb, "incidents", "incident_id");
 
-    auto* ddb = DatabasePool::instance().get("documents");
-    if (inst.entityType == "document") updateEntity(ddb, "documents", "document_id");
+    auto* ddb = DatabasePool::instance().get("dok");
+    if (inst.entityType == "dok") updateEntity(ddb, "documents", "document_id");
 
     auto* f18db = DatabasePool::instance().get("f18");
-    if (inst.entityType == "risk") updateEntity(f18db, "f18_workflows", "vorgang_id");
-    if (inst.entityType == "f18")  updateEntity(f18db, "f18_workflows", "vorgang_id");
+    if (inst.entityType == "risk") updateEntity(f18db, "f18_operations", "vorgang_id");
+    if (inst.entityType == "f18")  updateEntity(f18db, "f18_operations", "vorgang_id");
 
     // If this WFI is completed AND it is the Main WFI for the entity → release it
     if (inst.status == "completed") {
         // Check if this is the Main WFI by querying the entity record
         bool isMain = false;
-        if (inst.entityType == "project" && pdb) {
+        if (inst.entityType == "f16" && pdb) {
             auto rows = pdb->query(
-                "SELECT main_workflow_id FROM projects WHERE project_id=?;",
+                "SELECT release_workflow_id FROM projects WHERE project_id=?;",
                 {BindParam::text(inst.entityId)});
-            if (!rows.empty() && rowGet(rows[0],"main_workflow_id") == inst.instanceId)
+            if (!rows.empty() && rowGet(rows[0],"release_workflow_id") == inst.instanceId)
                 isMain = true;
-        } else if (inst.entityType == "task" && pdb) {
+        } else if (inst.entityType == "f22" && pdb) {
             auto rows = pdb->query(
-                "SELECT main_workflow_id FROM tasks WHERE task_id=?;",
+                "SELECT release_workflow_id FROM tasks WHERE task_id=?;",
                 {BindParam::text(inst.entityId)});
-            if (!rows.empty() && rowGet(rows[0],"main_workflow_id") == inst.instanceId)
+            if (!rows.empty() && rowGet(rows[0],"release_workflow_id") == inst.instanceId)
                 isMain = true;
         } else if ((inst.entityType == "f18" || inst.entityType == "risk") && f18db) {
             auto rows = f18db->query(
-                "SELECT main_workflow_id FROM f18_workflows WHERE vorgang_id=?;",
+                "SELECT release_workflow_id FROM f18_operations WHERE vorgang_id=?;",
                 {BindParam::text(inst.entityId)});
-            if (!rows.empty() && rowGet(rows[0],"main_workflow_id") == inst.instanceId)
+            if (!rows.empty() && rowGet(rows[0],"release_workflow_id") == inst.instanceId)
                 isMain = true;
         }
         if (isMain) {
@@ -1270,19 +1270,19 @@ bool WorkflowEngine::syncEntityWorkflowFields(const WorkflowInstance& inst) {
                 }
             }
             // For non-document entities, only "released" is permitted
-            if (inst.entityType != "document") targetSt = "released";
+            if (inst.entityType != "dok") targetSt = "released";
 
-            if (inst.entityType == "document") {
+            if (inst.entityType == "dok") {
                 // Apply state transition to the current document revision
                 auto cur = Rosenholz::DocumentRevision::currentRevision(inst.entityId);
                 if (cur) {
                     cur->transitionState(targetSt);
-                    LOG_INFO("[Lifecycle] Document revision transitioned: " +
+                    LOG_INFO("[F77] Document revision transitioned: " +
                              inst.entityId + " → " + targetSt);
                 }
             } else {
                 releaseEntity(inst.entityType, inst.entityId);
-                LOG_INFO("[Lifecycle] Entity released via Main WFI: " +
+                LOG_INFO("[F77] Entity released via Main WFI: " +
                          inst.entityType + "/" + inst.entityId);
             }
         }
@@ -1302,7 +1302,7 @@ void WorkflowEngine::createStandardTemplates() {
     // ── Template 1: Standard approval workflow ───────────────
     auto tpl = WorkflowTemplate::create("Standardgenehmigung","sequential");
     tpl->description = "Einfacher Genehmigungsworkflow: Einreichen → Prüfen → Entscheiden";
-    tpl->entityTypes = "project,task,document,change_request";
+    tpl->entityTypes = "f16,f22,dok,change_request";
     tpl->slaEnforced = true;
     tpl->defaultSlaHours = 72;
 
@@ -1364,7 +1364,7 @@ void WorkflowEngine::createStandardTemplates() {
     // ── Template 2: Project closure ─────────────────────────
     auto tpl2 = WorkflowTemplate::create("Projektabschluss","sequential");
     tpl2->description = "Formaler Projektabschluss mit Lessons Learned und Archivierung";
-    tpl2->entityTypes = "project";
+    tpl2->entityTypes = "f16";
 
     WorkflowTemplateAction i2;
     i2.tplActionId=genId("WFT"); i2.templateId=tpl2->templateId;
@@ -1471,22 +1471,23 @@ std::vector<std::shared_ptr<WorkflowInstance>> WorkflowEngine::searchInstances(
 // ══════════════════════════════════════════════════════════════
 
 // ------------------------------
-// createMainWorkflow
+// createReleaseWorkflow
 //
-// Creates the controlling WorkflowInstance for an entity.
-// The Main WFI has a single work step "Freigabe vorbereiten" between
+// Creates the F77 Freigabe-Workflow (controlling WorkflowInstance) for an entity.
+// The F77 WFI has a single work step "Freigabe vorbereiten" between
 // Init and End. End can only be fired when all other WFIs are closed.
+// Named "F77 — <title>" to distinguish from F18 Operations.
 // ------------------------------
-std::shared_ptr<WorkflowInstance> WorkflowEngine::createMainWorkflow(
+std::shared_ptr<WorkflowInstance> WorkflowEngine::createReleaseWorkflow(
     const std::string& entityType,
     const std::string& entityId,
     const std::string& entityTitle)
 {
     auto inst = startAdHoc(entityType, entityId,
-                           "Main — " + entityTitle.substr(0, 30),
+                           "F77 — " + entityTitle.substr(0, 30),
                            "sequential", "system");
     if (!inst) {
-        LOG_ERROR("[Lifecycle] createMainWorkflow failed for " + entityType + "/" + entityId);
+        LOG_ERROR("[F77] createReleaseWorkflow failed for " + entityType + "/" + entityId);
         return nullptr;
     }
     // Add a single mid-step: "Freigabe vorbereiten" — must be explicitly approved
@@ -1494,7 +1495,7 @@ std::shared_ptr<WorkflowInstance> WorkflowEngine::createMainWorkflow(
     addAction(*inst, "Freigabe vorbereiten", "sequential", 1,
               inst->actions.empty() ? "" : inst->actions[0].actionId,
               "", "", 0);
-    LOG_INFO("[Lifecycle] Main WFI created: " + inst->instanceId +
+    LOG_INFO("[F77] Main WFI created: " + inst->instanceId +
              " for " + entityType + "/" + entityId);
     return inst;
 }
@@ -1559,7 +1560,7 @@ int WorkflowEngine::lockAllOpenWorkflows(
             {BindParam::text(nowIso()), BindParam::text(iid)});
         if (ok) {
             count++;
-            LOG_INFO("[Lifecycle] WFI locked: " + iid);
+            LOG_INFO("[F77] WFI locked: " + iid);
         }
     }
     return count;
@@ -1575,8 +1576,8 @@ bool WorkflowEngine::releaseEntity(
     const std::string& entityType,
     const std::string& entityId)
 {
-    LOG_INFO("[Lifecycle] Releasing entity: " + entityType + "/" + entityId);
-    auto* pdb = DatabasePool::instance().get("projects");
+    LOG_INFO("[F77] Releasing entity: " + entityType + "/" + entityId);
+    auto* pdb = DatabasePool::instance().get("f16");
     auto* f18db = DatabasePool::instance().get("f18");
 
     auto upd = [&](Database* db, const std::string& table, const std::string& idCol) {
@@ -1586,9 +1587,9 @@ bool WorkflowEngine::releaseEntity(
                         {BindParam::text(nowIso()), BindParam::text(entityId)});
     };
 
-    if (entityType == "project") return upd(pdb, "projects", "project_id");
-    if (entityType == "task")    return upd(pdb, "tasks",    "task_id");
-    if (entityType == "f18")     return upd(f18db, "f18_workflows", "vorgang_id");
+    if (entityType == "f16") return upd(pdb, "projects", "project_id");
+    if (entityType == "f22")    return upd(pdb, "tasks",    "task_id");
+    if (entityType == "f18")     return upd(f18db, "f18_operations", "vorgang_id");
     return false;
 }
 

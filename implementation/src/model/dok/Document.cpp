@@ -1,14 +1,16 @@
 // Document.cpp
 #include "Document.h"
-#include "../workflow/WorkflowEngine.h"
-#include "../repository/DocumentRevision.h"
+#include "../../repository/ArchiveStore.h"
+#include "../../repository/DocumentRevision.h"
+#include "../../workflow/WorkflowEngine.h"
+#include "../../repository/DocumentRevision.h"
 #include <cstdlib>
-#include "../core/Database.h"
-#include "../core/Logger.h"
-#include "Utils.h"
-#include "../core/Repository.h"
-#include "../core/FileOps.h"
-#include "../core/Config.h"
+#include "../../core/Database.h"
+#include "../../core/Logger.h"
+#include "../Utils.h"
+#include "../../core/Repository.h"
+#include "../../core/FileOps.h"
+#include "../../core/Config.h"
 #include <chrono>
 #include <ctime>
 #include <sstream>
@@ -50,21 +52,22 @@ std::shared_ptr<Document> Document::create(
 }
 
 bool Document::save() const {
-    auto* db = DatabasePool::instance().get("documents");
+    auto* db = DatabasePool::instance().get("dok");
     if (!db) { LOG_ERROR("Document::save — documents DB unavailable"); return false; }
     bool ok = db->exec(R"(
         INSERT OR REPLACE INTO documents
-        (document_id,workflow_instance_id,workflow_status,workflow_current_state,main_workflow_id,
-         project_id,task_id,author_id,approved_by,doc_type,doc_category,title,version,
+        (document_id,workflow_instance_id,workflow_status,workflow_current_state,release_workflow_id,
+         project_id,task_id,f18_operation_id,f18_step_id,author_id,approved_by,doc_type,doc_category,title,version,
          date_created,date_modified,date_approved,date_expires,status,classification,
          volume_number,page_count,language,format,file_path,file_size,file_hash,file_url,
          external_ref,storage_system,tags,summary,links,notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
         BindParam::text(documentId), textOrNull(workflowInstanceId),
         textOrNull(workflowStatus), textOrNull(workflowCurrentState),
-        textOrNull(mainWorkflowId),
+        textOrNull(releaseWorkflowId),
         textOrNull(projectId), textOrNull(taskId),
+        textOrNull(f18OperationId), textOrNull(f18StepId),
         textOrNull(authorId), textOrNull(approvedBy),
         BindParam::text(docType), textOrNull(docCategory),
         BindParam::text(title), textOrNull(version),
@@ -88,8 +91,9 @@ void Document::fromRow(const Row& r) {
     auto g=[&](const std::string& k){ auto it=r.find(k); return it!=r.end()?it->second:""; };
     documentId=g("document_id"); workflowInstanceId=g("workflow_instance_id");
     workflowStatus=g("workflow_status"); workflowCurrentState=g("workflow_current_state");
-    mainWorkflowId=g("main_workflow_id");
+    releaseWorkflowId=g("release_workflow_id");
     projectId=g("project_id"); taskId=g("task_id");
+    f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
     authorId=g("author_id"); approvedBy=g("approved_by");
     docType=g("doc_type"); docCategory=g("doc_category");
     title=g("title"); version=g("version");
@@ -106,14 +110,14 @@ void Document::fromRow(const Row& r) {
     createdAt=g("created_at"); updatedAt=g("updated_at");
 }
 bool Document::load(const std::string& id) {
-    auto* db=DatabasePool::instance().get("documents");
+    auto* db=DatabasePool::instance().get("dok");
     if (!db) return false;
     auto rows=db->query("SELECT * FROM documents WHERE document_id=?;",{BindParam::text(id)});
     if (rows.empty()) { LOG_WARN("Document not found: "+id); return false; }
     fromRow(rows[0]); return true;
 }
 bool Document::remove() {
-    auto* db=DatabasePool::instance().get("documents");
+    auto* db=DatabasePool::instance().get("dok");
     if (!db) return false;
     db->exec("DELETE FROM entity_documents WHERE document_id=?;",{BindParam::text(documentId)});
     return db->exec("DELETE FROM documents WHERE document_id=?;",{BindParam::text(documentId)});
@@ -124,7 +128,7 @@ std::shared_ptr<Document> Document::loadById(const std::string& id) {
     auto d=std::make_shared<Document>(); if(!d->load(id)) return nullptr; return d;
 }
 std::vector<std::shared_ptr<Document>> Document::loadForProject(const std::string& pid) {
-    auto* db=DatabasePool::instance().get("documents");
+    auto* db=DatabasePool::instance().get("dok");
     std::vector<std::shared_ptr<Document>> result;
     if (!db) return result;
     auto rows=db->query("SELECT * FROM documents WHERE project_id=? ORDER BY date_created DESC;",
@@ -135,7 +139,7 @@ std::vector<std::shared_ptr<Document>> Document::loadForProject(const std::strin
 std::vector<std::shared_ptr<Document>> Document::loadForEntity(
     const std::string& et, const std::string& eid)
 {
-    auto* db=DatabasePool::instance().get("documents");
+    auto* db=DatabasePool::instance().get("dok");
     std::vector<std::shared_ptr<Document>> result;
     if (!db) return result;
     // Join entity_documents -> documents
@@ -235,7 +239,7 @@ std::string Document::archiveWebsite(const std::string& url, const std::string& 
 //   true on success
 // ------------------------------
 bool Document::attachToEntity(const std::string& et, const std::string& eid, const std::string& rel) {
-    auto* db = DatabasePool::instance().get("documents");
+    auto* db = DatabasePool::instance().get("dok");
     if (!db) return false;
     return db->exec(
         "INSERT OR IGNORE INTO entity_documents(entity_type,entity_id,document_id,relationship) VALUES(?,?,?,?);",
@@ -371,7 +375,7 @@ bool Document::snapshotVersion(const std::string& changeNote, const std::string&
         FileOps::copyFile(filePath, versionedPath, true);
     }
 
-    auto* db = DatabasePool::instance().get("documents");
+    auto* db = DatabasePool::instance().get("dok");
     if (!db) return false;
     std::string vid = genId("VER");
     return db->exec(
@@ -387,7 +391,7 @@ bool Document::snapshotVersion(const std::string& changeNote, const std::string&
 
 std::vector<Document::VersionRecord> Document::loadVersions() const {
     std::vector<VersionRecord> result;
-    auto* db = DatabasePool::instance().get("documents");
+    auto* db = DatabasePool::instance().get("dok");
     if (!db) return result;
     auto rows = db->query(
         "SELECT * FROM document_versions WHERE document_id=? ORDER BY created_at DESC;",
@@ -447,7 +451,7 @@ bool Document::openFile(const std::string& mode) const {
 // ------------------------------
 std::vector<std::shared_ptr<Document>> Document::loadRecent(int n) {
     std::vector<std::shared_ptr<Document>> result;
-    auto* db = DatabasePool::instance().get("documents");
+    auto* db = DatabasePool::instance().get("dok");
     if (!db) return result;
     auto rows = db->query("SELECT * FROM documents ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
     for (auto& r : rows) {
@@ -459,21 +463,20 @@ std::vector<std::shared_ptr<Document>> Document::loadRecent(int n) {
 }
 
 // ── Lifecycle: ensure Main WFI for this document ─────────────
-void Document::ensureMainWorkflow() {
-    if (!mainWorkflowId.empty()) return;
-    auto inst = Rosenholz::WorkflowEngine::createMainWorkflow(
-        "document", documentId, title);
+void Document::ensureReleaseWorkflow() {
+    if (!releaseWorkflowId.empty()) return;
+    auto inst = Rosenholz::WorkflowEngine::createReleaseWorkflow("dok", documentId, title);
     if (!inst) return;
-    mainWorkflowId = inst->instanceId;
+    releaseWorkflowId = inst->instanceId;
     status         = "in_work";
-    auto* db = DatabasePool::instance().get("documents");
+    auto* db = DatabasePool::instance().get("dok");
     if (db) db->exec(
-        "UPDATE documents SET main_workflow_id=?, status='in_work', updated_at=? "
+        "UPDATE documents SET release_workflow_id=?, status='in_work', updated_at=? "
         "WHERE document_id=?;",
-        {BindParam::text(mainWorkflowId),
+        {BindParam::text(releaseWorkflowId),
          BindParam::text(nowIso()),
          BindParam::text(documentId)});
-    LOG_INFO("[Document] Main WFI created: " + mainWorkflowId +
+    LOG_INFO("[F77] WFI created: " + releaseWorkflowId +
              " for doc " + documentId);
 }
 
@@ -486,7 +489,7 @@ void Document::ensureRevision1() {
                                                 "Revision 1 — Initialzustand");
     if (rev) {
         // Sync document status to match revision state (in_work)
-        auto* db = DatabasePool::instance().get("documents");
+        auto* db = DatabasePool::instance().get("dok");
         if (db) db->exec(
             "UPDATE documents SET status='in_work', updated_at=? WHERE document_id=?;",
             {BindParam::text(nowIso()), BindParam::text(documentId)});
@@ -495,6 +498,107 @@ void Document::ensureRevision1() {
     } else {
         LOG_ERROR("[Document] Failed to create Rev 1 for " + documentId);
     }
+}
+
+// ── checkout ─────────────────────────────────────────────────
+std::string Document::checkout(const std::string& destDir) {
+    auto& store = Rosenholz::Archive::ArchiveStore::instance();
+
+    // Determine where to put the local file
+    std::string dir = destDir.empty()
+        ? FileOps::joinPath(FileOps::joinPath(
+              Config::instance().basePath(), "checkout"), documentId)
+        : destDir;
+    FileOps::makeDirs(dir);
+
+    // Derive filename
+    std::string fname = documentId;
+    if (!format.empty()) fname += "." + format;
+    std::string localPath = FileOps::joinPath(dir, fname);
+
+    // Try LMDB first (authoritative content store)
+    auto rev = Rosenholz::DocumentRevision::currentRevision(documentId);
+    if (rev && store.isOpen() && !rev->contentHash.empty()) {
+        if (store.retrieveContent(documentId, rev->rev, localPath)) {
+            checkedOutPath = localPath;
+            LOG_INFO("[Document] Checked out Rev " + std::to_string(rev->rev) +
+                     " → " + localPath);
+            return localPath;
+        }
+    }
+
+    // Fall back to MFS file path
+    if (!filePath.empty() && FileOps::fileExists(filePath)) {
+        if (FileOps::copyFile(filePath, localPath, true)) {
+            checkedOutPath = localPath;
+            LOG_INFO("[Document] Checked out from MFS → " + localPath);
+            return localPath;
+        }
+    }
+
+    // Nothing to check out — create an empty file
+    FileOps::writeTextFile(localPath, "", false);
+    checkedOutPath = localPath;
+    LOG_INFO("[Document] Checked out (empty) → " + localPath);
+    return localPath;
+}
+
+// ── checkin ──────────────────────────────────────────────────
+bool Document::checkin(const std::string& srcPath) {
+    std::string path = srcPath.empty() ? checkedOutPath : srcPath;
+    if (path.empty() || !FileOps::fileExists(path)) {
+        LOG_ERROR("[Document] checkin: no file to check in (path=" + path + ")");
+        return false;
+    }
+
+    auto& store = Rosenholz::Archive::ArchiveStore::instance();
+
+    // Stage to LMDB
+    std::string tmpPath;
+    auto ref = store.stageContent(path, tmpPath);
+    if (!ref.valid()) {
+        LOG_ERROR("[Document] checkin: staging failed for " + path);
+        return false;
+    }
+
+    // Create a new revision
+    auto curRev = Rosenholz::DocumentRevision::currentRevision(documentId);
+    uint32_t baseRev = curRev ? curRev->rev : 0;
+    auto newRev = Rosenholz::DocumentRevision::createRevision(
+        documentId, baseRev, authorId, "Check-in");
+    if (!newRev) {
+        LOG_ERROR("[Document] checkin: createRevision failed");
+        store.stageContent(path, tmpPath); // clean staging
+        std::remove(tmpPath.c_str());
+        return false;
+    }
+
+    // Commit content to LMDB
+    if (!store.commitContent(tmpPath, ref, documentId, newRev->rev)) {
+        LOG_ERROR("[Document] checkin: commitContent failed");
+        newRev->remove();
+        return false;
+    }
+
+    // Update revision metadata
+    newRev->contentHash = ref.sha256;
+    newRev->contentSize = (int64_t)ref.size;
+    newRev->update();
+
+    // Update document fields
+    fileHash = ref.sha256;
+    fileSize = (int64_t)ref.size;
+    filePath = path;
+    update();
+
+    // Remove local checked-out file
+    if (srcPath.empty() && !checkedOutPath.empty())
+        std::remove(checkedOutPath.c_str());
+    checkedOutPath = "";
+
+    LOG_INFO("[Document] Checked in: " + documentId + " Rev " +
+             std::to_string(newRev->rev));
+    return true;
 }
 
 } // namespace Rosenholz

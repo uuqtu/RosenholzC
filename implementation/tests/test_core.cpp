@@ -72,8 +72,8 @@ void testSuiteCore() {
         bool ok = R::MigrationEngine::runAll();
         CHECK(ok, "MigrationEngine::runAll() succeeds");
 
-        int wfVer = R::MigrationEngine::currentVersion("workflow");
-        CHECK(wfVer >= 1, "workflow schema version >= 1");
+        int wfVer = R::MigrationEngine::currentVersion("f77");
+        CHECK(wfVer >= 1, "f77 schema version >= 1");
 
         int f18Ver = R::MigrationEngine::currentVersion("f18");
         CHECK(f18Ver >= 2, "f18 schema version >= 2 (v2 baseline)");

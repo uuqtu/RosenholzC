@@ -33,8 +33,8 @@ void printDocument(const Document& d) {
     std::cout << "  Projekt    : " << (d.projectId.empty() ? "—" : d.projectId.substr(0,32)) << "\n";
     if (!d.taskId.empty())
         std::cout << "  Aufgabe    : " << d.taskId.substr(0,32) << "\n";
-    if (!d.mainWorkflowId.empty())
-        std::cout << "  Main WFI   : " << d.mainWorkflowId.substr(0,36) << "\n";
+    if (!d.releaseWorkflowId.empty())
+        std::cout << "  Main WFI   : " << d.releaseWorkflowId.substr(0,36) << "\n";
     // Show current revision
     auto cur = DocumentRevision::currentRevision(d.documentId);
     if (cur)
@@ -165,26 +165,25 @@ static void revisionMenu(std::shared_ptr<Document> doc) {
             }
             
         } else if (ch==3) {
-            // Main Workflow for this document
-            hdr("MAIN WORKFLOW — " + doc->documentId.substr(0,26));
+            // F77 Freigabe-Workflow for this document
+            hdr("F77 FREIGABE-WORKFLOW — " + doc->documentId.substr(0,26));
             std::cout << "  Dokument-Status : " << doc->status << "\n";
-            if (doc->mainWorkflowId.empty()) {
+            if (doc->releaseWorkflowId.empty()) {
                 std::cout << "  (kein Main Workflow — wird angelegt)\n";
-                doc->ensureMainWorkflow();
+                doc->ensureReleaseWorkflow();
                 auto rd = Document::loadById(doc->documentId);
                 if (rd) *doc = *rd;
             }
-            if (!doc->mainWorkflowId.empty()) {
+            if (!doc->releaseWorkflowId.empty()) {
                 int blockers=0;
-                WorkflowEngine::canReleaseEntity(
-                    "document", doc->documentId, doc->mainWorkflowId, blockers);
-                std::cout << "  Main WFI  : " << doc->mainWorkflowId.substr(0,36) << "\n";
+                WorkflowEngine::canReleaseEntity("dok", doc->documentId, doc->releaseWorkflowId, blockers);
+                std::cout << "  Main WFI  : " << doc->releaseWorkflowId.substr(0,36) << "\n";
                 std::cout << (blockers>0
                     ? "  ⚠ " + std::to_string(blockers) + " offene Sub-WFI(s)\n"
                     : "  ✓ End-Schritt kann ausgeführt werden\n");
                 std::cout << "\n  1.Main WFI öffnen  0.Zurück\n";
                 int mch = readInt("Wahl",0,1);
-                if (mch==1) instanceMenu(doc->mainWorkflowId);
+                if (mch==1) instanceMenu(doc->releaseWorkflowId);
             }
         }
     }
@@ -247,23 +246,22 @@ void documentMenu(std::shared_ptr<Document> doc) {
             revisionMenu(doc);
             
         } else if (ch==3) {
-            // Main Workflow (inline)
-            hdr("MAIN WORKFLOW — " + doc->documentId.substr(0,26));
+            // F77 Freigabe-Workflow (inline)
+            hdr("F77 FREIGABE-WORKFLOW — " + doc->documentId.substr(0,26));
             std::cout << "  Status: " << doc->status << "\n";
-            if (doc->mainWorkflowId.empty()) {
+            if (doc->releaseWorkflowId.empty()) {
                 std::cout << "  Anlegen...\n";
-                doc->ensureMainWorkflow();
+                doc->ensureReleaseWorkflow();
                 if (auto rd = Document::loadById(doc->documentId)) *doc = *rd;
             }
-            if (!doc->mainWorkflowId.empty()) {
+            if (!doc->releaseWorkflowId.empty()) {
                 int bl=0;
-                WorkflowEngine::canReleaseEntity(
-                    "document",doc->documentId,doc->mainWorkflowId,bl);
-                std::cout << "  Main WFI: " << doc->mainWorkflowId.substr(0,36) << "\n"
+                WorkflowEngine::canReleaseEntity("dok",doc->documentId,doc->releaseWorkflowId,bl);
+                std::cout << "  Main WFI: " << doc->releaseWorkflowId.substr(0,36) << "\n"
                           << (bl>0 ? "  ⚠ "+std::to_string(bl)+" Sub-WFI(s) offen\n"
                                    : "  ✓ Freigabe möglich\n");
                 std::cout << "  1.Öffnen  0.Zurück\n";
-                if (readInt("Wahl",0,1)==1) instanceMenu(doc->mainWorkflowId);
+                if (readInt("Wahl",0,1)==1) instanceMenu(doc->releaseWorkflowId);
             }
             
         } else if (ch==4) {
@@ -315,7 +313,7 @@ void documentBrowserMenu(const std::string& projectId, const std::string& taskId
         if (!projectId.empty())
             docs = Document::loadForProject(projectId);
         else if (!taskId.empty())
-            docs = Document::loadForEntity("task", taskId);
+            docs = Document::loadForEntity("f22", taskId);
         else
             docs = Document::loadRecent(30);
         

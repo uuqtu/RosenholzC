@@ -40,9 +40,9 @@ std::string nowIsoMig() {
 std::map<std::string, int> MigrationEngine::targetVersionMap() {
     return {
         {"core",      SchemaVersions::core},
-        {"projects",  SchemaVersions::projects},
-        {"workflow",  SchemaVersions::workflow},
-        {"documents", SchemaVersions::documents},
+        {"f16",  SchemaVersions::f16},
+        {"f77",  SchemaVersions::f77},
+        {"dok",  SchemaVersions::dok},
         {"tracking",  SchemaVersions::tracking},
         {"f18",       SchemaVersions::f18},
     };
@@ -55,7 +55,7 @@ std::map<std::string, int> MigrationEngine::targetVersionMap() {
 // Returns all migration deltas in chronological order.
 //
 // Each Migration has:
-//   dbName      : the target database ("core", "workflow", …)
+//   dbName      : the target database ("core", "f77", …)
 //   toVersion   : the version this delta produces
 //   description : human-readable change summary
 //   sql         : one or more SQL statements to execute
@@ -79,9 +79,9 @@ std::vector<Migration> MigrationEngine::registry() {
     //
     // Example (future delta for workflow v3):
     //   {
-    //       "workflow", 3,
+    //       "f77", 3,
     //       "Add xyz column to workflow_steps",
-    //       R"SQL( ALTER TABLE f18_workflow_steps ADD COLUMN xyz TEXT; )SQL"
+    //       R"SQL( ALTER TABLE f18_operation_steps ADD COLUMN xyz TEXT; )SQL"
     //   },
     //
     return {

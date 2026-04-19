@@ -2,13 +2,13 @@
 // ============================================================
 // cli_common.h  —  Shared CLI utilities and forward declarations
 // ============================================================
-#include "../model/ProjectF16.h"
-#include "../model/TaskF22.h"
-#include "../model/Document.h"
+#include "../model/f16/ProjectF16.h"
+#include "../model/f22/TaskF22.h"
+#include "../model/dok/Document.h"
 #include "../model/Person.h"
 #include "../model/Team.h"
-#include "../model/f18/F18Workflow.h"
-#include "../model/f18/F18WorkflowStep.h"
+#include "../model/f18/F18Operation.h"
+#include "../model/f18/F18OperationStep.h"
 #include "../model/f18/Communication.h"
 #include "../workflow/WorkflowEngine.h"
 #include <string>
@@ -59,7 +59,7 @@ void printProject(const Rosenholz::ProjectF16&);
 std::shared_ptr<Rosenholz::Person>      createPersonWizard();
 std::shared_ptr<Rosenholz::ProjectF16>  createProjectWizard();
 std::shared_ptr<Rosenholz::TaskF22>     createTaskWizard(const std::string& projectId);
-std::shared_ptr<Rosenholz::F18Workflow> createF18Wizard(
+std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& projectId,
     const std::string& taskId = "",
     const std::string& type   = "");
@@ -75,10 +75,10 @@ void globalSearch(const std::string& query);
 void showRecentItems(const std::string& filter = "");
 
 // F18 Workflow display
-void printF18Workflow(const Rosenholz::F18Workflow&);
+void printF18Operation(const Rosenholz::F18Operation&);
 
 // F18 Workflow menu
-void f18Menu(std::shared_ptr<Rosenholz::F18Workflow> v);
+void f18Menu(std::shared_ptr<Rosenholz::F18Operation> v);
 void f18BrowserMenu(const std::string& projectId = "",
                     const std::string& taskId    = "",
                     const std::string& typeFilter = "");

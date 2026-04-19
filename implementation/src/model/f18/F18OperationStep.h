@@ -1,11 +1,11 @@
 #pragma once
 // ============================================================
-// F18WorkflowStep.h  —  Step inside an F18Workflow
+// F18OperationStep.h  —  Step inside an F18Operation
 //
 // Replaces WorkflowAction entirely.
-// Every F18Workflow has exactly:
+// Every F18Operation has exactly:
 //   - One Init step (isInitialize=true, autoApprove=true, sequenceOrder=0)
-//   - Zero or more mid-steps (added via F18Workflow::addStep)
+//   - Zero or more mid-steps (added via F18Operation::addStep)
 //   - One End step (isFinal=true, sequenceOrder=9999)
 //
 // Steps carry the ise-cobra tracking state (planned/focused/due/archived).
@@ -20,11 +20,11 @@
 
 namespace Rosenholz {
 
-class F18WorkflowStep {
+class F18OperationStep {
 public:
     // ── Identity ──────────────────────────────────────────────
     std::string stepId;             // XV/WFS/nnnn/yyyy
-    std::string vorgangId;          // → F18Workflow (parent)
+    std::string vorgangId;          // → F18Operation (parent)
     std::string tplStepId;          // → template step (optional)
 
     // ── Content ───────────────────────────────────────────────
@@ -32,7 +32,7 @@ public:
     std::string description;
     std::string stepType    { "task" };   // approval|review|task|notification
     int         sequenceOrder       { 0 };
-    std::string executionType { "sequential" };  // sequential|parallel|free
+    // Always sequential — F18 Operation Steps are strictly ordered
     std::string predecessorStepIds;              // comma-separated stepIds
 
     // ── Bookend flags ─────────────────────────────────────────
@@ -60,10 +60,15 @@ public:
     std::string comment;
 
     // ── ise-cobra tracking state ──────────────────────────────
-    std::string trackingStatus  { "planned" }; // planned|focused|due|archived
-    std::string plannedDate;
-    std::string focusDate;
-    std::string archivedDate;
+    // Tracking — auto-computed from dates (not manually set)
+    // planned: focusDate not yet reached
+    // focused: focusDate passed, dueDate not yet
+    // due:     dueDate passed, step not done
+    // in_work: explicitly marked as being worked on
+    // archived:step completed/rejected/skipped
+    std::string trackingStatus  { "planned" };
+    std::string focusDate;    ///< Must be before dueDate
+    std::string inWorkSince;  ///< Set when marked in_work
     std::string priority        { "medium" };  // low|medium|high|critical
     std::string assignedToGroup;
     std::string progressNote;
@@ -84,15 +89,19 @@ public:
     // Returns true if all predecessor steps are complete.
     // Always true if predecessorStepIds is empty.
     // ------------------------------
-    bool canStart(const std::vector<F18WorkflowStep>& allSteps) const;
+    /// Auto-compute and persist trackingStatus from current dates and state.
+    /// Called automatically on save and on date changes.
+    void computeTrackingStatus();
+
+    bool canStart(const std::vector<F18OperationStep>& allSteps) const;
 
     // ── CRUD ──────────────────────────────────────────────────
     bool save()   const;
     bool remove() const;
 
     // ── Factory ───────────────────────────────────────────────
-    static std::shared_ptr<F18WorkflowStep> loadById(const std::string& id);
-    static std::vector<F18WorkflowStep>     loadForVorgang(const std::string& vorgangId);
+    static std::shared_ptr<F18OperationStep> loadById(const std::string& id);
+    static std::vector<F18OperationStep>     loadForVorgang(const std::string& vorgangId);
 
 private:
     void fromRow(const Row& r);

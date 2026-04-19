@@ -11,7 +11,7 @@
 #include "../core/Database.h"
 #include "../core/FileOps.h"
 #include "../core/BackupManager.h"
-#include "../model/ProjectF16.h"
+#include "../model/f16/ProjectF16.h"
 #include "../model/Person.h"
 #include <iostream>
 #include <iomanip>
@@ -100,9 +100,9 @@ void run() {
             auto& cfg = Rosenholz::Config::instance();
             hdr("KONFIGURATION");
             std::cout << "  Basispfad : " << cfg.basePath() << "\n";
-            auto* prdb = Rosenholz::DatabasePool::instance().get("projects");
-            auto* wfdb = Rosenholz::DatabasePool::instance().get("workflow");
-            auto* ddb  = Rosenholz::DatabasePool::instance().get("documents");
+            auto* prdb = Rosenholz::DatabasePool::instance().get("f16");
+            auto* wfdb = Rosenholz::DatabasePool::instance().get("f77");
+            auto* ddb  = Rosenholz::DatabasePool::instance().get("dok");
             if (prdb) std::cout << "  Projekte  : " << prdb->rowCount("projects")
                                 << " F16, " << prdb->rowCount("tasks") << " F22\n";
             if (wfdb) std::cout << "  Workflows : " << wfdb->rowCount("workflow_instances") << " WFI, "

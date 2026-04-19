@@ -20,7 +20,7 @@ std::shared_ptr<Milestone> Milestone::create(const std::string& pid, const std::
 }
 
 bool Milestone::save() const {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     bool ok = db->exec(R"(
         INSERT OR REPLACE INTO milestones
@@ -56,13 +56,13 @@ void Milestone::fromRow(const Row& r) {
 }
 
 bool Milestone::load(const std::string& id) {
-    auto* db=DatabasePool::instance().get("projects"); if (!db) return false;
+    auto* db=DatabasePool::instance().get("f16"); if (!db) return false;
     auto rows=db->query("SELECT * FROM milestones WHERE milestone_id=?;",{BindParam::text(id)});
     if (rows.empty()){LOG_WARN("Milestone not found: "+id);return false;}
     fromRow(rows[0]); return true;
 }
 bool Milestone::remove() {
-    auto* db=DatabasePool::instance().get("projects"); if (!db) return false;
+    auto* db=DatabasePool::instance().get("f16"); if (!db) return false;
     return db->exec("DELETE FROM milestones WHERE milestone_id=?;",{BindParam::text(milestoneId)});
 }
 bool Milestone::update() { return save(); }
@@ -71,14 +71,14 @@ std::shared_ptr<Milestone> Milestone::loadById(const std::string& id) {
     auto m=std::make_shared<Milestone>(); if(!m->load(id)) return nullptr; return m;
 }
 std::vector<std::shared_ptr<Milestone>> Milestone::loadForProject(const std::string& pid) {
-    auto* db=DatabasePool::instance().get("projects");
+    auto* db=DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<Milestone>> result; if (!db) return result;
     auto rows=db->query("SELECT * FROM milestones WHERE project_id=? ORDER BY planned_date;",{BindParam::text(pid)});
     for (auto& r:rows){auto m=std::make_shared<Milestone>();m->fromRow(r);result.push_back(m);}
     return result;
 }
 std::vector<std::shared_ptr<Milestone>> Milestone::loadOverdue() {
-    auto* db=DatabasePool::instance().get("projects");
+    auto* db=DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<Milestone>> result; if (!db) return result;
     auto rows=db->query("SELECT * FROM milestones WHERE status='pending' AND planned_date < date('now') ORDER BY planned_date;");
     for (auto& r:rows){auto m=std::make_shared<Milestone>();m->fromRow(r);result.push_back(m);}

@@ -254,7 +254,7 @@ void instanceMenu(const std::string& instanceId) {
             auto& act = inst->actions[an-1];
 
             // If this is the End step of a document Main WFI, ask for target state
-            if (act.isFinal && inst->entityType == "document") {
+            if (act.isFinal && inst->entityType == "dok") {
                 std::cout << "  ── END-SCHRITT: Dokument-Zielzustand wählen ──\n"
                           << "  1.in_work    2.pre_released  3.released\n"
                           << "  4.locked     5.closed\n";
@@ -457,8 +457,8 @@ void instanceMenu(const std::string& instanceId) {
             // Attach document to instance or specific action
             // Derive project context from entity if possible
             std::string ctx_proj, ctx_task;
-            if (inst->entityType == "project") ctx_proj = inst->entityId;
-            else if (inst->entityType == "task") ctx_task = inst->entityId;
+            if (inst->entityType == "f16") ctx_proj = inst->entityId;
+            else if (inst->entityType == "f22") ctx_task = inst->entityId;
 
             auto doc = attachDocumentDialog(ctx_proj, ctx_task);
             if (!doc) { std::cout << "  >> Abgebrochen.\n"; continue; }

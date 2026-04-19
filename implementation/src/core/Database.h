@@ -120,8 +120,8 @@ public:
     /// Initialise all databases under basePath/db/
     bool initAll(const std::string& basePath, bool walMode, int cacheSize);
 
-    /// Get a database by logical name ("core","projects","workflow",
-    ///   "documents","tracking","reporting")
+    /// Get a database by logical name ("core","f16","f77",
+    ///   "dok","tracking","reporting")
     Database* get(const std::string& name);
 
     /// Close all connections gracefully

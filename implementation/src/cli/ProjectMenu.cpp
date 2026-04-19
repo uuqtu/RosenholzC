@@ -35,8 +35,8 @@ void printProject(const ProjectF16& p) {
     row("CPI/SPI",  std::to_string(p.cpi).substr(0,4) + " / " + std::to_string(p.spi).substr(0,4));
     row("Start",    p.startDatePlanned.empty() ? "—" : p.startDatePlanned.substr(0,10));
     row("Ende",     p.endDatePlanned.empty()   ? "—" : p.endDatePlanned.substr(0,10));
-    if (!p.mainWorkflowId.empty())
-        row("Main WFI", p.mainWorkflowId.substr(0,26));
+    if (!p.releaseWorkflowId.empty())
+        row("F77 WFI", p.releaseWorkflowId.substr(0,26));
     if (!p.milestones.empty())
         std::cout << "  Meilsteine:\n" << p.milestones.substr(0,120) << "\n";
     std::cout << "  +" << std::string(52,'-') << "+\n\n";
@@ -115,7 +115,7 @@ static void editMenu(std::shared_ptr<ProjectF16> p) {
             if (pid.empty()) continue;
             auto task = TaskF22::create(pid, p->title, p->leadId, "");
             task->description = "Konvertiert aus Projekt " + p->projectId;
-            task->save(); task->ensureMainWorkflow();
+            task->save(); task->ensureReleaseWorkflow();
             std::cout << "  >> Aufgabe angelegt: " << task->taskId << "\n";
         }
     }
@@ -123,19 +123,18 @@ static void editMenu(std::shared_ptr<ProjectF16> p) {
 
 // ── Main Workflow Untermenü ────────────────────────────────────
 static void mainWorkflowMenu(std::shared_ptr<ProjectF16> p) {
-    hdr("MAIN WORKFLOW — " + p->regNumber.toString());
+    hdr("F77 FREIGABE-WORKFLOW — " + p->regNumber.toString());
     std::cout << "  Status    : " << p->status << "\n";
-    if (p->mainWorkflowId.empty()) {
+    if (p->releaseWorkflowId.empty()) {
         std::cout << "  (kein Main Workflow — wird angelegt)\n";
-        p->ensureMainWorkflow();
+        p->ensureReleaseWorkflow();
         auto rp = ProjectF16::loadById(p->projectId);
         if (rp) *p = *rp;
     }
-    if (!p->mainWorkflowId.empty()) {
+    if (!p->releaseWorkflowId.empty()) {
         int blockers = 0;
-        bool canRel = WorkflowEngine::canReleaseEntity(
-            "project", p->projectId, p->mainWorkflowId, blockers);
-        std::cout << "  Main WFI  : " << p->mainWorkflowId.substr(0,36) << "\n";
+        bool canRel = WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers);
+        std::cout << "  Main WFI  : " << p->releaseWorkflowId.substr(0,36) << "\n";
         if (blockers > 0)
             std::cout << "  ⚠ " << blockers << " offene WFI(s) blockieren die Freigabe\n";
         else
@@ -143,13 +142,12 @@ static void mainWorkflowMenu(std::shared_ptr<ProjectF16> p) {
 
         std::cout << "\n  1.Main WFI öffnen  2.Alle Sub-WFIs sperren  0.Zurück\n";
         int ch = readInt("Wahl",0,2); 
-        if (ch==1) instanceMenu(p->mainWorkflowId);
+        if (ch==1) instanceMenu(p->releaseWorkflowId);
         else if (ch==2 && blockers>0) {
             std::cout << "  " << blockers << " WFI(s) sperren? 'ja' eingeben: ";
             std::string conf; std::getline(std::cin, conf);
             if (conf=="ja") {
-                int locked = WorkflowEngine::lockAllOpenWorkflows(
-                    "project", p->projectId, p->mainWorkflowId, true);
+                int locked = WorkflowEngine::lockAllOpenWorkflows("f16", p->projectId, p->releaseWorkflowId, true);
                 std::cout << "  >> " << locked << " WFI(s) gesperrt.\n";
             }
         }

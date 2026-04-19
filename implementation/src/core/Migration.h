@@ -29,9 +29,9 @@ namespace Rosenholz {
 // future schema changes going forward from this baseline.
 struct SchemaVersions {
     static constexpr int core      = 2;  // v2 baseline
-    static constexpr int projects  = 2;  // v2 baseline
-    static constexpr int workflow  = 2;  // v2 baseline (replaces v1–v3 history)
-    static constexpr int documents = 2;  // v2 baseline
+    static constexpr int f16       = 2;  // v2 baseline
+    static constexpr int f77       = 2;  // v2 baseline
+    static constexpr int dok       = 2;  // v2 baseline
     static constexpr int tracking  = 2;  // v2 baseline
     static constexpr int f18       = 2;  // v2 baseline (unified F18 schema)
 };

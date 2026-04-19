@@ -2,17 +2,17 @@
 // TaskF22.cpp  —  Task entity implementation
 // ============================================================
 
-#include "../mfs/MFSWriter.h"
+#include "../../mfs/MFSWriter.h"
 #include "TaskF22.h"
-#include "../workflow/WorkflowEngine.h"
-#include "../core/Database.h"
-#include "../core/Logger.h"
-#include "Utils.h"
-#include "../core/Repository.h"
+#include "../../workflow/WorkflowEngine.h"
+#include "../../core/Database.h"
+#include "../../core/Logger.h"
+#include "../Utils.h"
+#include "../../core/Repository.h"
 #ifndef _WIN32
 #endif
-#include "../core/RegNumber.h"
-#include "../core/FileOps.h"
+#include "../../core/RegNumber.h"
+#include "../../core/FileOps.h"
 
 using json = nlohmann::json;
 
@@ -55,12 +55,12 @@ std::shared_ptr<TaskF22> TaskF22::create(
 //   true on success
 // ------------------------------
 bool TaskF22::save() const {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) { LOG_ERROR("TaskF22::save — projects DB not available"); return false; }
 
     bool ok = db->exec(R"(
         INSERT OR REPLACE INTO tasks (
-            task_id, workflow_instance_id, workflow_status, workflow_current_state, main_workflow_id,
+            task_id, workflow_instance_id, workflow_status, workflow_current_state, release_workflow_id,
             reg_number, project_id, parent_task_id, assignee_id, assigned_by,
             task_code, title, description, task_type, status, priority,
             effort_planned_hrs, effort_actual_hrs, effort_remaining_hrs,
@@ -75,7 +75,7 @@ bool TaskF22::save() const {
         textOrNull(workflowInstanceId),
         textOrNull(workflowStatus),
         textOrNull(workflowCurrentState),
-        textOrNull(mainWorkflowId),
+        textOrNull(releaseWorkflowId),
         BindParam::text(regNumber.toString()),
         BindParam::text(projectId),
         textOrNull(parentTaskId),
@@ -117,7 +117,7 @@ bool TaskF22::save() const {
 void TaskF22::fromRow(const Row& r) {
     taskId               = rowGet(r,"task_id");
     workflowInstanceId   = rowGet(r,"workflow_instance_id");
-    mainWorkflowId       = rowGet(r,"main_workflow_id");
+    releaseWorkflowId       = rowGet(r,"release_workflow_id");
     workflowStatus       = rowGet(r,"workflow_status");
     workflowCurrentState = rowGet(r,"workflow_current_state");
     regNumber            = RegNumber::fromString(rowGet(r,"reg_number"));
@@ -154,7 +154,7 @@ void TaskF22::fromRow(const Row& r) {
 }
 
 bool TaskF22::load(const std::string& id) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM tasks WHERE task_id=?;", {BindParam::text(id)});
     if (rows.empty()) { LOG_WARN("TaskF22 not found: " + id); return false; }
@@ -164,7 +164,7 @@ bool TaskF22::load(const std::string& id) {
 }
 
 bool TaskF22::remove() {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     LOG_WARN("Removing TaskF22: " + taskId);
     db->exec("DELETE FROM task_quality WHERE task_id=?;", {BindParam::text(taskId)});
@@ -184,7 +184,7 @@ std::shared_ptr<TaskF22> TaskF22::loadById(const std::string& id) {
 }
 
 std::vector<std::shared_ptr<TaskF22>> TaskF22::loadForProject(const std::string& pid) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<TaskF22>> result;
     if (!db) return result;
     auto rows = db->query(
@@ -200,7 +200,7 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadForProject(const std::string&
 }
 
 std::vector<std::shared_ptr<TaskF22>> TaskF22::loadChildren(const std::string& parentId) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<TaskF22>> result;
     if (!db) return result;
     auto rows = db->query(
@@ -217,31 +217,31 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadChildren(const std::string& p
 // ── QTCS ─────────────────────────────────────────────────────
 bool TaskF22::addQuality(const std::string& id) {
     qualityIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO task_quality VALUES (?,?);",
         {BindParam::text(taskId), BindParam::text(id)}) : false;
 }
 bool TaskF22::addCost(const std::string& id) {
     costIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO task_cost VALUES (?,?);",
         {BindParam::text(taskId), BindParam::text(id)}) : false;
 }
 bool TaskF22::addTime(const std::string& id) {
     timeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO task_time VALUES (?,?);",
         {BindParam::text(taskId), BindParam::text(id)}) : false;
 }
 bool TaskF22::addScope(const std::string& id) {
     scopeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO task_scope VALUES (?,?);",
         {BindParam::text(taskId), BindParam::text(id)}) : false;
 }
 
 void TaskF22::loadQTCSLinks() {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return;
     auto loadIds = [&](const std::string& table, const std::string& col) {
         std::vector<std::string> ids;
@@ -287,7 +287,7 @@ bool TaskF22::reassignParent(const std::string& newParentTaskId) {
 // ------------------------------
 std::string TaskF22::convertToProject(const std::string& projectType_) {
     LOG_INFO("Promoting TaskF22 " + taskId + " -> ProjectF16");
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return "";
 
     std::string newProjId  = "f16_promoted_" + taskId;
@@ -357,7 +357,7 @@ bool TaskF22::writeMFSFile(const std::string& mfsRoot) const {
 // ------------------------------
 std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
     std::vector<std::shared_ptr<TaskF22>> result;
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return result;
     auto rows = db->query("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
     for (auto& r : rows) {
@@ -369,20 +369,20 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
 }
 
 
-void TaskF22::ensureMainWorkflow() {
-    if (!mainWorkflowId.empty()) return;
-    auto inst = Rosenholz::WorkflowEngine::createMainWorkflow("task", taskId, title);
+void TaskF22::ensureReleaseWorkflow() {
+    if (!releaseWorkflowId.empty()) return;
+    auto inst = Rosenholz::WorkflowEngine::createReleaseWorkflow("f22", taskId, title);
     if (!inst) return;
-    mainWorkflowId = inst->instanceId;
+    releaseWorkflowId = inst->instanceId;
     status         = "in_work";
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (db) db->exec(
-        "UPDATE tasks SET main_workflow_id=?, status='in_work', updated_at=? "
+        "UPDATE tasks SET release_workflow_id=?, status='in_work', updated_at=? "
         "WHERE task_id=?;",
-        {BindParam::text(mainWorkflowId), BindParam::text(nowIso()),
+        {BindParam::text(releaseWorkflowId), BindParam::text(nowIso()),
          BindParam::text(taskId)});
-    LOG_INFO("[Lifecycle] Main WFI ensured for F22: " + taskId +
-             " wfi=" + mainWorkflowId);
+    LOG_INFO("[F77] Main WFI ensured for F22: " + taskId +
+             " wfi=" + releaseWorkflowId);
 }
 
 } // namespace Rosenholz

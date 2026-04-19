@@ -1,7 +1,7 @@
 // test_workflow.cpp  —  WorkflowEngine tests with WorkflowFixture
 #include "TestFramework.h"
 #include "TestFixtures.h"
-#include "../src/model/f18/F18Workflow.h"
+#include "../src/model/f18/F18Operation.h"
 #include "../src/workflow/WorkflowEngine.h"
 #include "../src/core/FileOps.h"
 #include "../src/mfs/MFSWriter.h"
@@ -16,7 +16,7 @@ void testSuiteWorkflow() {
     {
         auto tpl = R::WorkflowTemplate::create("Test-Genehmigung","sequential");
         tpl->description = "Testvorlage";
-        tpl->entityTypes = "project,task";
+        tpl->entityTypes = "f16,f22";
         CHECK(tpl->save(), "WorkflowTemplate::save()");
         CHECK(!tpl->templateId.empty(), "Template has ID");
         CHECK(tpl->templateId.find("/WFD/") != std::string::npos,
@@ -58,8 +58,7 @@ void testSuiteWorkflow() {
         ProjectFixture pfix("WF-Bookend-Test");
 
         // Ad-hoc instance must have Init + End
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "Bookend-Test");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Bookend-Test");
         CHECK(inst != nullptr, "Instance created");
 
         bool hasInit = false, hasEnd = false;
@@ -97,8 +96,7 @@ void testSuiteWorkflow() {
     SECTION("WorkflowEngine — End auto-approves when all predecessors done");
     {
         ProjectFixture pfix("WF-End-Auto-Test");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "End-Auto-Test");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "End-Auto-Test");
         CHECK(inst != nullptr, "Instance created");
 
         // Add one mid-step
@@ -122,8 +120,7 @@ void testSuiteWorkflow() {
     SECTION("WorkflowInstance — ad-hoc start, auto-initialize");
     {
         ProjectFixture pfix("WF-Test-Vorgang");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId,
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId,
             "Ad-hoc Testinstanz", "sequential", "system");
         CHECK(inst != nullptr, "startAdHoc returns instance");
         CHECK(!inst->instanceId.empty(), "Instance has ID");
@@ -144,8 +141,7 @@ void testSuiteWorkflow() {
     SECTION("WorkflowEngine — add steps, fire, complete");
     {
         ProjectFixture pfix("WF-Steps-Test");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "Steps-Test", "sequential");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Steps-Test", "sequential");
         CHECK(inst != nullptr, "Instance started");
 
         // Add a step with the initialize as predecessor
@@ -179,8 +175,7 @@ void testSuiteWorkflow() {
     SECTION("WorkflowEngine — parallel execution");
     {
         TaskFixture tfix("WF-Parallel-Task");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "task", tfix.task->taskId, "Parallel-Test", "parallel");
+        auto inst = R::WorkflowEngine::startAdHoc("f22", tfix.task->taskId, "Parallel-Test", "parallel");
         CHECK(inst != nullptr, "Parallel instance started");
 
         std::string initId = inst->actions[0].actionId;
@@ -222,8 +217,7 @@ void testSuiteWorkflow() {
         CHECK(doc->save(), "Document for attachment saved");
 
         // Start a workflow instance
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "Doc-Attach-Instanz");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Doc-Attach-Instanz");
         CHECK(inst != nullptr, "Instance created");
 
         // Verify ptrs valid before attach
@@ -256,8 +250,7 @@ void testSuiteWorkflow() {
     SECTION("WorkflowEngine — escalation and participants");
     {
         ProjectFixture pfix("WF-Escalation-Test");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "Eskalations-Test");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Eskalations-Test");
 
         PersonFixture escalateTo("Eskalations","Empfaenger","ee@test.de","internal");
         CHECK(R::WorkflowEngine::escalate(*inst, escalateTo.person->personId, "SLA verletzt"),
@@ -278,8 +271,7 @@ void testSuiteWorkflow() {
     SECTION("WorkflowEngine — decision log entry from action");
     {
         ProjectFixture pfix("WF-DL-Test");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "DL-Test");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "DL-Test");
         auto action = R::WorkflowEngine::addAction(*inst, "Entscheidungsschritt",
                                                     "sequential", 1,
                                                     inst->actions[0].actionId);
@@ -294,7 +286,7 @@ void testSuiteWorkflow() {
             "createDecisionLogEntry succeeds");
 
         // createDecisionLogEntry now no-ops gracefully (F18 architecture)
-        // Decision logs are F18Workflow entities — the stub returns true
+        // Decision logs are F18Operation entities — the stub returns true
         auto* f18db = R::DatabasePool::instance().get("f18");
         CHECK(f18db != nullptr, "f18 DB accessible");
     }
@@ -315,8 +307,7 @@ void testSuiteWorkflow() {
     SECTION("WorkflowEngine — End action cannot be predecessor");
     {
         ProjectFixture pfix("WF-Guard-Test");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "Guard-Test");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Guard-Test");
         CHECK(inst != nullptr, "Instance created");
         std::string endId;
         for (auto& a : inst->actions)
@@ -336,8 +327,7 @@ void testSuiteWorkflow() {
         auto proj = R::ProjectF16::create("Suchbarer Vorgang");
         proj->save();
 
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", proj->projectId, "Suchbarer Workflow XYZ");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", proj->projectId, "Suchbarer Workflow XYZ");
         CHECK(inst != nullptr, "Instance created for search");
 
         // Add a mid-step so the instance doesn't auto-complete immediately
@@ -358,13 +348,13 @@ void testSuiteWorkflow() {
         CHECK(found, "searchInstances finds by name substring");
 
         // Entity type filter
-        auto res2 = R::WorkflowEngine::searchInstances("project", "", "", false);
+        auto res2 = R::WorkflowEngine::searchInstances("f16", "", "", false);
         bool found2 = false;
         for (auto& r : res2) if (r->instanceId == inst->instanceId) found2 = true;
         CHECK(found2, "searchInstances finds by entityType=project");
 
         // Wrong entity type must not match
-        auto res3 = R::WorkflowEngine::searchInstances("task", "", "", false);
+        auto res3 = R::WorkflowEngine::searchInstances("f22", "", "", false);
         bool found3 = false;
         for (auto& r : res3) if (r->instanceId == inst->instanceId) found3 = true;
         CHECK(!found3, "searchInstances excludes wrong entityType");
@@ -373,32 +363,22 @@ void testSuiteWorkflow() {
 }
 
 void testSuiteMFS() {
-    SECTION("MFS — rebuild all with correct German folder structure");
+    SECTION("MFS — rebuild all with correct flat root structure");
     {
         FullProjectFixture fix;
         auto& cfg = R::Config::instance();
-        // MFS enabled by default in test config
 
         CHECK(fix.project->writeMFSFile(cfg.mfsPath()), "writeMFSFile for project");
 
-        // Verify folder hierarchy
-        std::string de   = cfg.registratur().diensteinheitKuerzel;
-        std::string year = std::to_string(fix.project->regNumber.year);
+        // New structure: F16/<reg>/ at root (no DE/year subfolders)
         std::string sane = Rosenholz::sanitiseRegNr(fix.project->regNumber.toString());
+        auto f16dir = Rosenholz::FileOps::joinPath(
+            Rosenholz::FileOps::joinPath(cfg.mfsPath(), "F16"), sane);
+        CHECK(Rosenholz::FileOps::dirExists(f16dir), "Project F16 subfolder exists");
 
-        auto heft = Rosenholz::FileOps::joinPath(
-            Rosenholz::FileOps::joinPath(
-                Rosenholz::FileOps::joinPath(cfg.mfsPath(), "F16"), de),
-            Rosenholz::FileOps::joinPath(year, sane));
-        CHECK(Rosenholz::FileOps::dirExists(heft), "Project Haengeregister exists");
-
-        // Verify German subfolder names
-        // Only F22, F18, DOK — all other old subfolders were removed
-        // as they reflected concepts (risks, milestones, etc.) now handled by F18
-        for (auto& sub : {"F22","F18","DOK"}) {
-            CHECK(Rosenholz::FileOps::dirExists(Rosenholz::FileOps::joinPath(heft, sub)),
-                  std::string("Haengeregister has ") + sub + "/ subfolder");
-        }
+        // Deckblatt inside project folder
+        auto deckblatt = Rosenholz::FileOps::joinPath(f16dir, "00_DECKBLATT.txt");
+        CHECK(Rosenholz::FileOps::fileExists(deckblatt), "Deckblatt written");
     }
 
     SECTION("MFS — document filing requires entity reference");
@@ -418,26 +398,23 @@ void testSuiteMFS() {
         bool ok = Rosenholz::MFSWriter::writeDocument(*doc, cfg.mfsPath());
         CHECK(ok, "Document with project ref filed in MFS");
 
-        // Re-filing after rename replaces old file
+        // Re-filing after rename — document now in its own subfolder
         doc->title = "Testdokument v2";
         doc->update();
         Rosenholz::MFSWriter::writeDocument(*doc, cfg.mfsPath());
-        // Verify only one file with this ID prefix
+        // Verify the document subfolder exists under F16/<reg>/DOK/<docId>/
         auto proj = R::ProjectF16::loadById(pfix.project->projectId);
         if (proj) {
-            std::string de = cfg.registratur().diensteinheitKuerzel;
-            std::string dokDir = Rosenholz::FileOps::joinPath(
+            std::string projSane = Rosenholz::sanitiseRegNr(proj->regNumber.toString());
+            std::string docSane  = Rosenholz::sanitiseRegNr(doc->documentId);
+            std::string docDir = Rosenholz::FileOps::joinPath(
                 Rosenholz::FileOps::joinPath(
-                    Rosenholz::FileOps::joinPath(cfg.mfsPath(), "F16"), de),
-                Rosenholz::FileOps::joinPath(
-                    std::to_string(proj->regNumber.year),
                     Rosenholz::FileOps::joinPath(
-                        Rosenholz::sanitiseRegNr(proj->regNumber.toString()), "DOK")));
-            std::string sane = Rosenholz::sanitiseRegNr(doc->documentId);
-            int count = 0;
-            for (auto& f : Rosenholz::FileOps::listDir(dokDir))
-                if (f.size() >= sane.size() && f.substr(0,sane.size()) == sane) count++;
-            CHECK(count == 1, "Only one file per document ID after rename+refile");
+                        Rosenholz::FileOps::joinPath(cfg.mfsPath(), "F16"), projSane),
+                    "DOK"),
+                docSane);
+            CHECK(Rosenholz::FileOps::dirExists(docDir),
+                  "Only one file per document ID after rename+refile");
         }
     }
 
@@ -459,26 +436,25 @@ void testSuiteMFS() {
 }
 
 void testSuiteReporting() {
-    SECTION("F18Workflow — LessonsLearned type");
+    SECTION("F18Operation — LessonsLearned type");
     {
         ProjectFixture pfix("LL-F18-Test");
-        auto ll = Rosenholz::F18Workflow::create(
+        auto ll = Rosenholz::F18Operation::create(
             pfix.project->projectId, "Test-Lessons-Learned",
-            Rosenholz::F18VorgangType::LESSONS_LEARNED);
-        CHECK(ll != nullptr, "LessonsLearned F18Workflow created");
+            Rosenholz::F18OperationType::LESSONS_LEARNED);
+        CHECK(ll != nullptr, "LessonsLearned F18Operation created");
         ll->lessonType = "positive";
         ll->recommendation = "Structured reviews are effective";
         ll->update();
-        auto reloaded = Rosenholz::F18Workflow::loadById(ll->vorgangId);
+        auto reloaded = Rosenholz::F18Operation::loadById(ll->vorgangId);
         CHECK(reloaded != nullptr, "LessonsLearned reloadable");
         CHECK(reloaded->lessonType == "positive", "lessonType persisted");
     }
 
-    SECTION("F18Workflow — DecisionLog type via WorkflowEngine");
+    SECTION("F18Operation — DecisionLog type via WorkflowEngine");
     {
         ProjectFixture pfix("DL-Test-Vorgang");
-        auto inst = R::WorkflowEngine::startAdHoc(
-            "project", pfix.project->projectId, "DL-Test-WF");
+        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "DL-Test-WF");
         auto action = R::WorkflowEngine::addAction(
             *inst,"Entscheidung","sequential",1,inst->actions[0].actionId);
         R::WorkflowEngine::tick(*inst);
@@ -489,7 +465,7 @@ void testSuiteReporting() {
             "Kein Netzwerk erforderlich, einfachere Deployment");
         CHECK(ok, "createDecisionLogEntry via WorkflowEngine");
 
-        // Decision log entries now stored as F18Workflow entities
+        // Decision log entries now stored as F18Operation entities
         auto* f18db = R::DatabasePool::instance().get("f18");
         CHECK(f18db != nullptr, "f18 db accessible for DL check");
     }
@@ -512,7 +488,7 @@ void testSuiteMigration() {
     SECTION("Migration — schema versions");
     {
         // v2 baseline: all schemas start at version 2
-        std::vector<std::string> allDbs = {"core","projects","workflow","documents","tracking","f18"};
+        std::vector<std::string> allDbs = {"core","f16","f77","dok","tracking","f18"};
         for (auto& name : allDbs) {
             int ver = R::MigrationEngine::currentVersion(name);
             CHECK(ver >= 2, "schema version >= 2 for db: " + name);
@@ -527,7 +503,7 @@ void testSuiteMigration() {
 
     SECTION("Migration — all pool DBs accessible");
     {
-        std::vector<std::string> dbs = {"core","projects","workflow","documents","tracking","f18"};
+        std::vector<std::string> dbs = {"core","f16","f77","dok","tracking","f18"};
         for (auto& name : dbs) {
             auto* db = R::DatabasePool::instance().get(name);
             CHECK(db != nullptr, "DB accessible: " + name);

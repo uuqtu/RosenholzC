@@ -10,7 +10,7 @@
 namespace Rosenholz {
 
 Database* DocumentRevision::db() {
-    return DatabasePool::instance().get("documents");
+    return DatabasePool::instance().get("dok");
 }
 
 void DocumentRevision::fromRow(const Row& r) {

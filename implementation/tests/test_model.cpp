@@ -6,7 +6,7 @@
 #include "../src/repository/ArchiveStore.h"
 #include "../src/repository/DocumentRevision.h"
 #include "../src/model/Utils.h"
-#include "../src/model/f18/F18Workflow.h"
+#include "../src/model/f18/F18Operation.h"
 #include "../src/model/f18/Communication.h"
 #include "../src/core/FileOps.h"
 
@@ -129,34 +129,34 @@ void testSuiteModel() {
     }
 
     // ── IncidentF18 ─────────────────────────────────────────
-        SECTION("F18Workflow — create incident and risk types");
+        SECTION("F18Operation — create incident and risk types");
     {
         ProjectFixture pfix;
-        // Create an incident-type F18Workflow
-        auto inc = R::F18Workflow::create(pfix.project->projectId, "Test-Vorfall",
-                                           R::F18VorgangType::INCIDENT);
-        CHECK(inc != nullptr, "F18Workflow incident created");
+        // Create an incident-type F18Operation
+        auto inc = R::F18Operation::create(pfix.project->projectId, "Test-Vorfall",
+                                           R::F18OperationType::INCIDENT);
+        CHECK(inc != nullptr, "F18Operation incident created");
         CHECK(!inc->vorgangId.empty(), "Incident has vorgangId");
         CHECK(inc->vorgangType == "incident", "vorgangType=incident");
         inc->severity = "high";
         inc->incidentType = "technical";
         inc->update();
-        auto reloaded = R::F18Workflow::loadById(inc->vorgangId);
+        auto reloaded = R::F18Operation::loadById(inc->vorgangId);
         CHECK(reloaded != nullptr, "Incident reloadable");
         CHECK(reloaded->severity == "high", "severity persisted");
         CHECK(reloaded->incidentType == "technical", "incidentType persisted");
 
-        // Create a risk-type F18Workflow
-        auto risk = R::F18Workflow::create(pfix.project->projectId, "Test-Risiko",
-                                            R::F18VorgangType::RISK);
-        CHECK(risk != nullptr, "F18Workflow risk created");
+        // Create a risk-type F18Operation
+        auto risk = R::F18Operation::create(pfix.project->projectId, "Test-Risiko",
+                                            R::F18OperationType::RISK);
+        CHECK(risk != nullptr, "F18Operation risk created");
         risk->probabilityScore   = 4;
         risk->impactScoreTime    = 3;
         risk->impactScoreCost    = 3;
         risk->impactScoreQuality = 2;
         risk->impactScoreScope   = 2;
         risk->recalcRiskScore();
-        auto reloadedRisk = R::F18Workflow::loadById(risk->vorgangId);
+        auto reloadedRisk = R::F18Operation::loadById(risk->vorgangId);
         CHECK(reloadedRisk != nullptr, "Risk reloadable");
         CHECK(reloadedRisk->overallRiskScore > 0, "Risk score calculated");
         CHECK(!reloadedRisk->riskLevel.empty(), "Risk level set");
@@ -175,9 +175,9 @@ void testSuiteModel() {
         CHECK(d->save(), "Document::save()");
         CHECK(d->documentId.find("/DOK/") != std::string::npos,
               "Document ID contains /DOK/");
-        CHECK(d->attachToEntity("project", pfix.project->projectId), "attachToEntity");
+        CHECK(d->attachToEntity("f16", pfix.project->projectId), "attachToEntity");
 
-        auto docs = R::Document::loadForEntity("project", pfix.project->projectId);
+        auto docs = R::Document::loadForEntity("f16", pfix.project->projectId);
         CHECK(!docs.empty(), "loadForEntity returns documents");
 
         // Orphan document should be saveable in DB but refused by MFS
@@ -236,82 +236,82 @@ void testSuiteModel() {
 
     // ── Trackable ────────────────────────────────────────────
 
-    SECTION("F18Workflow — all major vorgangTypes");
+    SECTION("F18Operation — all major vorgangTypes");
     {
         ProjectFixture pfix("F18-Types-Test");
 
         // Generic
-        auto gen = R::F18Workflow::create(pfix.project->projectId, "Generischer Workflow",
-                                           R::F18VorgangType::GENERIC);
-        CHECK(gen != nullptr, "Generic F18Workflow created");
+        auto gen = R::F18Operation::create(pfix.project->projectId, "Generischer Workflow",
+                                           R::F18OperationType::GENERIC);
+        CHECK(gen != nullptr, "Generic F18Operation created");
         CHECK(gen->vorgangType == "generic", "vorgangType=generic");
 
         // Measure
-        auto measure = R::F18Workflow::create(pfix.project->projectId, "Korrekturmassnahme",
-                                               R::F18VorgangType::MEASURE);
-        CHECK(measure != nullptr, "Measure F18Workflow created");
+        auto measure = R::F18Operation::create(pfix.project->projectId, "Korrekturmassnahme",
+                                               R::F18OperationType::MEASURE);
+        CHECK(measure != nullptr, "Measure F18Operation created");
         measure->measureCategory = "corrective";
         measure->plannedDate     = "2026-05-01";
         measure->update();
-        auto mr = R::F18Workflow::loadById(measure->vorgangId);
+        auto mr = R::F18Operation::loadById(measure->vorgangId);
         CHECK(mr != nullptr, "Measure reloadable");
         CHECK(mr->measureCategory == "corrective", "measureCategory persisted");
 
         // QualityGate
-        auto qg = R::F18Workflow::create(pfix.project->projectId, "Phase-Gate Review",
-                                          R::F18VorgangType::QUALITY_GATE);
-        CHECK(qg != nullptr, "QualityGate F18Workflow created");
+        auto qg = R::F18Operation::create(pfix.project->projectId, "Phase-Gate Review",
+                                          R::F18OperationType::QUALITY_GATE);
+        CHECK(qg != nullptr, "QualityGate F18Operation created");
         qg->phase       = "design";
         qg->gateResult  = "passed";
         qg->update();
-        auto qgr = R::F18Workflow::loadById(qg->vorgangId);
+        auto qgr = R::F18Operation::loadById(qg->vorgangId);
         CHECK(qgr != nullptr, "QualityGate reloadable");
         CHECK(qgr->phase == "design", "phase persisted");
 
         // ChangeRequest
-        auto cr = R::F18Workflow::create(pfix.project->projectId, "Scope-Erweiterung",
-                                          R::F18VorgangType::CHANGE_REQUEST);
-        CHECK(cr != nullptr, "ChangeRequest F18Workflow created");
+        auto cr = R::F18Operation::create(pfix.project->projectId, "Scope-Erweiterung",
+                                          R::F18OperationType::CHANGE_REQUEST);
+        CHECK(cr != nullptr, "ChangeRequest F18Operation created");
         cr->changeType   = "scope";
         cr->justification= "Neues Feature erbeten";
         cr->update();
 
         // ChangeObject — references the CR
-        auto co = R::F18Workflow::create(pfix.project->projectId, "Scope-Umsetzung",
-                                          R::F18VorgangType::CHANGE_OBJECT);
-        CHECK(co != nullptr, "ChangeObject F18Workflow created");
+        auto co = R::F18Operation::create(pfix.project->projectId, "Scope-Umsetzung",
+                                          R::F18OperationType::CHANGE_OBJECT);
+        CHECK(co != nullptr, "ChangeObject F18Operation created");
         co->parentVorgangId = cr->vorgangId;
         co->update();
-        auto cor = R::F18Workflow::loadById(co->vorgangId);
+        auto cor = R::F18Operation::loadById(co->vorgangId);
         CHECK(cor != nullptr, "ChangeObject reloadable");
         CHECK(cor->parentVorgangId == cr->vorgangId, "parentVorgangId links to CR");
 
         // DecisionLog
-        auto dl = R::F18Workflow::create(pfix.project->projectId, "Datenbankentscheidung",
-                                          R::F18VorgangType::DECISION_LOG);
-        CHECK(dl != nullptr, "DecisionLog F18Workflow created");
+        auto dl = R::F18Operation::create(pfix.project->projectId, "Datenbankentscheidung",
+                                          R::F18OperationType::DECISION_LOG);
+        CHECK(dl != nullptr, "DecisionLog F18Operation created");
         dl->decisionType = "architectural";
         dl->rationale    = "SQLite passt besser als PostgreSQL";
         dl->update();
-        auto dlr = R::F18Workflow::loadById(dl->vorgangId);
+        auto dlr = R::F18Operation::loadById(dl->vorgangId);
         CHECK(dlr != nullptr, "DecisionLog reloadable");
         CHECK(dlr->decisionType == "architectural", "decisionType persisted");
 
         // CommunicationPlan
-        auto cp = R::F18Workflow::create(pfix.project->projectId, "Stakeholder-Kommunikation",
-                                          R::F18VorgangType::COMMUNICATION_PLAN);
-        CHECK(cp != nullptr, "CommunicationPlan F18Workflow created");
+        auto cp = R::F18Operation::create(pfix.project->projectId, "Stakeholder-Kommunikation",
+                                          R::F18OperationType::COMMUNICATION_PLAN);
+        CHECK(cp != nullptr, "CommunicationPlan F18Operation created");
         cp->audience  = "Auftraggeber";
         cp->frequency = "weekly";
         cp->update();
     }
 
-    SECTION("F18WorkflowStep — addStep creates Init/End bookends");
+    SECTION("F18OperationStep — addStep creates Init/End bookends");
     {
         ProjectFixture pfix("F18-Step-Test");
-        auto v = R::F18Workflow::create(pfix.project->projectId, "Step-Test-Workflow",
-                                         R::F18VorgangType::GENERIC);
-        CHECK(v != nullptr, "F18Workflow created for step test");
+        auto v = R::F18Operation::create(pfix.project->projectId, "Step-Test-Workflow",
+                                         R::F18OperationType::GENERIC);
+        CHECK(v != nullptr, "F18Operation created for step test");
         v->loadSteps();
         CHECK(v->steps.size() == 2, "Initial steps = Init + End");
         bool hasInit = false, hasEnd = false;
@@ -368,7 +368,7 @@ void testSuiteModel() {
         CHECK(!reloaded->decisions.empty(), "decisions persisted");
     }
 
-    SECTION("F18Workflow — loadForProject and loadForTask filtering");
+    SECTION("F18Operation — loadForProject and loadForTask filtering");
     {
         ProjectFixture pfix("F18-Filter-Test");
 
@@ -378,27 +378,27 @@ void testSuiteModel() {
         task->save();
 
         // Create mixed types on project
-        R::F18Workflow::create(pfix.project->projectId, "Risiko-A", R::F18VorgangType::RISK);
-        R::F18Workflow::create(pfix.project->projectId, "Incident-A", R::F18VorgangType::INCIDENT);
-        R::F18Workflow::create(pfix.project->projectId, "Risiko-B", R::F18VorgangType::RISK);
+        R::F18Operation::create(pfix.project->projectId, "Risiko-A", R::F18OperationType::RISK);
+        R::F18Operation::create(pfix.project->projectId, "Incident-A", R::F18OperationType::INCIDENT);
+        R::F18Operation::create(pfix.project->projectId, "Risiko-B", R::F18OperationType::RISK);
 
         // Unfiltered
-        auto all = R::F18Workflow::loadForProject(pfix.project->projectId);
+        auto all = R::F18Operation::loadForProject(pfix.project->projectId);
         CHECK(all.size() >= 3, "loadForProject returns all");
 
         // Filtered by type
-        auto risks = R::F18Workflow::loadForProject(pfix.project->projectId,
-                                                     R::F18VorgangType::RISK);
+        auto risks = R::F18Operation::loadForProject(pfix.project->projectId,
+                                                     R::F18OperationType::RISK);
         CHECK(risks.size() >= 2, "loadForProject with type filter returns 2 risks");
         for (auto& r : risks)
             CHECK(r->vorgangType == "risk", "filtered result has type=risk");
 
         // F22 link
-        auto f22v = R::F18Workflow::create(pfix.project->projectId, "Task-Vorgang",
-                                            R::F18VorgangType::GENERIC, task->taskId);
-        CHECK(f22v != nullptr, "F18Workflow linked to F22");
+        auto f22v = R::F18Operation::create(pfix.project->projectId, "Task-Vorgang",
+                                            R::F18OperationType::GENERIC, task->taskId);
+        CHECK(f22v != nullptr, "F18Operation linked to F22");
         CHECK(f22v->taskId == task->taskId, "taskId set correctly");
-        auto byTask = R::F18Workflow::loadForTask(task->taskId);
+        auto byTask = R::F18Operation::loadForTask(task->taskId);
         CHECK(!byTask.empty(), "loadForTask returns F18 linked to F22");
     }
 
@@ -407,14 +407,14 @@ void testSuiteModel() {
     {
         ProjectFixture pfix("Lifecycle-F16-Test");
         auto p = pfix.project;
-        p->ensureMainWorkflow();  // wizard calls this; test must call explicitly
-        CHECK(!p->mainWorkflowId.empty(), "F16 has mainWorkflowId after ensureMainWorkflow");
+        p->ensureReleaseWorkflow();  // wizard calls this; test must call explicitly
+        CHECK(!p->releaseWorkflowId.empty(), "F16 has releaseWorkflowId after ensureReleaseWorkflow");
         CHECK(p->status == "in_work", "F16 status=in_work");
-        auto inst = R::WorkflowInstance::loadById(p->mainWorkflowId);
+        auto inst = R::WorkflowInstance::loadById(p->releaseWorkflowId);
         CHECK(inst != nullptr, "Main WFI loadable");
         if (inst) {
-            CHECK(inst->name.find("Main") != std::string::npos, "Main WFI name contains Main");
-            CHECK(inst->entityType == "project", "Main WFI entityType=project");
+            CHECK(inst->name.find("F77") != std::string::npos, "F77 WFI name contains F77");
+            CHECK(inst->entityType == "f16", "Main WFI entityType=project");
             CHECK(inst->entityId == p->projectId, "Main WFI entityId=projectId");
         }
     }
@@ -424,24 +424,24 @@ void testSuiteModel() {
         ProjectFixture pfix("Lifecycle-F22-Test");
         auto task = R::TaskF22::create(pfix.project->projectId, "Lifecycle-Task", "", "");
         task->save();
-        task->ensureMainWorkflow();
-        CHECK(!task->mainWorkflowId.empty(), "F22 has mainWorkflowId");
+        task->ensureReleaseWorkflow();
+        CHECK(!task->releaseWorkflowId.empty(), "F22 has releaseWorkflowId");
         CHECK(task->status == "in_work", "F22 status=in_work");
-        auto inst = R::WorkflowInstance::loadById(task->mainWorkflowId);
+        auto inst = R::WorkflowInstance::loadById(task->releaseWorkflowId);
         CHECK(inst != nullptr, "F22 Main WFI loadable");
-        if (inst) CHECK(inst->entityType == "task", "F22 Main WFI entityType=task");
+        if (inst) CHECK(inst->entityType == "f22", "F22 Main WFI entityType=task");
     }
 
-    SECTION("Lifecycle — F18Workflow gets Main WFI on creation");
+    SECTION("Lifecycle — F18Operation gets Main WFI on creation");
     {
         ProjectFixture pfix("Lifecycle-F18-Test");
-        // F18Workflow::create calls ensureMainWorkflow() automatically
-        auto v = R::F18Workflow::create(pfix.project->projectId, "Lifecycle-Vorgang",
-                                         R::F18VorgangType::RISK);
-        CHECK(v != nullptr, "F18Workflow created");
-        CHECK(!v->mainWorkflowId.empty(), "F18 has mainWorkflowId (auto from create)");
+        // F18Operation::create calls ensureReleaseWorkflow() automatically
+        auto v = R::F18Operation::create(pfix.project->projectId, "Lifecycle-Vorgang",
+                                         R::F18OperationType::RISK);
+        CHECK(v != nullptr, "F18Operation created");
+        CHECK(!v->releaseWorkflowId.empty(), "F18 has releaseWorkflowId (auto from create)");
         CHECK(v->status == "in_work", "F18 status=in_work");
-        auto inst = R::WorkflowInstance::loadById(v->mainWorkflowId);
+        auto inst = R::WorkflowInstance::loadById(v->releaseWorkflowId);
         CHECK(inst != nullptr, "F18 Main WFI loadable");
         if (inst) CHECK(inst->entityType == "f18", "F18 Main WFI entityType=f18");
     }
@@ -451,13 +451,11 @@ void testSuiteModel() {
         ProjectFixture pfix("Release-Block-Test");
         auto p = pfix.project;
         // Start an additional WFI on the project
-        auto extra = R::WorkflowEngine::startAdHoc(
-            "project", p->projectId, "Extra-WF");
+        auto extra = R::WorkflowEngine::startAdHoc("f16", p->projectId, "Extra-WF");
         CHECK(extra != nullptr, "Extra WFI created");
         // canReleaseEntity should report 1 blocker
         int blockers = 0;
-        bool canRelease = R::WorkflowEngine::canReleaseEntity(
-            "project", p->projectId, p->mainWorkflowId, blockers);
+        bool canRelease = R::WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers);
         CHECK(!canRelease, "canReleaseEntity=false with open extra WFI");
         CHECK(blockers == 1, "1 blocker counted");
     }
@@ -466,11 +464,11 @@ void testSuiteModel() {
     {
         ProjectFixture pfix("Lock-Test");
         auto p = pfix.project;
-        p->ensureMainWorkflow();
+        p->ensureReleaseWorkflow();
 
         // Start two WFIs with a mid-step so they stay "active" (don't auto-complete)
-        auto wf1 = R::WorkflowEngine::startAdHoc("project", p->projectId, "Sub-WF-1");
-        auto wf2 = R::WorkflowEngine::startAdHoc("project", p->projectId, "Sub-WF-2");
+        auto wf1 = R::WorkflowEngine::startAdHoc("f16", p->projectId, "Sub-WF-1");
+        auto wf2 = R::WorkflowEngine::startAdHoc("f16", p->projectId, "Sub-WF-2");
         // Add mid-steps so End can't auto-approve (WFIs stay active)
         if (wf1) {
             std::string initId1;
@@ -484,17 +482,14 @@ void testSuiteModel() {
         }
         // Both WFIs are now active with pending mid-steps
         int blockers = 0;
-        R::WorkflowEngine::canReleaseEntity(
-            "project", p->projectId, p->mainWorkflowId, blockers);
+        R::WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers);
         CHECK(blockers == 2, "2 blockers before lock");
         // Lock all open WFIs (requires explicit confirmation)
-        int locked = R::WorkflowEngine::lockAllOpenWorkflows(
-            "project", p->projectId, p->mainWorkflowId, true);
+        int locked = R::WorkflowEngine::lockAllOpenWorkflows("f16", p->projectId, p->releaseWorkflowId, true);
         CHECK(locked == 2, "2 WFIs locked");
         // Now canReleaseEntity should return true
         int blockers2 = 0;
-        bool canNow = R::WorkflowEngine::canReleaseEntity(
-            "project", p->projectId, p->mainWorkflowId, blockers2);
+        bool canNow = R::WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers2);
         CHECK(canNow, "canReleaseEntity=true after locking all");
         CHECK(blockers2 == 0, "0 blockers after lock");
     }
@@ -504,7 +499,7 @@ void testSuiteModel() {
         ProjectFixture pfix("Release-Test");
         auto p = pfix.project;
         CHECK(p->status == "in_work", "starts in_work");
-        bool ok = R::WorkflowEngine::releaseEntity("project", p->projectId);
+        bool ok = R::WorkflowEngine::releaseEntity("f16", p->projectId);
         CHECK(ok, "releaseEntity succeeds");
         auto reloaded = R::ProjectF16::loadById(p->projectId);
         CHECK(reloaded != nullptr, "reloaded after release");
@@ -703,7 +698,7 @@ void testSuiteModel() {
         auto doc = R::Document::create("AutoRev-Doc", "spec", pfix.project->projectId);
         doc->save();
         doc->ensureRevision1();
-        doc->ensureMainWorkflow();
+        doc->ensureReleaseWorkflow();
 
         // Revision 1 must exist
         auto rev1 = R::DocumentRevision::loadByRev(doc->documentId, 1);
@@ -723,10 +718,10 @@ void testSuiteModel() {
         auto all = R::DocumentRevision::loadAllRevisions(doc->documentId);
         CHECK(all.size() == 1, "ensureRevision1 is idempotent — still 1 revision");
 
-        // Main WFI exists
+        // F77 WFI exists
         auto fresh = R::Document::loadById(doc->documentId);
         CHECK(fresh != nullptr, "Document reloadable");
-        if (fresh) CHECK(!fresh->mainWorkflowId.empty(), "Main WFI created");
+        if (fresh) CHECK(!fresh->releaseWorkflowId.empty(), "Main WFI created");
     }
 
     SECTION("Document — 5-state machine via DocumentRevision");

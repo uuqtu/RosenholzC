@@ -2,18 +2,18 @@
 // ProjectF16.cpp  —  Project entity implementation
 // ============================================================
 
-#include "../mfs/MFSWriter.h"
+#include "../../mfs/MFSWriter.h"
 #include "ProjectF16.h"
-#include "../workflow/WorkflowEngine.h"
-#include "../core/Database.h"
-#include "../core/Logger.h"
-#include "Utils.h"
-#include "../core/Repository.h"
+#include "../../workflow/WorkflowEngine.h"
+#include "../../core/Database.h"
+#include "../../core/Logger.h"
+#include "../Utils.h"
+#include "../../core/Repository.h"
 #ifndef _WIN32
 #endif
-#include "../core/RegNumber.h"
-#include "../core/FileOps.h"
-#include "../core/Config.h"
+#include "../../core/RegNumber.h"
+#include "../../core/FileOps.h"
+#include "../../core/Config.h"
 #include <chrono>
 #include <ctime>
 #include <sstream>
@@ -64,7 +64,7 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
 //   true on success, false on DB error or rollback
 // ------------------------------
 bool ProjectF16::save() const {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) { LOG_ERROR("ProjectF16::save — projects DB not available"); return false; }
     // Wrap in transaction for atomicity
     db->beginTransaction();
@@ -73,7 +73,7 @@ bool ProjectF16::save() const {
 
     bool ok = db->exec(R"(
         INSERT OR REPLACE INTO projects (
-            project_id, workflow_instance_id, workflow_status, workflow_current_state, main_workflow_id,
+            project_id, workflow_instance_id, workflow_status, workflow_current_state, release_workflow_id,
             reg_number, reg_dept, reg_sequence, reg_year,
             title, codename, project_type, size_class,
             owner_team_id, lead_id, sponsor_id, status, phase,
@@ -100,7 +100,7 @@ bool ProjectF16::save() const {
         textOrNull(workflowInstanceId),
         textOrNull(workflowStatus),
         textOrNull(workflowCurrentState),
-        textOrNull(mainWorkflowId),
+        textOrNull(releaseWorkflowId),
         BindParam::text(regNumber.toString()),
         BindParam::text(regNumber.dept),
         BindParam::int64(regNumber.sequence),
@@ -169,7 +169,7 @@ void ProjectF16::fromRow(const Row& r) {
 
     projectId            = rowGet(r,"project_id");
     workflowInstanceId   = rowGet(r,"workflow_instance_id");
-    mainWorkflowId       = rowGet(r,"main_workflow_id");
+    releaseWorkflowId       = rowGet(r,"release_workflow_id");
     workflowStatus       = rowGet(r,"workflow_status");
     workflowCurrentState = rowGet(r,"workflow_current_state");
     regNumber.dept       = rowGet(r,"reg_dept");
@@ -226,7 +226,7 @@ void ProjectF16::fromRow(const Row& r) {
 }
 
 bool ProjectF16::load(const std::string& id) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM projects WHERE project_id=?;", {BindParam::text(id)});
     if (rows.empty()) { LOG_WARN("ProjectF16 not found: " + id); return false; }
@@ -237,7 +237,7 @@ bool ProjectF16::load(const std::string& id) {
 }
 
 bool ProjectF16::remove() {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     LOG_WARN("Removing ProjectF16: " + projectId);
     // Remove QTCS links
@@ -261,7 +261,7 @@ std::shared_ptr<ProjectF16> ProjectF16::loadById(const std::string& id) {
 }
 
 std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadAll() {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<ProjectF16>> result;
     if (!db) return result;
     auto rows = db->query("SELECT * FROM projects ORDER BY created_at DESC;");
@@ -275,7 +275,7 @@ std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadAll() {
 }
 
 std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadByStatus(const std::string& status_) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<ProjectF16>> result;
     if (!db) return result;
     auto rows = db->query("SELECT * FROM projects WHERE status=? ORDER BY created_at DESC;",
@@ -291,55 +291,55 @@ std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadByStatus(const std::str
 // ── QTCS multi-assignment ─────────────────────────────────────
 bool ProjectF16::addQuality(const std::string& id) {
     qualityIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO project_quality VALUES (?,?);",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 bool ProjectF16::addCost(const std::string& id) {
     costIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO project_cost VALUES (?,?);",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 bool ProjectF16::addTime(const std::string& id) {
     timeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO project_time VALUES (?,?);",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 bool ProjectF16::addScope(const std::string& id) {
     scopeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("INSERT OR IGNORE INTO project_scope VALUES (?,?);",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 bool ProjectF16::removeQuality(const std::string& id) {
     qualityIds.erase(std::remove(qualityIds.begin(), qualityIds.end(), id), qualityIds.end());
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("DELETE FROM project_quality WHERE project_id=? AND quality_id=?;",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 bool ProjectF16::removeCost(const std::string& id) {
     costIds.erase(std::remove(costIds.begin(), costIds.end(), id), costIds.end());
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("DELETE FROM project_cost WHERE project_id=? AND cost_id=?;",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 bool ProjectF16::removeTime(const std::string& id) {
     timeIds.erase(std::remove(timeIds.begin(), timeIds.end(), id), timeIds.end());
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("DELETE FROM project_time WHERE project_id=? AND time_id=?;",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 bool ProjectF16::removeScope(const std::string& id) {
     scopeIds.erase(std::remove(scopeIds.begin(), scopeIds.end(), id), scopeIds.end());
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db ? db->exec("DELETE FROM project_scope WHERE project_id=? AND scope_id=?;",
                           {BindParam::text(projectId), BindParam::text(id)}) : false;
 }
 
 void ProjectF16::loadQTCSLinks() {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return;
 
     auto loadIds = [&](const std::string& table, const std::string& col) {
@@ -390,7 +390,7 @@ bool ProjectF16::reassignWorkflowInstance(const std::string& newInstanceId) {
 // ── Convert to Task ───────────────────────────────────────────
 std::string ProjectF16::convertToTask(const std::string& parentProjectId) {
     LOG_INFO("Converting ProjectF16 " + projectId + " -> Task under " + parentProjectId);
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return "";
 
     std::string taskId = "f22_" + projectId;
@@ -470,7 +470,7 @@ bool ProjectF16::writeMFSFile(const std::string& mfsRoot) const {
 // ------------------------------
 std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadRecent(int n) {
     std::vector<std::shared_ptr<ProjectF16>> result;
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return result;
     auto rows = db->query("SELECT * FROM projects ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
     for (auto& r : rows) {
@@ -482,20 +482,20 @@ std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadRecent(int n) {
 }
 
 
-void ProjectF16::ensureMainWorkflow() {
-    if (!mainWorkflowId.empty()) return;
-    auto inst = Rosenholz::WorkflowEngine::createMainWorkflow("project", projectId, title);
+void ProjectF16::ensureReleaseWorkflow() {
+    if (!releaseWorkflowId.empty()) return;
+    auto inst = Rosenholz::WorkflowEngine::createReleaseWorkflow("f16", projectId, title);
     if (!inst) return;
-    mainWorkflowId = inst->instanceId;
+    releaseWorkflowId = inst->instanceId;
     status         = "in_work";
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (db) db->exec(
-        "UPDATE projects SET main_workflow_id=?, status='in_work', updated_at=? "
+        "UPDATE projects SET release_workflow_id=?, status='in_work', updated_at=? "
         "WHERE project_id=?;",
-        {BindParam::text(mainWorkflowId), BindParam::text(nowIso()),
+        {BindParam::text(releaseWorkflowId), BindParam::text(nowIso()),
          BindParam::text(projectId)});
-    LOG_INFO("[Lifecycle] Main WFI ensured for F16: " + projectId +
-             " wfi=" + mainWorkflowId);
+    LOG_INFO("[F77] Main WFI ensured for F16: " + projectId +
+             " wfi=" + releaseWorkflowId);
 }
 
 } // namespace Rosenholz

@@ -1,5 +1,5 @@
 // ============================================================
-// F18Menu.cpp  —  F18Workflow browser and detail menu
+// F18Menu.cpp  —  F18Operation browser and detail menu
 //
 // This single menu handles ALL F18 Workflow types:
 //   incident, risk, measure, qualityGate,
@@ -8,8 +8,8 @@
 //   changeRequest, changeObject, generic
 // ============================================================
 #include "cli_common.h"
-#include "../model/f18/F18Workflow.h"
-#include "../model/f18/F18WorkflowStep.h"
+#include "../model/f18/F18Operation.h"
+#include "../model/f18/F18OperationStep.h"
 #include "../model/f18/Communication.h"
 #include <iomanip>
 #include <algorithm>
@@ -19,10 +19,10 @@ namespace CLI {
 using namespace Rosenholz;
 
 // ── Step chain display ────────────────────────────────────────
-static void drawF18Chain(const std::vector<F18WorkflowStep>& steps) {
+static void drawF18Chain(const std::vector<F18OperationStep>& steps) {
     auto sorted = steps;
     std::sort(sorted.begin(), sorted.end(),
-        [](const F18WorkflowStep& a, const F18WorkflowStep& b) {
+        [](const F18OperationStep& a, const F18OperationStep& b) {
             if (a.isInitialize) return true;
             if (b.isInitialize) return false;
             if (a.isFinal) return false;
@@ -50,7 +50,7 @@ static void drawF18Chain(const std::vector<F18WorkflowStep>& steps) {
 }
 
 // ── Step detail menu ─────────────────────────────────────────
-static void stepMenu(F18WorkflowStep& step, std::vector<F18WorkflowStep>& allSteps) {
+static void stepMenu(F18OperationStep& step, std::vector<F18OperationStep>& allSteps) {
     while (true) {
         hdr("SCHRITT — " + step.stepId.substr(0,22));
         std::cout << "  Titel   : " << step.title << "\n";
@@ -126,10 +126,10 @@ static void stepMenu(F18WorkflowStep& step, std::vector<F18WorkflowStep>& allSte
 }
 
 // ── F18 detail menu ───────────────────────────────────────────
-void f18Menu(std::shared_ptr<F18Workflow> v) {
+void f18Menu(std::shared_ptr<F18Operation> v) {
     while (true) {
         v->loadSteps();
-        printF18Workflow(*v);
+        printF18Operation(*v);
         drawF18Chain(v->steps);
 
         // Show release status in header
@@ -230,22 +230,22 @@ void f18Menu(std::shared_ptr<F18Workflow> v) {
             v->update();
             std::cout << "  >> Status: " << v->status << "\n";
         } else if (ch==8) {
-            // Main Workflow
-            hdr("MAIN WORKFLOW — " + v->vorgangId.substr(0,22));
+            // F77 Freigabe-Workflow
+            hdr("F77 FREIGABE-WORKFLOW — " + v->vorgangId.substr(0,22));
             std::cout << "  Status: " << v->status << "\n";
-            if (v->mainWorkflowId.empty()) { v->ensureMainWorkflow();
-                auto rv = F18Workflow::loadById(v->vorgangId);
+            if (v->releaseWorkflowId.empty()) { v->ensureReleaseWorkflow();
+                auto rv = F18Operation::loadById(v->vorgangId);
                 if (rv) *v = *rv; }
-            if (!v->mainWorkflowId.empty()) {
+            if (!v->releaseWorkflowId.empty()) {
                 int blockers=0;
                 Rosenholz::WorkflowEngine::canReleaseEntity(
-                    "f18",v->vorgangId,v->mainWorkflowId,blockers);
-                std::cout << "  Main WFI: " << v->mainWorkflowId.substr(0,36) << "\n";
+                    "f18",v->vorgangId,v->releaseWorkflowId,blockers);
+                std::cout << "  Main WFI: " << v->releaseWorkflowId.substr(0,36) << "\n";
                 std::cout << (blockers>0 ? "  ⚠ " + std::to_string(blockers)
                     + " WFI(s) offen\n" : "  ✓ Freigabe möglich\n");
                 std::cout << "  1.Main WFI öffnen  0.Zurück\n";
                 int mch = readInt("Wahl",0,1);
-                if (mch==1) instanceMenu(v->mainWorkflowId);
+                if (mch==1) instanceMenu(v->releaseWorkflowId);
             }
         }
     }
@@ -255,13 +255,13 @@ void f18Menu(std::shared_ptr<F18Workflow> v) {
 void f18BrowserMenu(const std::string& projectId, const std::string& taskId,
                     const std::string& typeFilter) {
     while (true) {
-        std::vector<std::shared_ptr<F18Workflow>> items;
+        std::vector<std::shared_ptr<F18Operation>> items;
         if (!taskId.empty())
-            items = F18Workflow::loadForTask(taskId, typeFilter);
+            items = F18Operation::loadForTask(taskId, typeFilter);
         else if (!projectId.empty())
-            items = F18Workflow::loadForProject(projectId, typeFilter);
+            items = F18Operation::loadForProject(projectId, typeFilter);
         else
-            items = F18Workflow::loadRecent(50);
+            items = F18Operation::loadRecent(50);
 
         std::string ctxLabel = typeFilter.empty() ? "alle Typen" : typeFilter;
         hdr("F18 VORGÄNGE (" + std::to_string(items.size()) + ") — " + ctxLabel);

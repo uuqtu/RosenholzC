@@ -166,7 +166,7 @@ void Meeting::fromRow(const Row& r) {
 }
 
 bool Meeting::save() const {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     return db->exec(R"SQL(
         INSERT OR REPLACE INTO meetings
@@ -189,7 +189,7 @@ bool Meeting::save() const {
 }
 
 bool Meeting::load(const std::string& id) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM meetings WHERE meeting_id=?;",
                           {BindParam::text(id)});
@@ -201,7 +201,7 @@ bool Meeting::load(const std::string& id) {
 bool Meeting::update() { return save(); }
 
 bool Meeting::remove() {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     return db && db->exec("DELETE FROM meetings WHERE meeting_id=?;",
                           {BindParam::text(meetingId)});
 }
@@ -213,7 +213,7 @@ std::shared_ptr<Meeting> Meeting::loadById(const std::string& id) {
 }
 
 std::vector<std::shared_ptr<Meeting>> Meeting::loadForProject(const std::string& pid) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<Meeting>> res;
     if (!db) return res;
     for (auto& r : db->query(
@@ -225,7 +225,7 @@ std::vector<std::shared_ptr<Meeting>> Meeting::loadForProject(const std::string&
 }
 
 std::vector<std::shared_ptr<Meeting>> Meeting::loadForTask(const std::string& tid) {
-    auto* db = DatabasePool::instance().get("projects");
+    auto* db = DatabasePool::instance().get("f16");
     std::vector<std::shared_ptr<Meeting>> res;
     if (!db) return res;
     for (auto& r : db->query(

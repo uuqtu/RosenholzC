@@ -23,7 +23,7 @@
 #include <map>
 
 namespace Rosenholz {
-class F18Workflow;  // forward declaration
+class F18Operation;  // forward declaration
 
 
 // Forward declarations — avoids pulling in all model headers
@@ -60,7 +60,9 @@ public:
     // directory if the file exists on disk.
     // ------------------------------
     static bool writeDocument(const Document&       d,   const std::string& mfsRoot);
-    static bool writeF18     (const F18Workflow&    v,   const std::string& mfsRoot);
+    static bool writeF18     (const F18Operation&    v,   const std::string& mfsRoot);
+    static bool writeF77     (const std::string& wfiId, const std::string& entityType,
+                              const std::string& entityTitle, const std::string& mfsRoot);
     static bool writePerson  (const Person&         p,   const std::string& mfsRoot);
     static bool writeTeam    (const Team&           t,   const std::string& mfsRoot);
 

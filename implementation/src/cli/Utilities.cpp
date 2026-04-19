@@ -10,9 +10,9 @@
 // ============================================================
 #include "cli_common.h"
 #include "../workflow/WorkflowEngine.h"
-#include "../model/Document.h"
-#include "../model/TaskF22.h"
-#include "../model/ProjectF16.h"
+#include "../model/dok/Document.h"
+#include "../model/f22/TaskF22.h"
+#include "../model/f16/ProjectF16.h"
 #include "../mfs/MFSWriter.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
@@ -246,7 +246,7 @@ std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
     p->budgetPlanned   = budget;
 
     if (p->save()) {
-        p->ensureMainWorkflow();
+        p->ensureReleaseWorkflow();
         std::cout << "\n  >> Project created: " << p->regNumber.toString()
                   << " (" << p->projectId << ")\n\n";
         // write MFS file
@@ -282,7 +282,7 @@ std::shared_ptr<Rosenholz::TaskF22> createTaskWizard(const std::string& projectI
     t->effortPlannedHrs = effort;
 
     if (t->save()) {
-        t->ensureMainWorkflow();
+        t->ensureReleaseWorkflow();
         std::cout << "\n  >> Task created: " << t->regNumber.toString()
                   << " (" << t->taskId << ")\n\n";
         auto& cfg = Rosenholz::Config::instance();
@@ -402,7 +402,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         doc->dateCreated = nowIso();
         if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
         doc->ensureRevision1();
-        doc->ensureMainWorkflow();
+        doc->ensureReleaseWorkflow();
         // Copy to MFS
         if (!doc->importLocalFile(srcPath)) {
             std::cout << "  >> Warnung: MFS-Import fehlgeschlagen.\n";
@@ -422,7 +422,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         std::cout << "  Herunterladen...\n";
         if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
         doc->ensureRevision1();
-        doc->ensureMainWorkflow();
+        doc->ensureReleaseWorkflow();
         // Download and import
         const std::string& base = Config::instance().basePath();
         std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
@@ -446,23 +446,26 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
     // ── Quelle 3: Neu anlegen ─────────────────────────────────────
     else {
         std::cout << "  Neue Datei anlegen:\n"
-                  << "    1.Textdatei (.txt)  2.PDF-Vorlage  "
-                     "3.Weitere (Format oben angegeben)\n";
-        int nf = readInt("Art", 1, 3);
+                  << "    1.Textdatei (.txt)   2.Word-Dokument (.docx)\n"
+                  << "    3.Excel-Tabelle (.xlsx)  4.Präsentation (.pptx)\n"
+                  << "    5.PDF-Vorlage (.pdf)  6.Weiteres Format\n";
+        int nf = readInt("Art", 1, 6);
         doc->version     = readOpt("Version (leer=1.0): ");
         if (doc->version.empty()) doc->version = "1.0";
         doc->dateCreated = nowIso();
         if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
         doc->ensureRevision1();
-        doc->ensureMainWorkflow();
+        doc->ensureReleaseWorkflow();
 
         // Create empty file in MFS
         const std::string& mfs = Config::instance().mfsPath();
         std::string sane = sanitiseRegNr(doc->documentId);
         std::string safeName = FileOps::sanitizeFilename(doc->title);
         if (safeName.size() > 40) safeName = safeName.substr(0, 40);
-        std::string ext = (nf == 1) ? "txt" : (nf == 2 ? "pdf" : doc->format);
-        doc->format = ext;
+        static const char* exts[] = {"txt","docx","xlsx","pptx","pdf",""};
+        std::string ext = (nf <= 5) ? exts[nf-1] : doc->format;
+        if (nf == 6) ext = readOpt("Format/Erweiterung: ");
+        doc->format = ext.empty() ? "txt" : ext;
 
         std::string parentId = projectId.empty() ? taskId : projectId;
         std::string parentSane = sanitiseRegNr(parentId);
@@ -500,7 +503,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
 
     // Lifecycle: ensure Rev 1 and Main WFI on first creation
     doc->ensureRevision1();
-    doc->ensureMainWorkflow();
+    doc->ensureReleaseWorkflow();
 
     // Write MFS index file (the .txt metadata card)
     MFSWriter::writeDocument(*doc, Config::instance().mfsPath());
@@ -613,7 +616,7 @@ void showRecentItems(const std::string& filter) {
         }
     }
     if (all || filter.find("F18") != std::string::npos) {
-        auto items = Rosenholz::F18Workflow::loadRecent(20);
+        auto items = Rosenholz::F18Operation::loadRecent(20);
         if (!items.empty()) {
             std::cout << "  [F18] Workflows:\n";
             for (auto& v : items)
@@ -682,7 +685,7 @@ void globalSearch(const std::string& query) {
             hits.push_back({"F22", t->taskId, t->title, t->status});
 
     // F18 Workflows (all types)
-    auto vorgaenge = Rosenholz::F18Workflow::loadRecent(200);
+    auto vorgaenge = Rosenholz::F18Operation::loadRecent(200);
     for (auto& v : vorgaenge)
         if (match(v->title) || match(v->vorgangId))
             hits.push_back({"F18", v->vorgangId, v->title,
@@ -732,7 +735,7 @@ void globalSearch(const std::string& query) {
         auto t = TaskF22::loadById(h.id);
         if (t) taskMenu(t);
     } else if (h.typeCode == "F18") {
-        auto v = Rosenholz::F18Workflow::loadById(h.id);
+        auto v = Rosenholz::F18Operation::loadById(h.id);
         if (v) f18Menu(v);
     } else if (h.typeCode == "DOK") {
         auto d = Document::loadById(h.id);
@@ -744,10 +747,10 @@ void globalSearch(const std::string& query) {
 
 
 // ------------------------------
-// printF18Workflow — Display an F18Workflow entity in a structured box.
+// printF18Operation — Display an F18Operation entity in a structured box.
 // Shows common fields plus type-specific fields.
 // ------------------------------
-void printF18Workflow(const Rosenholz::F18Workflow& v) {
+void printF18Operation(const Rosenholz::F18Operation& v) {
     using namespace Rosenholz;
     hdr("F18 WORKFLOW  " + v.vorgangId.substr(0, 22));
     auto row = [](const std::string& k, const std::string& val) {
@@ -813,14 +816,14 @@ void printF18Workflow(const Rosenholz::F18Workflow& v) {
 
 
 // ------------------------------
-// createF18Wizard — Interactive wizard to create a new F18Workflow.
+// createF18Wizard — Interactive wizard to create a new F18Operation.
 //
 // Parameters:
 //   projectId : owning F16 project ID
 //   taskId    : owning F22 task ID (optional)
 //   type      : pre-selected vorgangType (optional, prompted if empty)
 // ------------------------------
-std::shared_ptr<Rosenholz::F18Workflow> createF18Wizard(
+std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& projectId,
     const std::string& taskId,
     const std::string& type)
@@ -859,7 +862,7 @@ std::shared_ptr<Rosenholz::F18Workflow> createF18Wizard(
     std::string owner  = readOpt("Verantwortlich (Person-ID, leer=offen): ");
     std::string prio   = readOpt("Priorität (low/medium/high/critical, leer=medium): ");
 
-    auto v = Rosenholz::F18Workflow::create(projectId, title, chosenType, taskId);
+    auto v = Rosenholz::F18Operation::create(projectId, title, chosenType, taskId);
     if (!v) {
         std::cout << "  >> FEHLER: F18 Workflow konnte nicht angelegt werden.\n";
         return nullptr;

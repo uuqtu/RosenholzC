@@ -1,0 +1,170 @@
+Good catch on the meeting structure. Let me first fix the relationship (MEETING is a child of TASK_F22, not an alternative), then do a full consistency check, then produce the complete documentation.Now the complete continuity documentation:
+
+---
+
+# PM Data Model — Continuity Documentation
+**Version:** 1.0 | **Based on:** Rosenholz Files (DDR/MfS HVA) structural analogy | **Status:** Consistent, workflow-enabled
+
+---
+
+## 1. Origin and Concept
+
+This data model is derived by translating the DDR Ministerium für Staatssicherheit (MfS) Rosenholz archive card system into a project management data model. The Rosenholz files were the microfilmed card index of the HVA (Hauptverwaltung Aufklärung), the MfS foreign intelligence branch. The structural analogy is as follows:
+
+| Rosenholz original | PM entity | Rationale |
+|---|---|---|
+| F-16 (Personenkartei) | `PROJECT_F16` | The Vorgang (operational file) is the project — the primary dossier around which all other records are organised |
+| F-22 (Vorgangskartei) | `TASK_F22` | The task card — a discrete unit of work assigned under a project, identified by reg_number |
+| F-18 (Verhaftungskartei) | `INCIDENT_RECORD_F18` | Incident record — something that has gone wrong, as distinct from a forward-looking risk |
+| Statistikbogen | `PORTFOLIO_REPORT_STATSSHEET` | Aggregate reporting per organisational unit per period |
+| AU (Archivierter Untersuchungsvorgang) | `ARCHIVED_PROJECT_AU` | The structured close-out and archive record of a completed project, with up to seven component document types |
+| Diensteinheit | `TEAM` | Organisational unit owning a project |
+| Registriernummer | `reg_number` (structured: dept/sequence/year) | The opaque cross-system identifier linking F-16, F-22 and F-18 records |
+| Vorgangsart | `PROJECT_TYPE` | The category of the project (IM, OV, OPK, GMS, AU, SVG etc.) each mapping to a PM equivalent |
+
+---
+
+## 2. Entity Inventory and Purpose
+
+### 2.1 Core project entities
+
+**`PROJECT_F16`** — the central hub entity. Every other entity relates to it directly or indirectly. Carries full QTCS control attributes: earned value fields (EV, PV, AC, EAC, ETC, VAC, CPI, SPI), budget lifecycle (planned → approved → committed → actual), schedule dates planned vs actual with variance, scope statement with version and change count, phase, priority, complexity, strategic alignment, methodology, classification, and links. Also carries denormalised workflow convenience fields (`workflow_instance_id`, `workflow_status`, `workflow_current_state`).
+
+**`PROJECT_TYPE`** — lookup table for the Vorgangsart. Fields: `type_code`, `label`, `rosenholz_equivalent`, `pm_equivalent`, `description`, `requires_au_archive` (bool), `default_methodology`, `default_workflow_def_id` (FK to WORKFLOW_DEFINITION). Example values: IM-Vorgang → Ongoing engagement; OV → Active investigation/audit; OPK → Due diligence; GMS → Advisory relationship; AU → Formal inquiry/closed case; SVG → Monitoring brief.
+
+**`TASK_F22`** — discrete unit of work within a project. Self-referential `parent_task_id` for subtask hierarchies. QTCS fields: effort planned/actual/remaining in hours, cost planned/actual, schedule dates planned vs actual with variance, percent complete, quality criteria, acceptance criteria. Additional: `is_milestone` bool (for lightweight milestones on tasks), WBS code, sprint/phase. The `reg_number` FK links back to the project's registration system. A task can have many meetings, documents, risks, incidents, measures, KPIs, decisions, and assumptions.
+
+**`MILESTONE`** — zero-duration control point. Distinct from `TASK_F22.is_milestone` — used for formal contractual or payment-trigger milestones requiring their own approval. Fields: type, planned/actual dates, variance days, status, criteria, `contractual` bool, `payment_trigger` bool. Links to project and optionally to a task. Requires an `APPROVAL`.
+
+### 2.2 People and teams
+
+**`PERSON`** — full resource record. Identity: last/first/preferred name, email, phone. Organisational: org_unit, department, location, country, role_title, person_type (internal/external/contractor/advisor), employment_type, seniority_level. Competence: skills, certifications, languages. Commercial: day_rate, monthly_rate. Availability: availability_pct, availability_from, availability_to. Admin: manager_id (self-ref), status, onboard/offboard dates, clearance_level, external_ref, links, notes.
+
+**`TEAM`** — organisational unit (Diensteinheit). Self-referential `parent_team_id` for hierarchy. Fields: name, abbreviation, `rosenholz_equivalent`, lead_id, location, type, headcount planned/actual, budget allocated/consumed, methodology, tools, status, links.
+
+**`TEAM_MEMBER`** — junction table between TEAM and PERSON. Fields: role, `allocation_pct` (supports partial allocation), start_date, end_date, status. A person can be a member of multiple teams with different allocations.
+
+**`STAKEHOLDER`** — project-scoped stakeholder register entry. Links PERSON to PROJECT_F16 with role, interest_level, influence_level, engagement_strategy, communication_frequency, communication_channel, last_contacted.
+
+### 2.3 Meetings
+
+**`MEETING`** — a child of `TASK_F22`. A task can have many meetings. This is the F22 operational equivalent — the scheduled event through which a task's work is conducted, reviewed, or decided. Fields: organiser_id, title, meeting_type (kickoff/review/steering/retrospective/ad-hoc etc.), status, scheduled/actual dates, duration_mins, location, channel, agenda, decisions (inline capture), actions, `next_meeting_id` (self-ref for recurring series), links, notes. Workflow-enabled.
+
+**`MEETING_PARTICIPANT`** — junction table between MEETING and PERSON. Fields: role (organiser/presenter/approver/note-taker/attendee/watcher), attended (bool), notes.
+
+### 2.4 Documents
+
+**`DOCUMENT`** — version-controlled document record. Can attach to project or task. Fields: author_id, approved_by, doc_type, doc_category, title, version, dates (created/modified/approved/expires), status, classification, volume_number (Stasi Bände analogy), page_count, language, format, file_path, file_url, external_ref, storage_system, tags, summary, links, notes. Workflow-enabled. Multiple entities reference DOCUMENT for evidence and recording: RISK, INCIDENT_RECORD_F18, QUALITY_PLAN, QUALITY_GATE, CHANGE_REQUEST, COMMUNICATION_PLAN, DECISION_LOG, ASSUMPTION_CONSTRAINT, APPROVAL, LESSON_LEARNED, MILESTONE, MEETING.
+
+### 2.5 Risk and incident
+
+**`RISK`** — forward-looking risk register entry. Distinct from INCIDENT_RECORD_F18 (which is something that has already occurred). Fields: owner_id, identified_by, category, subcategory, risk_type, status, identified/review/closed dates. Four-dimensional impact scoring: `impact_score_time`, `impact_score_cost`, `impact_score_quality`, `impact_score_scope` (each 1–5). Derived: `overall_risk_score`, `risk_level`. Response: response_strategy, contingency_plan, cost_reserve, schedule_reserve_days. Indicators: trigger_condition, early_warning_indicators, residual_risk_level. Escalation: escalated bool, escalated_to FK. Workflow-enabled.
+
+**`INCIDENT_RECORD_F18`** — something that has occurred and is impacting or has impacted the project. Can be linked back to the originating `risk_id`. Fields: reported_by, owner_id, incident_type, category, severity, impact_area, four-dimensional impact values (cost_impact float, schedule_impact_days int, scope_impact, quality_impact), occurred/reported/resolved dates, status, root_cause, immediate_action, corrective_action, resolution, escalation. Links forward to MEASURE and LESSON_LEARNED. Workflow-enabled.
+
+**`MEASURE`** — a concrete action taken to address a risk or resolve an incident. Can also be attached directly to a task or project. Fields: measure_type (preventive/corrective/detective/directive), measure_category, status, planned/actual dates, cost planned/actual, effort_hrs, effectiveness rating, verification_method, verified_date, verified_by, outcome. Workflow-enabled.
+
+### 2.6 Quality
+
+**`QUALITY_PLAN`** — project-level quality management document. Fields: owner_id, version, created/approved dates, standards_applied, quality_objectives, acceptance_criteria, review_frequency, audit_schedule, tools_methods, roles_responsibilities. Defines quality gates. Workflow-enabled.
+
+**`QUALITY_GATE`** — phase-exit checkpoint. Fields: quality_plan_id, reviewer_id, title, phase, planned/actual dates, criteria, result, decision, findings. Requires an APPROVAL. Evidenced by DOCUMENTs. Workflow-enabled.
+
+**`KPI`** — measurable performance indicator beyond EV metrics. Fields: category, dimension (time/cost/scope/quality/resource), unit, target/actual/baseline values, RAG thresholds (green/amber/red), rag_status, measurement_method, measurement_frequency, last/next measurement dates, trend. Attaches to project or task.
+
+### 2.7 Planning artefacts
+
+**`COMMUNICATION_PLAN`** — project-level communication governance. Fields: owner_id, version, created/approved dates, objectives, escalation_path. Contains multiple COMMUNICATION_ITEMs. Workflow-enabled.
+
+**`COMMUNICATION_ITEM`** — individual communication stream. Fields: plan_id, sender_id, audience, title, content_description, format, channel, frequency, next_due_date, last_sent_date, status.
+
+**`ASSUMPTION_CONSTRAINT`** — formally tracked assumption or constraint. Fields: ac_type (assumption/constraint), category, dimension (scope/time/cost/quality/resource), status, identified/review dates, validation_method, validated_date, validated_by, `breached` bool, breached_date, impact_if_wrong, mitigation. Workflow-enabled.
+
+**`CHANGE_REQUEST`** — formal change control record. Fields: raised_by, change_type, status, raised/decision/implemented dates, four-dimensional impact (cost_impact float, schedule_impact_days int, scope_impact, quality_impact), justification, decision_rationale. Requires APPROVAL. Evidenced by DOCUMENTs. Workflow-enabled.
+
+**`DEPENDENCY`** — inter-project or inter-task dependency. Fields: source/target project_id FKs, source/target task_id FKs (polymorphic — either project-to-project, task-to-task, or mixed), dependency_type (FS/SS/FF/SF), rosenholz_equivalent (cross-reference label), lag_days, status.
+
+### 2.8 Decisions and learning
+
+**`DECISION_LOG`** — formal decision record. Can originate from a MEETING or be made independently. Fields: decided_by, decision_type, status, decision/review dates, options_considered, rationale, four-dimensional impact fields, assumptions_made. Evidenced by DOCUMENTs. Workflow-enabled.
+
+**`LESSON_LEARNED`** — capturable at any point during or after a project, not only at close. Fields: submitted_by, reviewed_by, category, dimension, identified/reviewed dates, status, impact, recommendation, action_taken, `added_to_knowledge_base` bool, tags. Can originate from a project, task, or incident. Workflow-enabled.
+
+**`ARCHIVED_PROJECT_AU`** (Archivierter Untersuchungsvorgang) — the structured close-out record of a completed project. One-to-one with PROJECT_F16. Fields: archived_date, archive_reason, archiver_id, outcome_summary, final cost/duration/variance actuals, quality_assessment, scope_delivered_pct. Seven document component references (direct Rosenholz analogy): court_file_ref, supplementary_file_ref, case_officer_notes_ref, witness_statements_ref, expert_opinions_ref, evidence_ref, storage_location, retention_period. Workflow-enabled.
+
+**`PORTFOLIO_REPORT_STATSSHEET`** (Statistikbogen) — aggregate reporting per team per period. Fields: report_type, report_date, prepared_by, approved_by. Counts: projects total/active/closed/at-risk, tasks total/overdue, milestones total/overdue. Financials: budget planned/actual/variance, avg CPI, avg SPI. Control: risks open/high, incidents open, changes open/approved, decisions open, assumptions breached. Summaries: type/size/status breakdown, quality_summary, kpi_summary, highlights, lowlights, actions. Workflow-enabled.
+
+**`APPROVAL`** — generic approval workflow record. Linked polymorphically to: DOCUMENT, CHANGE_REQUEST, MILESTONE, QUALITY_GATE. Also linked to `workflow_action_id` so every approval is anchored to an immutable workflow audit step. Fields: requested_by, approver_id, approval_type, status, requested/due/decided dates, decision, conditions, rationale.
+
+### 2.9 Workflow engine
+
+Eight entities form the workflow engine, completely separate from business entities but linked to all workflowable ones via `workflow_instance_id`:
+
+**`WORKFLOW_DEFINITION`** — template for a workflow. Defines entity_type it governs, initial and terminal states, parallel approval policy, SLA enforcement, escalation policy, effective date range, version.
+
+**`WORKFLOW_STATE`** — a named state within a definition. Fields: state_type (draft/review/pending/approved/rejected/active/on-hold/closed), is_initial bool, is_terminal bool, requires_approval bool, notifies_on_entry/exit bools, sla_hours, allowed_roles.
+
+**`WORKFLOW_TRANSITION`** — a legal state change. Fields: from_state_id, to_state_id, trigger_event, condition, required_role, requires_comment bool, auto_trigger bool.
+
+**`WORKFLOW_INSTANCE`** — the runtime record for one entity going through one workflow. Polymorphic via entity_type + entity_id. Tracks current and previous state, SLA breach, escalation level and target, priority, outcome.
+
+**`WORKFLOW_PARTICIPANT`** — all people attached to an instance. The `role` field carries: initiator, approver, co-approver, reviewer, watcher, informed, delegate, escalation-target. `delegation_from` is a self-ref FK for proxy/delegation chains. `delegated_from` and `delegated_to` dates bound the delegation window.
+
+**`WORKFLOW_ACTION`** — immutable audit log entry for every step. Fields: actor_id, acting_as_role, action_type, decision, comment, action_date, on_behalf_of bool, on_behalf_of_id.
+
+**`WORKFLOW_NOTIFICATION`** — every notification fired by the engine. Fields: recipient_id, notification_type, channel, subject, body, scheduled/sent dates, sent bool, acknowledged bool, acknowledged_date.
+
+**`WORKFLOW_SLA_LOG`** — time-in-state log per instance. Fields: state_id, entered/exited dates, sla_hours_allowed, actual_hours_spent, breached bool, breach_reason.
+
+---
+
+## 3. Workflow-enabled entities
+
+Every entity below carries the three denormalised convenience fields `workflow_instance_id FK`, `workflow_status`, `workflow_current_state` for fast query without joining to the engine tables:
+
+`PROJECT_F16`, `TASK_F22`, `MEETING`, `MILESTONE`, `DOCUMENT`, `RISK`, `INCIDENT_RECORD_F18`, `MEASURE`, `QUALITY_PLAN`, `QUALITY_GATE`, `COMMUNICATION_PLAN`, `LESSON_LEARNED`, `DECISION_LOG`, `ASSUMPTION_CONSTRAINT`, `CHANGE_REQUEST`, `ARCHIVED_PROJECT_AU`, `PORTFOLIO_REPORT_STATSSHEET`
+
+Entities intentionally **not** workflow-enabled (lookup/junction/log tables that do not have independent lifecycle states): `PROJECT_TYPE`, `PERSON`, `TEAM`, `TEAM_MEMBER`, `STAKEHOLDER`, `MEETING_PARTICIPANT`, `COMMUNICATION_ITEM`, `KPI`, `DEPENDENCY`, `APPROVAL` (APPROVAL is the output of a workflow step, not itself workflowed), `WORKFLOW_*` engine tables themselves.
+
+---
+
+## 4. Key design decisions
+
+**Reg_number structure** — decomposed into three fields on PROJECT_F16: `reg_dept` (Roman numeral, the MfS Registrierbereich), `reg_sequence` (sequential integer within year), `reg_year` (four-digit year). The composite `reg_number` string is derived for display. This enables cohort queries (all projects of dept XV in 2024) while preserving the opaque cross-system key pattern from the Rosenholz original.
+
+**MEETING as child of TASK_F22** — a meeting is not an alternative to a task but an operational item within one. A task can have many meetings. Meetings also carry a direct `project_id` FK for convenience queries, but the primary parent is always `task_id`. Meetings produce DECISION_LOG entries and are minuted in DOCUMENTs.
+
+**RISK vs INCIDENT_RECORD_F18** — deliberately kept separate. RISK is forward-looking (something that might happen). INCIDENT_RECORD_F18 (F18 analogy) is backward-looking (something that has happened or is happening). An incident can optionally reference the risk that triggered it via `risk_id FK`.
+
+**Polymorphic DEPENDENCY** — covers project-to-project, task-to-task, and cross-level dependencies in a single table using nullable source/target FKs for both levels.
+
+**APPROVAL anchored to WORKFLOW_ACTION** — every approval decision is recorded as a WORKFLOW_ACTION entry, making APPROVAL the business-facing view and WORKFLOW_ACTION the immutable audit record. The two are linked via `workflow_action_id FK` on APPROVAL.
+
+**SIZE_CLASS on PROJECT_F16** — explicit field (`large`/`medium`/`small`) enabling differentiated governance rules. Large projects may require full QTCS steering, quality gates, communication plans, and AU archiving. Small projects may use lightweight subsets.
+
+---
+
+## 5. Consistency issues resolved in this version
+
+1. `MEETING` renamed from `MEETING_F22` — it is not a parallel to F22/TASK but a child item of it
+2. `MEETING` primary parent changed from `PROJECT_F16` to `TASK_F22` — `project_id` retained as a convenience denormalisation only
+3. `TASK_F22.milestone` renamed to `is_milestone` to avoid reserved word conflicts
+4. `APPROVAL` linked to `WORKFLOW_ACTION` via FK — previously approval was floating without an audit anchor
+5. `DECISION_LOG` added to TASK_F22 relationships — previously only on PROJECT_F16
+6. `ASSUMPTION_CONSTRAINT` added to TASK_F22 relationships — for task-level constraints
+7. `PORTFOLIO_REPORT_STATSSHEET` `approved_by` field kept as a plain string FK (not a full workflow) since reports are workflow-governed via the engine, not via a separate approval entity
+8. `WORKFLOW_INSTANCE` governs `MEETING` (not `MEETING_F22`) — name corrected throughout
+9. All `owner_id`, `lead_id`, `sponsor_id`, `identified_by`, `reported_by`, `submitted_by`, `decided_by`, `archiver_id`, `prepared_by`, `organiser_id` fields are FKs to `PERSON`
+10. `BUDGET_LINE` deliberately deferred — single budget field on PROJECT_F16 is sufficient for the current scope; budget line breakdown can be added as a child entity in a future version
+
+---
+
+## 6. Open items / future extensions
+
+- `BUDGET_LINE` — cost breakdown by type (labour/material/external/travel/contingency) per project
+- `RESOURCE_PLAN` — demand-side capacity planning entity linking skill requirements to project periods
+- `KNOWLEDGE_BASE` — repository for promoted LESSON_LEARNED entries across the portfolio
+- `PROGRAMME` / `PORTFOLIO` — parent entities above PROJECT_F16 for multi-project programme management
+- `CONTRACT` / `VENDOR` — procurement entities for externally sourced work (explicitly excluded in v1.0)
+- `TAG` / `LABEL` — normalised tagging entity replacing string `tags` fields
+- Versioning / history tables — for full audit trail of field changes on key entities

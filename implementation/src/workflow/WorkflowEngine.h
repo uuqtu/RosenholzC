@@ -44,7 +44,7 @@
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "../core/Repository.h"
-#include "../model/Document.h"
+#include "../model/dok/Document.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -516,11 +516,11 @@ public:
 
     // ── Entity Lifecycle ─────────────────────────────────────────
     // ------------------------------
-    // createMainWorkflow
+    // createReleaseWorkflow
     //
     // Creates and starts the controlling Main WorkflowInstance for an entity.
     // Called automatically by F16/F22/F18 create factories.
-    // Sets entity.mainWorkflowId and entity.status = "in_work".
+    // Sets entity.releaseWorkflowId and entity.status = "in_work".
     //
     // Parameters:
     //   entityType  : "project" | "task" | "f18"
@@ -528,7 +528,8 @@ public:
     //   entityTitle : used as the WFI name
     // Returns: the new WorkflowInstance (already saved)
     // ------------------------------
-    static std::shared_ptr<WorkflowInstance> createMainWorkflow(
+    // F77 Freigabe-Workflow factory — creates the controlling lifecycle WFI
+    static std::shared_ptr<WorkflowInstance> createReleaseWorkflow(
         const std::string& entityType,
         const std::string& entityId,
         const std::string& entityTitle);

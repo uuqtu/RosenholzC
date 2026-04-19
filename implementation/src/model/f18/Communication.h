@@ -6,7 +6,7 @@
 // that can be attached to:
 //   - F16 Projekt      (ownerType = "project")
 //   - F22 Aufgabe      (ownerType = "task")
-//   - F18WorkflowStep  (ownerType = "f18step")
+//   - F18OperationStep  (ownerType = "f18step")
 //
 // The ownerType + ownerId pair identifies the parent.
 // ============================================================
@@ -23,7 +23,7 @@ class Communication {
 public:
     // ── Identity ──────────────────────────────────────────────
     std::string commId;             // XV/COM/nnnn/yyyy
-    std::string ownerId;            // → F16.projectId | F22.taskId | F18WorkflowStep.stepId
+    std::string ownerId;            // → F16.projectId | F22.taskId | F18OperationStep.stepId
     std::string ownerType;          // "project" | "task" | "f18step"
 
     // ── Content ───────────────────────────────────────────────
@@ -59,7 +59,7 @@ public:
     // create
     //
     // Parameters:
-    //   ownerId   : ID of F16, F22, or F18WorkflowStep
+    //   ownerId   : ID of F16, F22, or F18OperationStep
     //   ownerType : "project" | "task" | "f18step"
     //   title     : display name
     //   commType  : message|call|meeting|email|report

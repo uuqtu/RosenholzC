@@ -25,8 +25,8 @@ void printTask(const TaskF22& t) {
     row("Fortsch",std::to_string(t.percentComplete) + "%");
     row("Start",  t.startDatePlanned.empty() ? "—" : t.startDatePlanned.substr(0,10));
     row("Ende",   t.dueDatePlanned.empty()   ? "—" : t.dueDatePlanned.substr(0,10));
-    if (!t.mainWorkflowId.empty())
-        row("Main WFI", t.mainWorkflowId.substr(0,26));
+    if (!t.releaseWorkflowId.empty())
+        row("F77 WFI", t.releaseWorkflowId.substr(0,26));
     std::cout << "  +" << std::string(52,'-') << "+\n\n";
 }
 
@@ -93,7 +93,7 @@ static void editMenu(std::shared_ptr<TaskF22> t) {
             auto proj = ProjectF16::create(t->title, type.empty()?"OV":type, "medium");
             proj->scopeStatement = t->description;
             proj->leadId         = t->assigneeId;
-            proj->save(); proj->ensureMainWorkflow();
+            proj->save(); proj->ensureReleaseWorkflow();
             std::cout << "  >> Projekt angelegt: " << proj->projectId << "\n";
         }
     }
@@ -101,32 +101,30 @@ static void editMenu(std::shared_ptr<TaskF22> t) {
 
 // ── Main Workflow Untermenü ────────────────────────────────────
 static void mainWorkflowMenu(std::shared_ptr<TaskF22> t) {
-    hdr("MAIN WORKFLOW — " + t->regNumber.toString());
+    hdr("F77 FREIGABE-WORKFLOW — " + t->regNumber.toString());
     std::cout << "  Status    : " << t->status << "\n";
-    if (t->mainWorkflowId.empty()) {
+    if (t->releaseWorkflowId.empty()) {
         std::cout << "  (kein Main Workflow — wird angelegt)\n";
-        t->ensureMainWorkflow();
+        t->ensureReleaseWorkflow();
         auto rt = TaskF22::loadById(t->taskId);
         if (rt) *t = *rt;
     }
-    if (!t->mainWorkflowId.empty()) {
+    if (!t->releaseWorkflowId.empty()) {
         int blockers = 0;
-        bool canRel = WorkflowEngine::canReleaseEntity(
-            "task", t->taskId, t->mainWorkflowId, blockers);
-        std::cout << "  Main WFI  : " << t->mainWorkflowId.substr(0,36) << "\n";
+        bool canRel = WorkflowEngine::canReleaseEntity("f22", t->taskId, t->releaseWorkflowId, blockers);
+        std::cout << "  Main WFI  : " << t->releaseWorkflowId.substr(0,36) << "\n";
         if (blockers > 0)
             std::cout << "  ⚠ " << blockers << " offene WFI(s) blockieren die Freigabe\n";
         else
             std::cout << "  ✓ Alle Sub-WFIs abgeschlossen — Freigabe möglich\n";
         std::cout << "\n  1.Main WFI öffnen  2.Sub-WFIs sperren  0.Zurück\n";
         int ch = readInt("Wahl",0,2);
-        if (ch==1) instanceMenu(t->mainWorkflowId);
+        if (ch==1) instanceMenu(t->releaseWorkflowId);
         else if (ch==2 && blockers>0) {
             std::cout << "  'ja' eingeben zum Sperren: ";
             std::string conf; std::getline(std::cin, conf);
             if (conf=="ja") {
-                int locked = WorkflowEngine::lockAllOpenWorkflows(
-                    "task", t->taskId, t->mainWorkflowId, true);
+                int locked = WorkflowEngine::lockAllOpenWorkflows("f22", t->taskId, t->releaseWorkflowId, true);
                 std::cout << "  >> " << locked << " WFI(s) gesperrt.\n";
             }
         }

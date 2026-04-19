@@ -1,5 +1,5 @@
 -- ============================================================
--- f18.db  —  F18Workflow + F18WorkflowStep + Communication
+-- f18.db  —  F18Operation + F18OperationStep + Communication
 --
 -- Replaces:
 --   - reporting.db (risks, measures, quality_gates,
@@ -8,7 +8,7 @@
 --   - projects.db meetings table
 --
 -- Design:
---   One table f18_workflows stores ALL workflow types.
+--   One table f18_operations stores ALL workflow types.
 --   The vorgangType column acts as a discriminator.
 --   Type-specific fields are NULL when not applicable.
 -- ============================================================
@@ -21,13 +21,13 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 -- ── F18 Workflow (unified entity table) ──────────────────────
-CREATE TABLE IF NOT EXISTS f18_workflows (
+CREATE TABLE IF NOT EXISTS f18_operations (
     vorgang_id          TEXT PRIMARY KEY,
     vorgang_type        TEXT NOT NULL DEFAULT 'generic',
     project_id          TEXT,           -- → F16
     task_id             TEXT,           -- → F22
     parent_vorgang_id   TEXT,           -- → F18 (CO only, → ChangeRequest)
-    main_workflow_id    TEXT,           -- WFI ID of controlling Main Workflow
+    release_workflow_id    TEXT,           -- WFI ID of controlling Main Workflow
     title               TEXT NOT NULL,
     description         TEXT,
     status              TEXT NOT NULL DEFAULT 'draft',
@@ -123,23 +123,22 @@ CREATE TABLE IF NOT EXISTS f18_workflows (
     updated_at          TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_f18_project    ON f18_workflows(project_id, vorgang_type);
-CREATE INDEX IF NOT EXISTS idx_f18_task       ON f18_workflows(task_id, vorgang_type);
-CREATE INDEX IF NOT EXISTS idx_f18_parent     ON f18_workflows(parent_vorgang_id);
-CREATE INDEX IF NOT EXISTS idx_f18_status     ON f18_workflows(status);
-CREATE INDEX IF NOT EXISTS idx_f18_type       ON f18_workflows(vorgang_type);
+CREATE INDEX IF NOT EXISTS idx_f18_project    ON f18_operations(project_id, vorgang_type);
+CREATE INDEX IF NOT EXISTS idx_f18_task       ON f18_operations(task_id, vorgang_type);
+CREATE INDEX IF NOT EXISTS idx_f18_parent     ON f18_operations(parent_vorgang_id);
+CREATE INDEX IF NOT EXISTS idx_f18_status     ON f18_operations(status);
+CREATE INDEX IF NOT EXISTS idx_f18_type       ON f18_operations(vorgang_type);
 
 -- ── F18 Workflow Steps ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS f18_workflow_steps (
+CREATE TABLE IF NOT EXISTS f18_operation_steps (
     step_id             TEXT PRIMARY KEY,
-    vorgang_id          TEXT NOT NULL REFERENCES f18_workflows(vorgang_id),
+    vorgang_id          TEXT NOT NULL REFERENCES f18_operations(vorgang_id),
     tpl_step_id         TEXT,           -- soft ref to template step
     title               TEXT NOT NULL,
     description         TEXT,
     step_type           TEXT DEFAULT 'task',
     sequence_order      INTEGER DEFAULT 0,
-    execution_type      TEXT DEFAULT 'sequential'
-                             CHECK(execution_type IN ('sequential','parallel','free')),
+    execution_type      TEXT DEFAULT 'sequential',  -- always sequential
     predecessor_step_ids TEXT,          -- comma-separated step IDs
 
     -- bookends
@@ -167,24 +166,26 @@ CREATE TABLE IF NOT EXISTS f18_workflow_steps (
     decision_date       TEXT,
     comment             TEXT,
 
-    -- ise-cobra tracking
-    tracking_status     TEXT DEFAULT 'planned',
-    planned_date        TEXT,
-    focus_date          TEXT,
-    archived_date       TEXT,
+    -- Tracking — auto-computed from dates; not manually set
+    -- tracking_status: planned|focused|due|in_work|archived (computed, stored for query)
+    tracking_status     TEXT DEFAULT 'planned'
+                             CHECK(tracking_status IN ('planned','focused','due','in_work','archived')),
+    focus_date          TEXT,    -- must be before due_date; when passed → focused
+    -- due_date already exists above
     priority            TEXT DEFAULT 'medium',
     assigned_to_group   TEXT,
     progress_note       TEXT,
     percent_complete    INTEGER DEFAULT 0,
+    in_work_since       TEXT,    -- set when step is marked in_work
 
     notes               TEXT DEFAULT '{}',
     created_at          TEXT,
     updated_at          TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_f18step_vorgang  ON f18_workflow_steps(vorgang_id, sequence_order);
-CREATE INDEX IF NOT EXISTS idx_f18step_status   ON f18_workflow_steps(status);
-CREATE INDEX IF NOT EXISTS idx_f18step_assigned ON f18_workflow_steps(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_f18step_vorgang  ON f18_operation_steps(vorgang_id, sequence_order);
+CREATE INDEX IF NOT EXISTS idx_f18step_status   ON f18_operation_steps(status);
+CREATE INDEX IF NOT EXISTS idx_f18step_assigned ON f18_operation_steps(assigned_to);
 
 -- ── Communication (replaces meetings) ────────────────────────
 CREATE TABLE IF NOT EXISTS communications (

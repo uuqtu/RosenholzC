@@ -1,16 +1,20 @@
 #pragma once
 // ============================================================
-// F18Workflow.h  —  Unified Workflow-Vorgang entity
+// F18Operation.h  —  Unified F18 Operation entity
 //
-// F18Workflow is the single concrete class that represents all
+// An F18 Operation (formerly F18Workflow) represents a DDR-style
+// operational vorgang (Incident, Risk, Measure, etc.).
+// NOT to be confused with F77 Freigabe-Workflows (WorkflowInstance).
+//
+// F18Operation is the single concrete class that represents all
 // types of workflow-based entities in Rosenholz PM.
 // The `vorgangType` field selects the semantic role and determines
 // which type-specific fields are populated.
 //
 // Hierarchy:
-//   F16 (Projekt) ──0..*──► F18Workflow
-//   F22 (Aufgabe) ──0..*──► F18Workflow
-//   F18Workflow   ──1..*──► F18WorkflowStep
+//   F16 (Projekt) ──0..*──► F18Operation
+//   F22 (Aufgabe) ──0..*──► F18Operation
+//   F18Operation   ──1..*──► F18OperationStep
 //
 // ChangeObject is the only F18 that references another F18
 // (parentVorgangId → a ChangeRequest F18).
@@ -32,10 +36,10 @@
 namespace Rosenholz {
 
 // ------------------------------
-// F18VorgangType
+// F18OperationType
 // All valid values for the vorgangType discriminator field.
 // ------------------------------
-namespace F18VorgangType {
+namespace F18OperationType {
     constexpr const char* GENERIC              = "generic";
     constexpr const char* INCIDENT             = "incident";
     constexpr const char* RISK                 = "risk";
@@ -49,13 +53,13 @@ namespace F18VorgangType {
     constexpr const char* CHANGE_OBJECT        = "changeObject";
 }
 
-class F18WorkflowStep; // forward
+class F18OperationStep; // forward
 
-class F18Workflow {
+class F18Operation {
 public:
     // ── Identity ──────────────────────────────────────────────
     std::string vorgangId;              // XV/F18/nnnn/yyyy
-    std::string vorgangType;            // see F18VorgangType::*
+    std::string vorgangType;            // see F18OperationType::*
     std::string projectId;              // → F16 (0..1)
     std::string taskId;                 // → F22 (0..1)
     std::string parentVorgangId;        // → F18 ChangeRequest (CO only)
@@ -64,7 +68,7 @@ public:
     std::string title;
     std::string description;
     std::string status          { "in_work" }; // in_work → released (only via Main WFI End step)
-    std::string mainWorkflowId;               // WFI ID of the controlling Main Workflow
+    std::string releaseWorkflowId;               // WFI ID of the controlling Main Workflow
     std::string ownerId;                      // → Person
     std::string priority        { "medium" }; // low|medium|high|critical
     std::string createdAt;
@@ -158,11 +162,11 @@ public:
     std::string links;
 
     // ── Lazy-loaded children ──────────────────────────────────
-    std::vector<F18WorkflowStep> steps;  ///< Lazy-loaded, value type for iteration
+    std::vector<F18OperationStep> steps;  ///< Lazy-loaded, value type for iteration
 
     // ── CRUD ──────────────────────────────────────────────────
     bool save()   const;
-    void ensureMainWorkflow();  ///< Called after first save to create Main WFI
+    void ensureReleaseWorkflow();  ///< Called after first save to create Main WFI
     bool update();
     bool remove() const;
     bool load(const std::string& id);
@@ -174,43 +178,52 @@ public:
     // Parameters:
     //   projectId  : owning F16 (may be empty if taskId set)
     //   title      : display name
-    //   type       : one of F18VorgangType::*
+    //   type       : one of F18OperationType::*
     //   taskId     : owning F22 (optional)
     //
-    // Returns: saved F18Workflow with generated vorgangId
+    // Returns: saved F18Operation with generated vorgangId
     // ------------------------------
-    static std::shared_ptr<F18Workflow> create(
+    static std::shared_ptr<F18Operation> create(
         const std::string& projectId,
         const std::string& title,
-        const std::string& type       = F18VorgangType::GENERIC,
+        const std::string& type       = F18OperationType::GENERIC,
         const std::string& taskId     = "");
 
-    static std::shared_ptr<F18Workflow> loadById(const std::string& id);
+    static std::shared_ptr<F18Operation> loadById(const std::string& id);
 
     // ------------------------------
     // loadForProject / loadForTask
     // Load all F18 Workflows for a given parent entity.
     // Optional type filter.
     // ------------------------------
-    static std::vector<std::shared_ptr<F18Workflow>> loadForProject(
+    static std::vector<std::shared_ptr<F18Operation>> loadForProject(
         const std::string& projectId,
         const std::string& type = "");
 
-    static std::vector<std::shared_ptr<F18Workflow>> loadForTask(
+    static std::vector<std::shared_ptr<F18Operation>> loadForTask(
         const std::string& taskId,
         const std::string& type = "");
 
     // ------------------------------
     // loadRecent — last n created across all types
     // ------------------------------
-    static std::vector<std::shared_ptr<F18Workflow>> loadRecent(int n = 20);
+    static std::vector<std::shared_ptr<F18Operation>> loadRecent(int n = 20);
 
     // ── Step management ───────────────────────────────────────
     // ------------------------------
-    // addStep — add an F18WorkflowStep to this workflow.
+    // addStep — add an F18OperationStep to this workflow.
     // Always inserts between Init and End bookends.
     // ------------------------------
-    std::shared_ptr<F18WorkflowStep> addStep(
+    /// Default: appends new step before the End step.
+    std::shared_ptr<F18OperationStep> addStep(
+        const std::string& title,
+        const std::string& stepType   = "task",
+        const std::string& assigneeId = "");
+
+    /// Custom: inserts between predecessorStepId and its successor.
+    /// The old successor then points to the new step.
+    std::shared_ptr<F18OperationStep> insertAfter(
+        const std::string& predecessorStepId,
         const std::string& title,
         const std::string& stepType   = "task",
         const std::string& assigneeId = "");

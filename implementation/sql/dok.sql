@@ -10,9 +10,11 @@ CREATE TABLE IF NOT EXISTS documents (
     workflow_instance_id   TEXT,
     workflow_status        TEXT,
     workflow_current_state TEXT,
-    main_workflow_id       TEXT,
+    release_workflow_id       TEXT,
     project_id             TEXT,
     task_id                TEXT,
+    f18_operation_id       TEXT,   -- F18 Operation reference
+    f18_step_id            TEXT,   -- F18 Operation Step reference
     author_id              TEXT,
     approved_by            TEXT,
     doc_type               TEXT,
@@ -59,7 +61,7 @@ CREATE TABLE IF NOT EXISTS communication_plans (
     workflow_instance_id   TEXT,
     workflow_status        TEXT,
     workflow_current_state TEXT,
-    main_workflow_id       TEXT,
+    release_workflow_id       TEXT,
     project_id             TEXT,
     owner_id               TEXT,
     version                TEXT DEFAULT '1.0',

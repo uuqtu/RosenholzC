@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS projects (
     workflow_instance_id        TEXT,
     workflow_status             TEXT,
     workflow_current_state      TEXT,
-    main_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
+    release_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     workflow_instance_id        TEXT,
     workflow_status             TEXT,
     workflow_current_state      TEXT,
-    main_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
+    release_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     workflow_instance_id        TEXT,
     workflow_status             TEXT,
     workflow_current_state      TEXT,
-    main_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
+    release_workflow_id            TEXT,  -- controlling Main WFI (in_work→released)
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,

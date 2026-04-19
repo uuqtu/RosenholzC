@@ -47,6 +47,8 @@ namespace RegDept {
     constexpr const char* ARCHIVE   = "AU";   ///< Archived (Untersuchungsvorgang)
     constexpr const char* PERSON    = "HVA";  ///< Person registry
     constexpr const char* TEAM      = "DE";   ///< Diensteinheit
+    constexpr const char* OPERATION = "F18";  ///< F18 Operation (vormals Incident)
+    constexpr const char* RELEASE   = "F77";  ///< F77 Freigabe-Workflow (lifecycle)
 }
 
 class RegNumberGenerator {
