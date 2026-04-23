@@ -7,7 +7,8 @@
 using namespace Rosenholz;
 #include "../src/app/AppController.h"
 #include "../src/core/Migration.h"
-#include "../src/workflow/WorkflowEngine.h"
+#include "../src/workflow/F77Workflow.h"
+#include "../src/workflow/F77Workflow.h"
 
 // Forward declarations of all test suites
 void testSuiteCore();
@@ -34,7 +35,7 @@ int main(int argc, char* argv[]) {
             std::exit(2);
         }
         MigrationEngine::runAll();
-        WorkflowEngine::createStandardTemplates();
+        F77_Engine::seedDefaultTemplates();
     };
 
     // Initial setup: wipe and set test dir, then init
@@ -58,7 +59,7 @@ int main(int argc, char* argv[]) {
     }
     Logger::instance().setLevel(LogLevel::WARN);
     MigrationEngine::runAll();
-    WorkflowEngine::createStandardTemplates();
+    F77_Engine::seedDefaultTemplates();
 
     std::cout << "\n=== ROSENHOLZ PM TEST SUITE v" << Version::toString() << " ===\n\n";
 

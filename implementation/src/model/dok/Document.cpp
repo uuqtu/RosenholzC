@@ -2,10 +2,11 @@
 #include "Document.h"
 #include "../../repository/ArchiveStore.h"
 #include "../../repository/DocumentRevision.h"
-#include "../../workflow/WorkflowEngine.h"
+#include "../../workflow/F77Workflow.h"
 #include "../../repository/DocumentRevision.h"
 #include <cstdlib>
 #include "../../core/Database.h"
+#include "../../workflow/F77Workflow.h"
 #include "../../core/Logger.h"
 #include "../Utils.h"
 #include "../../core/Repository.h"
@@ -122,7 +123,11 @@ bool Document::remove() {
     db->exec("DELETE FROM entity_documents WHERE document_id=?;",{BindParam::text(documentId)});
     return db->exec("DELETE FROM documents WHERE document_id=?;",{BindParam::text(documentId)});
 }
-bool Document::update() { updatedAt=nowIso(); dateModified=updatedAt; return save(); }
+bool Document::update() {
+    if (isFrozen()) {
+        LOG_WARN("[DOK] update() verweigert: Revision ist eingefroren — " + documentId);
+        return false;
+    } updatedAt=nowIso(); dateModified=updatedAt; return save(); }
 
 std::shared_ptr<Document> Document::loadById(const std::string& id) {
     auto d=std::make_shared<Document>(); if(!d->load(id)) return nullptr; return d;
@@ -333,9 +338,7 @@ bool Document::refreshFromUrl() {
         return false;
     }
 
-    // Snapshot existing file first
-    if (!filePath.empty() && FileOps::fileExists(filePath))
-        snapshotVersion("Vor URL-Aktualisierung");
+    // No snapshot before URL refresh — revise() is the sole entry point for revisions
 
     const std::string& base = Config::instance().basePath();
     std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
@@ -365,47 +368,117 @@ bool Document::refreshFromUrl() {
     return ok;
 }
 
-bool Document::snapshotVersion(const std::string& changeNote, const std::string& createdBy) {
-    // Copy current file to versioned name
-    std::string versionedPath;
-    if (!filePath.empty() && FileOps::fileExists(filePath)) {
-        std::string dir = FileOps::dirName(filePath);
-        std::string versName = mfsDocFilename(*this, version + "-snap");
-        versionedPath = FileOps::joinPath(dir, versName);
-        FileOps::copyFile(filePath, versionedPath, true);
+
+
+// ── revertChanges ─────────────────────────────────────────────
+bool Document::revertChanges() {
+    // Restore the document to the state of the PREVIOUS revision.
+    //
+    // Rules:
+    //   - Only works when current active revision is in_work.
+    //   - Finds the revision BEFORE the current one (parentRev).
+    //   - Restores that revision's content into the current in_work revision
+    //     (overwrites its LMDB content). No new revision is created.
+    //   - If no previous revision exists (rev == 1 with no parent): does nothing.
+    //   - Discards the local checked-out working copy.
+
+    // Must have a checkout in progress
+    if (preCheckoutRevId == 0 && checkedOutPath.empty()) {
+        LOG_WARN("[Document] revertChanges: kein aktiver Checkout fuer " + documentId);
+        return false;
     }
 
-    auto* db = DatabasePool::instance().get("dok");
-    if (!db) return false;
-    std::string vid = genId("VER");
-    return db->exec(
-        "INSERT INTO document_versions"
-        "(version_id,document_id,version_number,file_path,file_size,file_hash,"
-        " created_by,change_note,created_at) VALUES(?,?,?,?,?,?,?,?,?);",
-        {BindParam::text(vid), BindParam::text(documentId),
-         BindParam::text(version), textOrNull(versionedPath),
-         BindParam::int64(fileSize), textOrNull(fileHash),
-         textOrNull(createdBy), textOrNull(changeNote),
-         BindParam::text(nowIso())});
+    auto curRev = Rosenholz::DocumentRevision::currentRevision(documentId);
+    if (!curRev) {
+        LOG_ERROR("[Document] revertChanges: keine aktive Revision fuer " + documentId);
+        return false;
+    }
+    if (curRev->revState != DocRevState::IN_WORK) {
+        LOG_ERROR("[Document] revertChanges: aktive Revision ist nicht in_work");
+        return false;
+    }
+
+    // Find the previous revision via parentRev
+    if (curRev->parentRev == 0) {
+        // This IS revision 1 — no previous revision to restore from.
+        // Just discard the local copy and leave the revision content empty.
+        if (!checkedOutPath.empty()) {
+            std::remove(checkedOutPath.c_str());
+            checkedOutPath.clear();
+        }
+        preCheckoutRevId = 0;
+        LOG_INFO("[Document] revertChanges: erste Revision — kein Vorzustand vorhanden, "
+                 "ausgecheckte Datei verworfen");
+        return false; // nothing to restore
+    }
+
+    auto prevRev = Rosenholz::DocumentRevision::loadByRev(documentId, curRev->parentRev);
+    if (!prevRev) {
+        LOG_ERROR("[Document] revertChanges: Vorgaenger-Revision " +
+                  std::to_string(curRev->parentRev) + " nicht gefunden");
+        return false;
+    }
+
+    auto& store = Rosenholz::Archive::ArchiveStore::instance();
+
+    // Restore previous revision's content into the current in_work revision
+    if (!prevRev->contentHash.empty() && store.isOpen()) {
+        std::string tmpDir = FileOps::joinPath(Config::instance().basePath(), "tmp_revert");
+        FileOps::makeDirs(tmpDir);
+        std::string fname = documentId + (format.empty() ? "" : "." + format);
+        std::string tmpPath = FileOps::joinPath(tmpDir, fname);
+
+        if (store.retrieveContent(documentId, prevRev->rev, tmpPath)) {
+            std::string stagePath;
+            auto ref = store.stageContent(tmpPath, stagePath);
+            if (ref.valid()) {
+                // Overwrite current in_work revision's content in LMDB
+                if (store.commitContent(stagePath, ref, documentId, curRev->rev)) {
+                    curRev->contentHash = ref.sha256;
+                    curRev->contentSize = (int64_t)ref.size;
+                    curRev->update();
+                    fileHash = ref.sha256;
+                    fileSize = (int64_t)ref.size;
+                    update();
+                    FileOps::deleteFile(tmpPath);
+                    if (!checkedOutPath.empty()) {
+                        std::remove(checkedOutPath.c_str());
+                        checkedOutPath.clear();
+                    }
+                    preCheckoutRevId = 0;
+                    LOG_INFO("[Document] revertChanges: Inhalt auf Rev " +
+                             std::to_string(prevRev->rev) + " zurueckgesetzt fuer " + documentId);
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Fallback: no LMDB content in previous revision
+    if (!checkedOutPath.empty()) {
+        std::remove(checkedOutPath.c_str());
+        checkedOutPath.clear();
+    }
+    preCheckoutRevId = 0;
+    LOG_WARN("[Document] revertChanges: Vorgaenger-Revision hat keinen LMDB-Inhalt — "
+             "Arbeitskopie verworfen, Revision-Inhalt unveraendert");
+    return false;
 }
 
 std::vector<Document::VersionRecord> Document::loadVersions() const {
+    // Returns version history via DocumentRevision (replaces document_versions table).
     std::vector<VersionRecord> result;
-    auto* db = DatabasePool::instance().get("dok");
-    if (!db) return result;
-    auto rows = db->query(
-        "SELECT * FROM document_versions WHERE document_id=? ORDER BY created_at DESC;",
-        {BindParam::text(documentId)});
-    for (auto& r : rows) {
+    auto revs = DocumentRevision::loadAllRevisions(documentId);
+    for (auto& r : revs) {
         VersionRecord v;
-        v.versionId    = rowGet(r,"version_id");
-        v.versionNumber= rowGet(r,"version_number");
-        v.filePath     = rowGet(r,"file_path");
-        v.fileHash     = rowGet(r,"file_hash");
-        v.fileSize     = std::stoll(rowGet(r,"file_size").empty() ? "0" : rowGet(r,"file_size"));
-        v.createdBy    = rowGet(r,"created_by");
-        v.changeNote   = rowGet(r,"change_note");
-        v.createdAt    = rowGet(r,"created_at");
+        v.versionId     = r->documentId + "/r" + std::to_string(r->rev);
+        v.versionNumber = std::to_string(r->rev);
+        v.filePath      = filePath;
+        v.fileHash      = r->contentHash;
+        v.fileSize      = r->contentSize;
+        v.createdBy     = r->createdBy;
+        v.changeNote    = r->changeNote;
+        v.createdAt     = r->createdAt;
         result.push_back(v);
     }
     return result;
@@ -462,47 +535,143 @@ std::vector<std::shared_ptr<Document>> Document::loadRecent(int n) {
     return result;
 }
 
+// ── State predicates ──────────────────────────────────────────
+bool Document::isInWork() const {
+    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
+    return cur && cur->revState == DocRevState::IN_WORK;
+}
+
+bool Document::isFrozen() const {
+    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
+    return cur && cur->revState != DocRevState::IN_WORK;
+}
+
+bool Document::canRevise() const {
+    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
+    // No revisions yet: can create first revision
+    if (!cur) return true;
+    // Active revision must be frozen (not in_work) to branch a new one
+    return cur->revState != DocRevState::IN_WORK;
+}
+
+bool Document::canCheckout() const {
+    // Must be in_work and no checkout already open
+    return isInWork() && checkedOutPath.empty();
+}
+
+bool Document::canCheckin() const {
+    // Must be in_work and a checkout must be open
+    return isInWork() && !checkedOutPath.empty();
+}
+
+bool Document::canRevert() const {
+    if (!isInWork() || checkedOutPath.empty()) return false;
+    // Must have a parent revision to restore from
+    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
+    return cur && cur->parentRev > 0;
+}
+
+bool Document::canEdit() const {
+    return isInWork();
+}
+
+
 // ── Lifecycle: ensure Main WFI for this document ─────────────
 void Document::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
-    auto inst = Rosenholz::WorkflowEngine::createReleaseWorkflow("dok", documentId, title);
-    if (!inst) return;
-    releaseWorkflowId = inst->instanceId;
+    auto wf = Rosenholz::F77_Engine::startDefault("dok", documentId);
+    if (!wf) return;
+    releaseWorkflowId = wf->workflowId;
     status         = "in_work";
     auto* db = DatabasePool::instance().get("dok");
     if (db) db->exec(
         "UPDATE documents SET release_workflow_id=?, status='in_work', updated_at=? "
-        "WHERE document_id=?;",
-        {BindParam::text(releaseWorkflowId),
-         BindParam::text(nowIso()),
-         BindParam::text(documentId)});
-    LOG_INFO("[F77] WFI created: " + releaseWorkflowId +
+            "WHERE document_id=?;",
+            {BindParam::text(releaseWorkflowId),
+             BindParam::text(nowIso()),
+             BindParam::text(documentId)});
+    LOG_INFO("[F77] Workflow created: " + releaseWorkflowId +
              " for doc " + documentId);
 }
 
-// ── Lifecycle: ensure Revision 1 exists for this document ────
-void Document::ensureRevision1() {
-    // Only create if no revisions exist yet
+// ── revise ────────────────────────────────────────────────────
+//
+// The sole entry point for creating new document revisions.
+// All other code paths that used to call createRevision have
+// been consolidated here.
+std::shared_ptr<DocumentRevision> Document::revise(
+    const std::string& changeNote,
+    const std::string& createdBy)
+{
     uint32_t latest = DocumentRevision::latestRevNumber(documentId);
-    if (latest > 0) return;
-    auto rev = DocumentRevision::createRevision(documentId, 0, authorId,
-                                                "Revision 1 — Initialzustand");
-    if (rev) {
-        // Sync document status to match revision state (in_work)
+
+    // Case 1: No revisions yet — create the first revision.
+    if (latest == 0) {
+        auto rev = DocumentRevision::createRevision(
+            documentId, 0,
+            createdBy.empty() ? authorId : createdBy,
+            changeNote.empty() ? "Revision 1 — Initialzustand" : changeNote);
+        if (rev) {
+            // Sync document status
+            auto* db = DatabasePool::instance().get("dok");
+            if (db) db->exec(
+                "UPDATE documents SET status='in_work', updated_at=? WHERE document_id=?;",
+                {BindParam::text(nowIso()), BindParam::text(documentId)});
+            status = "in_work";
+            LOG_INFO("[Document] Revision 1 angelegt: " + documentId);
+        }
+        return rev;
+    }
+
+    // Case 2: Check the active revision state.
+    auto cur = DocumentRevision::currentRevision(documentId);
+    if (!cur) {
+        LOG_ERROR("[Document] revise: keine aktive Revision gefunden fuer " + documentId);
+        return nullptr;
+    }
+
+    // Refuse if active revision is still in_work:
+    // only one in_work revision is allowed at a time.
+    if (cur->revState == DocRevState::IN_WORK) {
+        LOG_WARN("[Document] revise: aktive Revision ist noch in_work — "
+                 "erst Workflow starten und Revision freigeben, bevor neue angelegt werden kann.");
+        return nullptr;
+    }
+
+    // Active revision is frozen (pre_released / released / locked / closed):
+    // create the next revision branching from the current one.
+    auto newRev = DocumentRevision::createRevision(
+        documentId, cur->rev,
+        createdBy.empty() ? authorId : createdBy,
+        changeNote.empty() ? "Neue Revision" : changeNote);
+    if (newRev) {
         auto* db = DatabasePool::instance().get("dok");
         if (db) db->exec(
             "UPDATE documents SET status='in_work', updated_at=? WHERE document_id=?;",
             {BindParam::text(nowIso()), BindParam::text(documentId)});
         status = "in_work";
-        LOG_INFO("[Document] Rev 1 created for " + documentId);
-    } else {
-        LOG_ERROR("[Document] Failed to create Rev 1 for " + documentId);
+        LOG_INFO("[Document] Revision " + std::to_string(newRev->rev) +
+                 " angelegt: " + documentId);
     }
+    return newRev;
 }
+
+
+// ── Lifecycle: ensure Revision 1 exists for this document ────
 
 // ── checkout ─────────────────────────────────────────────────
 std::string Document::checkout(const std::string& destDir) {
     auto& store = Rosenholz::Archive::ArchiveStore::instance();
+
+    // Record which revision was current at checkout time so revertChanges()
+    // can restore from the PREVIOUS revision if needed.
+    // No new revision is created here — revise() is the only entry point.
+    auto preRev = Rosenholz::DocumentRevision::currentRevision(documentId);
+    if (preRev) {
+        preCheckoutRevId = preRev->rev;
+        LOG_INFO("[Document] checkout: recording preCheckoutRevId=" +
+                 std::to_string(preRev->rev) + " for " + documentId);
+    }
 
     // Determine where to put the local file
     std::string dir = destDir.empty()
@@ -561,29 +730,32 @@ bool Document::checkin(const std::string& srcPath) {
         return false;
     }
 
-    // Create a new revision
+    // Commit content to the CURRENT in_work revision.
+    // checkin never creates a new revision — only revise() does that.
     auto curRev = Rosenholz::DocumentRevision::currentRevision(documentId);
-    uint32_t baseRev = curRev ? curRev->rev : 0;
-    auto newRev = Rosenholz::DocumentRevision::createRevision(
-        documentId, baseRev, authorId, "Check-in");
-    if (!newRev) {
-        LOG_ERROR("[Document] checkin: createRevision failed");
-        store.stageContent(path, tmpPath); // clean staging
+    if (!curRev) {
+        LOG_ERROR("[Document] checkin: keine aktive Revision fuer " + documentId);
+        std::remove(tmpPath.c_str());
+        return false;
+    }
+    if (curRev->revState != DocRevState::IN_WORK) {
+        LOG_ERROR("[Document] checkin: aktive Revision ist nicht in_work (ist: "
+                  + curRev->revState + ") — nur in_work-Revisionen koennen eingecheckt werden");
         std::remove(tmpPath.c_str());
         return false;
     }
 
-    // Commit content to LMDB
-    if (!store.commitContent(tmpPath, ref, documentId, newRev->rev)) {
+    // Commit content to LMDB under the current revision
+    if (!store.commitContent(tmpPath, ref, documentId, curRev->rev)) {
         LOG_ERROR("[Document] checkin: commitContent failed");
-        newRev->remove();
         return false;
     }
 
     // Update revision metadata
-    newRev->contentHash = ref.sha256;
-    newRev->contentSize = (int64_t)ref.size;
-    newRev->update();
+    curRev->contentHash = ref.sha256;
+    curRev->contentSize = (int64_t)ref.size;
+    curRev->update();
+    auto newRev = curRev; // alias for code below
 
     // Update document fields
     fileHash = ref.sha256;

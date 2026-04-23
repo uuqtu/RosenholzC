@@ -43,6 +43,7 @@ pkgs.mkShell {
     nlohmann_json  # header-only JSON (nlohmann/json.hpp)
     lmdb           # Lightning Memory-Mapped Database (file archive store)
     openssl        # SHA-256 for content-addressed chunk storage
+    readline       # GNU Readline: Ctrl+C handling, tab-completion, history
 
     # Download & archiving (used by FileOps + Document)
     curl

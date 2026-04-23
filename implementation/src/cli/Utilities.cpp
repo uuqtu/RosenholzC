@@ -9,7 +9,8 @@
 // createPersonWizard()           : new person wizard
 // ============================================================
 #include "cli_common.h"
-#include "../workflow/WorkflowEngine.h"
+#include "../workflow/F77Workflow.h"
+#include "../workflow/F77Workflow.h"
 #include "../model/dok/Document.h"
 #include "../model/f22/TaskF22.h"
 #include "../model/f16/ProjectF16.h"
@@ -130,77 +131,80 @@ void printPerson(const Rosenholz::Person& p) {
 
 void listProjects() {
     auto all = Rosenholz::ProjectF16::loadAll();
-    if (all.empty()) {
-        std::cout << "\n  (no projects yet)\n\n";
-        return;
-    }
-    hdr("ALL PROJECTS");
+    if (all.empty()) { std::cout << "  (keine Projekte)\n"; return; }
     std::cout << "  " << std::left
-              << std::setw(4)  << "#"
-              << std::setw(14) << "Reg-Nr"
-              << std::setw(28) << "Title"
-              << std::setw(8)  << "Status"
-              << "\n";
-    hr();
-    int n = 1;
+              << std::setw(24) << "REG-NR"
+              << std::setw(30) << "TITEL"
+              << std::setw(14) << "STATUS"
+              << std::setw(12) << "PHASE"
+              << std::setw(8)  << "PRIO"
+              << "CPI\n"
+              << "  " << std::string(80,'-') << "\n";
     for (auto& p : all) {
-        std::string title = p->title.size() > 26 ? p->title.substr(0,25)+"~" : p->title;
+        std::string title = p->title.size()>28 ? p->title.substr(0,27)+"~" : p->title;
+        std::string phase = p->phase.empty() ? "-" : p->phase;
+        std::string prio  = p->priority.empty() ? "-" : p->priority;
+        char cpibuf[8]; snprintf(cpibuf, sizeof(cpibuf), "%.2f", p->cpi);
         std::cout << "  " << std::left
-                  << std::setw(4)  << n++
-                  << std::setw(14) << p->regNumber.toString()
-                  << std::setw(28) << title
-                  << std::setw(8)  << p->status
-                  << "\n";
+                  << std::setw(24) << p->regNumber.toString()
+                  << std::setw(30) << title
+                  << std::setw(14) << p->status
+                  << std::setw(12) << phase
+                  << std::setw(8)  << prio
+                  << cpibuf << "\n";
     }
-    std::cout << "\n";
+    std::cout << "  " << all.size() << " Projekt(e)\n";
 }
 
 void listTasks(const std::string& projectId) {
     auto tasks = Rosenholz::TaskF22::loadForProject(projectId);
-    if (tasks.empty()) {
-        std::cout << "\n  (no tasks for this project)\n\n";
-        return;
-    }
-    hdr("TASKS FOR PROJECT");
+    if (tasks.empty()) { std::cout << "  (keine Aufgaben)\n"; return; }
     std::cout << "  " << std::left
-              << std::setw(4)  << "#"
-              << std::setw(14) << "Reg-Nr"
-              << std::setw(24) << "Title"
-              << std::setw(6)  << "WBS"
-              << std::setw(8)  << "Status"
-              << std::setw(5)  << "%"
-              << "\n";
-    hr();
-    int n = 1;
+              << std::setw(24) << "REG-NR"
+              << std::setw(28) << "TITEL"
+              << std::setw(14) << "STATUS"
+              << std::setw(6)  << "  %"
+              << std::setw(10) << "PRIO"
+              << "ASSIGNEE\n"
+              << "  " << std::string(80,'-') << "\n";
     for (auto& t : tasks) {
-        std::string title = t->title.size()>22 ? t->title.substr(0,21)+"~" : t->title;
+        std::string title = t->title.size()>26 ? t->title.substr(0,25)+"~" : t->title;
+        std::string ass   = t->assigneeId.empty() ? "-" : t->assigneeId.substr(0,12);
         std::cout << "  " << std::left
-                  << std::setw(4)  << n++
-                  << std::setw(14) << t->regNumber.toString()
-                  << std::setw(24) << title
-                  << std::setw(6)  << fval(t->wbsCode)
-                  << std::setw(8)  << t->status
-                  << std::setw(5)  << t->percentComplete
-                  << "\n";
+                  << std::setw(24) << t->regNumber.toString()
+                  << std::setw(28) << title
+                  << std::setw(14) << t->status
+                  << std::setw(6)  << t->percentComplete
+                  << std::setw(10) << t->priority
+                  << ass << "\n";
     }
-    std::cout << "\n";
+    std::cout << "  " << tasks.size() << " Aufgabe(n)\n";
 }
 
 
 
 void listPersons() {
     auto all = Rosenholz::Person::loadAll();
-    if (all.empty()) { std::cout << "\n  (no persons yet)\n\n"; return; }
-    hdr("PERSONS");
-    int n = 1;
+    if (all.empty()) { std::cout << "  (keine Personen)\n"; return; }
+    std::cout << "  " << std::left
+              << std::setw(20) << "REG-NR"
+              << std::setw(24) << "NAME"
+              << std::setw(16) << "ROLLE"
+              << std::setw(14) << "TYP"
+              << "STATUS\n"
+              << "  " << std::string(76,'-') << "\n";
     for (auto& p : all) {
-        std::cout << "  " << std::setw(3) << n++ << ". ["
-                  << p->regNumber.toString() << "]  "
-                  << std::left << std::setw(22) << p->fullName()
-                  << "  " << std::setw(20) << p->email
-                  << "  " << p->roleTitle << "\n";
+        std::string name = p->fullName().size()>22 ? p->fullName().substr(0,21)+"~" : p->fullName();
+        std::string role = p->roleTitle.empty() ? "-" :
+                           (p->roleTitle.size()>14 ? p->roleTitle.substr(0,13)+"~" : p->roleTitle);
+        std::cout << "  " << std::left
+                  << std::setw(20) << p->regNumber.toString()
+                  << std::setw(24) << name
+                  << std::setw(16) << role
+                  << std::setw(14) << (p->employmentType.empty() ? "-" : p->employmentType)
+                  << p->status << "\n";
     }
-    std::cout << "\n";
+    std::cout << "  " << all.size() << " Person(en)\n";
 }
 
 std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
@@ -697,10 +701,11 @@ void globalSearch(const std::string& query) {
         if (match(d->title) || match(d->documentId) || match(d->tags))
             hits.push_back({"DOK", d->documentId, d->title, "v"+d->version});
 
-    // WFI Workflow Instances
-    auto wfis = WorkflowEngine::searchInstances("", "", query, false);
+    // F77 Workflows (active)
+    auto wfis = F77_Workflow::loadActive();
     for (auto& w : wfis)
-        hits.push_back({"WFI", w->instanceId, w->name, w->status});
+        if (match(w->templateName) || match(w->workflowId))
+            hits.push_back({"F77", w->workflowId, w->templateName, w->status});
 
     if (hits.empty()) {
         std::cout << "  (keine Treffer für \"" << query << "\")\n\n";

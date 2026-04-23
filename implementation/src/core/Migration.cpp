@@ -41,9 +41,9 @@ std::map<std::string, int> MigrationEngine::targetVersionMap() {
     return {
         {"core",      SchemaVersions::core},
         {"f16",  SchemaVersions::f16},
+        {"f22",  SchemaVersions::f22},
         {"f77",  SchemaVersions::f77},
         {"dok",  SchemaVersions::dok},
-        {"tracking",  SchemaVersions::tracking},
         {"f18",       SchemaVersions::f18},
     };
 }

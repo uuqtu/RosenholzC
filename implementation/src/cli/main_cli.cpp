@@ -1,169 +1,456 @@
 // ============================================================
-// main_cli.cpp  —  Rosenholz PM Hauptmenü
+// main_cli.cpp  —  Rosenholz PM  Unix-style CLI — Einstiegspunkt
 //
-// Entry: run()
-// Alle Entitätszugänge über Projekte (F16) — kein Standalone-Dokument.
+// This file contains only:
+//   printHelp()  — full usage text
+//   dispatch()   — routes the command to the right cli_*.cpp module
+//   main()       — arg parsing, AppController bootstrap, shutdown
+//
+// All command implementations live in:
+//   cli_f16.cpp  cli_f22.cpp  cli_f18.cpp  cli_dok.cpp
+//   cli_f77.cpp  cli_per.cpp  cli_de.cpp
+//   cli_sys.cpp  cli_comm.cpp cli_utils.cpp
 // ============================================================
 #include "cli_common.h"
 #include "../app/AppController.h"
 #include "../core/Config.h"
 #include "../core/Logger.h"
-#include "../core/Database.h"
-#include "../core/FileOps.h"
-#include "../core/BackupManager.h"
-#include "../model/f16/ProjectF16.h"
-#include "../model/Person.h"
 #include <iostream>
-#include <iomanip>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <cstring>
+#include <csignal>
+#include <signal.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
-namespace CLI {
+using namespace Rosenholz;
 
-void run() {
-    std::cout << "\n"
-              << "  ╔══════════════════════════════════════╗\n"
-              << "  ║   Rosenholz PM — Interaktive Shell   ║\n"
-              << "  ╚══════════════════════════════════════╝\n\n";
+// ── printHelp ─────────────────────────────────────────────────
+//
+// Full usage reference. Printed when no command is given or
+// when -h / --help is requested. Does not initialise the DB.
 
-    while (true) {
-        hdr("HAUPTMENÜ");
-        std::cout
-            << "  PROJEKTE (F16)\n"
-            << "    1.  Alle Projekte anzeigen\n"
-            << "    2.  Neues Projekt anlegen\n"
-            << "    3.  Projekt öffnen (nach Nummer)\n"
-            << "    4.  Projekt öffnen (nach ID)\n"
-            << "\n  PERSONEN & TEAMS\n"
-            << "    5.  Alle Personen anzeigen\n"
-            << "    6.  Neue Person anlegen\n"
-            << "    7.  Diensteinheiten (Teams)\n"
-            << "\n  WORKFLOWS\n"
-            << "    8.  Workflow-Browser\n"
-            << "\n  SYSTEM\n"
-            << "    9.  Backup jetzt ausführen\n"
-            << "   10.  Konfiguration / Status\n"
-            << "   11.  ID-Kurzzeichentabelle\n"
-            << "   12.  Log-Verbosity setzen\n"
-            << "   13.  Globale Suche\n"
-            << "\n    0.  Beenden\n";
-        hr();
-
-        int ch = readInt("Wahl", 0, 13);
-        if (ch == 0) { std::cout << "\n  Auf Wiedersehen.\n\n"; break; }
-
-        if (ch == 1) {
-            listProjects();
-
-        } else if (ch == 2) {
-            auto p = createProjectWizard();
-            if (p) {
-                std::cout << "  Projekt jetzt öffnen? (j/n): ";
-                std::string yn; std::getline(std::cin, yn);
-                if (yn=="j"||yn=="J"||yn=="y") projectMenu(p);
-            }
-
-        } else if (ch == 3) {
-            auto all = Rosenholz::ProjectF16::loadAll();
-            if (all.empty()) { std::cout << "  (keine Projekte)\n"; continue; }
-            int n=1;
-            for (auto& p : all)
-                std::cout << "  " << std::setw(3) << n++ << ". " << p->regNumber.toString()
-                          << "  " << p->title.substr(0,40)
-                          << "  [" << p->status << "]\n";
-            int pick = readInt("Nummer",1,(int)all.size());
-            projectMenu(all[pick-1]);
-
-        } else if (ch == 4) {
-            std::string id = readLine("Projekt-ID: ");
-            auto p = Rosenholz::ProjectF16::loadById(id);
-            if (!p) { std::cout << "  >> Nicht gefunden.\n"; continue; }
-            projectMenu(p);
-
-        } else if (ch == 5) {
-            listPersons();
-
-        } else if (ch == 6) {
-            createPersonWizard();
-
-        } else if (ch == 7) {
-            teamMenu();
-
-        } else if (ch == 8) {
-            workflowMenu();
-
-        } else if (ch == 9) {
-            std::cout << "  Backup läuft...\n";
-            auto& cfg = Rosenholz::Config::instance();
-            Rosenholz::BackupManager::backupDatabases(cfg.basePath(), cfg.backup().backupPath, false);
-            std::cout << "  >> Backup abgeschlossen.\n";
-
-        } else if (ch == 10) {
-            auto& cfg = Rosenholz::Config::instance();
-            hdr("KONFIGURATION");
-            std::cout << "  Basispfad : " << cfg.basePath() << "\n";
-            auto* prdb = Rosenholz::DatabasePool::instance().get("f16");
-            auto* wfdb = Rosenholz::DatabasePool::instance().get("f77");
-            auto* ddb  = Rosenholz::DatabasePool::instance().get("dok");
-            if (prdb) std::cout << "  Projekte  : " << prdb->rowCount("projects")
-                                << " F16, " << prdb->rowCount("tasks") << " F22\n";
-            if (wfdb) std::cout << "  Workflows : " << wfdb->rowCount("workflow_instances") << " WFI, "
-                                << wfdb->rowCount("workflow_actions") << " WFA\n";
-            if (ddb)  std::cout << "  Dokumente : " << ddb->rowCount("documents") << "\n";
-
-        } else if (ch == 11) {
-            hdr("ID-KURZZEICHEN");
-            std::cout << "  F16  = Projekt (Vorgang)\n"
-                      << "  F22  = Aufgabe (Task)\n"
-                      << "  F18  = Vorgang (Incident/Risk/Measure/...)\n"
-                      << "  DOK  = Dokument\n"
-                      << "  WFI  = Workflow-Instanz\n"
-                      << "  WFA  = Workflow-Aktion (Schritt)\n"
-                      << "  WFS  = F18-Workflow-Schritt\n"
-                      << "  PER  = Person\n"
-                      << "  TEA  = Diensteinheit (Team)\n";
-
-        } else if (ch == 12) {
-            std::cout << "  1.DEBUG  2.INFO  3.WARN  4.ERROR\n";
-            int lv = readInt("Level",1,4);
-            static const Rosenholz::LogLevel lvls[] = {
-                Rosenholz::LogLevel::DEBUG, Rosenholz::LogLevel::INFO,
-                Rosenholz::LogLevel::WARN,  Rosenholz::LogLevel::ERR};
-            Rosenholz::Logger::instance().setLevel(lvls[lv-1]);
-            std::cout << "  >> Log-Level gesetzt.\n";
-
-        } else if (ch == 13) {
-            std::string q = readLine("Suche: ");
-            if (!q.empty()) globalSearch(q);
-        }
-    }
+static void printHelp() {
+    std::cout <<
+"Rosenholz PM  —  Registratur-Projektverwaltung\n"
+"Verwendung:  rh BEFEHL [ARGUMENTE...]\n"
+"\n"
+"INTERAKTIVE SHELL\n"
+"  rh                            Interaktive Shell starten (rh>-Prompt)\n"
+"  rh> BEFEHL [ARGS]             Befehl eingeben wie auf der Kommandozeile\n"
+"  rh> exit                      Shell beenden\n"
+"\n"
+"PROJEKT (F16)\n"
+"  rh -f16                       Alle Projekte auflisten (REG-NR/TITEL/STATUS/PHASE/PRIO/CPI)\n"
+"  rh -f16 -n                    Guided Wizard: neues Projekt anlegen\n"
+"  rh -f16 <id>                  Projektmenü öffnen\n"
+"  rh -f16 -s <suche>            Suche nach Titel oder Registriernummer\n"
+"  rh -f16 -status <status>      Filter: in_work | released | locked | closed\n"
+"\n"
+"AUFGABE (F22)\n"
+"  rh -f22                       Letzte 20 Aufgaben auflisten (REG-NR/TITEL/STATUS/%/PRIO/ASSIGNEE)\n"
+"  rh -f22 -n                    Guided Wizard: F16 wählen, dann Aufgabe anlegen\n"
+"  rh -f22 <projekt-id>          Alle Aufgaben dieses Projekts auflisten\n"
+"  rh -f22 <aufgabe-id>          Aufgabenmenü öffnen\n"
+"\n"
+"OPERATION (F18)\n"
+"  rh -f18                       Letzte 20 F18-Operationen auflisten (ID/TYP/STATUS/TITEL)\n"
+"  rh -f18 -n                    Guided Wizard: F16/F22 wählen, dann F18 anlegen\n"
+"  rh -f18 <projekt-id>          F18-Browser für dieses Projekt öffnen\n"
+"  rh -f18 <projekt-id> -t <typ> F18-Operation mit Typ anlegen:\n"
+"                                  incident | risk | measure | qualityGate |\n"
+"                                  changeRequest | decisionLog | lessonsLearned |\n"
+"                                  assumptionConstraint | communicationPlan |\n"
+"                                  changeObject | generic\n"
+"  rh -f18 <f18-id>              F18-Menü öffnen\n"
+"\n"
+"DOKUMENT (DOK)\n"
+"  rh -dok                       Letzte 20 Dokumente auflisten (DOK-ID/STATUS/VERSION/TITEL)\n"
+"  rh -dok -n                    Guided Wizard: Entitätstyp wählen (F16|F22|F18), dann anlegen\n"
+"  rh -dok -f16                  Guided: Projekt aus Liste wählen, dann Dokument anlegen\n"
+"  rh -dok -f22                  Guided: Projekt → Aufgabe wählen, dann Dokument anlegen\n"
+"  rh -dok -f18                  Guided: F18-Operation aus Liste wählen, dann anlegen\n"
+"  rh -dok <projekt-id>          Dokumenten-Browser für dieses Projekt öffnen\n"
+"  rh -dok <dok-id>              Dokumentenmenü öffnen\n"
+"\n"
+"WORKFLOW (F77)\n"
+"  rh -f77                       Alle aktiven Workflows auflisten (ID/VORLAGE/TYP/ZIEL)\n"
+"  rh -f77 -tpl                  Alle Vorlagen auflisten\n"
+"  rh -f77 -new                  Neue Vorlage anlegen (Assistent)\n"
+"  rh -f77 -start <entität-id>   Workflow auf Entität starten (Typ auto-erkannt)\n"
+"                                  Zielzustand: released (Default)\n"
+"  rh -f77 -start <id> <zustand> Workflow mit vorgegebenem Zielzustand starten\n"
+"  rh -f77 <workflow-id>         Workflow-Menü öffnen:\n"
+"                                  1.Schritt ausführen  2.Validieren  3.Tick\n"
+"                                  4.Sperren            5.Zielzustand ändern\n"
+"\n"
+"PERSON\n"
+"  rh -per                       Alle Personen auflisten (REG-NR/NAME/ROLLE/TYP/STATUS)\n"
+"  rh -per -n                    Guided Wizard: neue Person anlegen\n"
+"  rh -per -s <suche>            Personensuche nach Name\n"
+"  rh -per <id>                  Personen-Detailkarte anzeigen\n"
+"\n"
+"DIENSTEINHEIT (DE)\n"
+"  rh -de                        Diensteinheiten-Browser öffnen\n"
+"\n"
+"SYSTEM\n"
+"  rh -search <suche>            Globale Suche: F16, F22, F18, DOK, F77\n"
+"                                  Ergebnisse nummeriert — Nummer eingeben zum Öffnen\n"
+"  rh -backup                    Vollständiges Backup (Datenbanken + MFS)\n"
+"  rh -status                    Systemstatus: Datensatz-Zählungen je Pool\n"
+"  rh -mfs                       MFS-Baum vollständig aus DB neu aufbauen\n"
+"                                  (F16, F22, F18, DOK, F77, Personen, Teams)\n"
+"  rh -mfs <id>                  MFS-Dateien für eine einzelne Entität schreiben\n"
+"                                  (Auto-Erkennung: F16 | F22 | F18 | DOK | F77)\n"
+"  rh -log <level>               Log-Verbosität: debug | info | warn | error\n"
+"  rh -h, --help                 Hilfe anzeigen (ohne Datenbankinitialisierung)\n"
+"\n"
+"GLOBALE FLAGS (vor dem Befehl)\n"
+"  -s <settings.json>            Alternative Einstellungsdatei verwenden\n"
+"  -b <basispfad>                Basispfad für Datenhaltung überschreiben\n"
+"\n"
+"IDs haben das Format XV/F16/0001/2026 und enthalten immer /.\n"
+"Argumente mit / werden als IDs interpretiert.\n"
+"Guided-Assistenten (-n, -f16, -f22, -f18) zeigen zuerst eine Auswahlliste.\n";
 }
 
-} // namespace CLI
 
-// ── Entry point ───────────────────────────────────────────────
-int main(int argc, char** argv) {
-    std::string settingsPath = "settings.json";
-    std::string rhFile;
-    for (int i = 1; i < argc; ++i) {
-        std::string a(argv[i]);
-        if ((a == "--settings" || a == "-s") && i+1 < argc)
-            settingsPath = argv[++i];
-        else if ((a == "--basepath" || a == "-b") && i+1 < argc) {
-            // Override basepath via environment for quick testing
-            setenv("RH_BASEPATH", argv[++i], 1);
-        } else if (a.size() > 3 && a.substr(a.size()-3) == ".rh")
-            rhFile = a;
+// Forward declaration so runShell can call dispatch
+static void dispatch(const std::string& cmd, const std::vector<std::string>& rest);
+
+// ── SIGINT handler ────────────────────────────────────────────
+// Ctrl+C during a wizard or menu: abort the current input/prompt
+// and return to the rh> shell prompt. Does NOT exit the process.
+static void sigintHandler(int) {
+    CLI::cliMarkInterrupted();
+    // Tell readline to abandon the current line cleanly
+    rl_done = 1;
+    std::cout << "\n  (Ctrl+C — zurück zur rh>-Shell)\n";
+}
+
+// ── Tab-completion ─────────────────────────────────────────────
+//
+// Context-aware: completes command tokens at the start of the line,
+// and entity IDs when after a command that takes an <id> argument.
+//
+// Completion mapping:
+//   First token     → command tokens (-f16, -f22, …)
+//   -f16  <id>      → all F16 registration numbers
+//   -f22  <id>      → F16 reg-nrs + recent F22 reg-nrs
+//   -f18  <id>      → F16 reg-nrs + recent F18 vorgang-IDs
+//   -dok  <id>      → F16 reg-nrs + recent DOK document-IDs
+//   -f77  <id>      → active F77 workflow-IDs
+//   -f77  -start <id> → F16 + F22 + F18 + DOK ids
+//   -per  <id>      → all Person reg-nrs
+//   -mfs  <id>      → all entity types
+//   -search <text>  → no completion (free text)
+
+static const char* const kCommands[] = {
+    "-f16", "-f22", "-f18", "-dok", "-f77",
+    "-per", "-de",  "-search", "-backup", "-status",
+    "-mfs", "-log", "-h", "--help",
+    "exit", "quit", "help",
+    nullptr
+};
+
+// Holds the candidate list between generator calls within one Tab press
+static std::vector<std::string> g_candidates;
+
+static char* candidateGenerator(const char* text, int state) {
+    static std::size_t idx;
+    static std::size_t len;
+    if (state == 0) { idx = 0; len = std::strlen(text); }
+    while (idx < g_candidates.size()) {
+        const std::string& s = g_candidates[idx++];
+        if (s.compare(0, len, text) == 0)
+            return strdup(s.c_str());
+    }
+    return nullptr;
+}
+
+// Parse the tokens already on the readline line buffer (before cursor)
+static std::vector<std::string> currentLineTokens() {
+    std::vector<std::string> tokens;
+    if (!rl_line_buffer) return tokens;
+    std::istringstream ss(std::string(rl_line_buffer, rl_point));
+    std::string t;
+    while (ss >> t) tokens.push_back(t);
+    return tokens;
+}
+
+static char** rhCompletion(const char* text, int /*start*/, int /*end*/) {
+    rl_attempted_completion_over = 1;   // no fallback to filename completion
+    g_candidates.clear();
+
+    auto tokens = currentLineTokens();
+
+    // ── First token: complete command names ───────────────────
+    if (tokens.empty() || (tokens.size() == 1 && !tokens[0].empty() &&
+                            rl_line_buffer[rl_point - 1] != ' ')) {
+        for (int i = 0; kCommands[i]; ++i)
+            g_candidates.push_back(kCommands[i]);
+        return rl_completion_matches(text, candidateGenerator);
     }
 
-    // Bootstrap application
-    bool ok = Rosenholz::AppController::instance()
-                  .init(settingsPath, rhFile, Rosenholz::AppMode::CLI);
-    if (!ok) {
-        std::cerr << "ERROR: AppController init failed.\n";
+    // ── After a command: complete entity IDs ─────────────────
+    // Determine which command is active
+    std::string cmd = tokens.empty() ? "" : tokens[0];
+
+    // Helper: add F16 reg-nrs
+    auto addF16 = [&]() {
+        try {
+            auto all = Rosenholz::ProjectF16::loadAll();
+            for (auto& p : all) g_candidates.push_back(p->regNumber.toString());
+        } catch (...) {}
+    };
+    // Helper: add recent F22 reg-nrs
+    auto addF22 = [&]() {
+        try {
+            auto all = Rosenholz::TaskF22::loadRecent(50);
+            for (auto& t : all) g_candidates.push_back(t->regNumber.toString());
+        } catch (...) {}
+    };
+    // Helper: add recent F18 ids
+    auto addF18 = [&]() {
+        try {
+            auto all = Rosenholz::F18Operation::loadRecent(50);
+            for (auto& v : all) g_candidates.push_back(v->vorgangId);
+        } catch (...) {}
+    };
+    // Helper: add recent DOK ids
+    auto addDok = [&]() {
+        try {
+            auto all = Rosenholz::Document::loadRecent(50);
+            for (auto& d : all) g_candidates.push_back(d->documentId);
+        } catch (...) {}
+    };
+    // Helper: add active F77 workflow ids
+    auto addF77 = [&]() {
+        try {
+            auto all = Rosenholz::F77_Workflow::loadActive();
+            for (auto& w : all) g_candidates.push_back(w->workflowId);
+        } catch (...) {}
+    };
+    // Helper: add person reg-nrs
+    auto addPer = [&]() {
+        try {
+            auto all = Rosenholz::Person::loadAll();
+            for (auto& p : all) g_candidates.push_back(p->regNumber.toString());
+        } catch (...) {}
+    };
+
+    if (cmd == "-f16") {
+        addF16();
+        // Also sub-flags
+        g_candidates.insert(g_candidates.end(), {"-n", "-s", "-status"});
+    } else if (cmd == "-f22") {
+        addF16();   // project-id to list/create under
+        addF22();   // task-id to open menu
+        g_candidates.insert(g_candidates.end(), {"-n"});
+    } else if (cmd == "-f18") {
+        addF16();
+        addF18();
+        g_candidates.insert(g_candidates.end(), {"-n", "-t"});
+    } else if (cmd == "-dok") {
+        addF16();
+        addDok();
+        g_candidates.insert(g_candidates.end(), {"-n", "-f16", "-f22", "-f18"});
+    } else if (cmd == "-f77") {
+        if (tokens.size() >= 2 && tokens[1] == "-start") {
+            // -f77 -start <any-entity-id>
+            addF16(); addF22(); addF18(); addDok();
+        } else {
+            addF77();
+            g_candidates.insert(g_candidates.end(), {"-tpl", "-new", "-start"});
+        }
+    } else if (cmd == "-per") {
+        addPer();
+        g_candidates.insert(g_candidates.end(), {"-n", "-s"});
+    } else if (cmd == "-mfs") {
+        addF16(); addF22(); addF18(); addDok(); addF77();
+    } else if (cmd == "-log") {
+        g_candidates = {"debug", "info", "warn", "error"};
+    }
+
+    if (g_candidates.empty()) return nullptr;
+    return rl_completion_matches(text, candidateGenerator);
+}
+
+// ── runShell ──────────────────────────────────────────────────
+//
+// Interactive command shell. Launched when rh is run without arguments.
+//
+// Features:
+//   Tab        — completes command tokens (-f16, -f22, …)
+//   Arrow keys — navigate command history
+//   Ctrl+C     — aborts the current wizard / menu, returns to rh> prompt
+//   Ctrl+D     — exits the shell (EOF)
+//   exit/quit  — exits the shell
+
+static void runShell() {
+    // Register Ctrl+C handler — abort current activity, stay in shell
+    struct sigaction sa{};
+    sa.sa_handler = sigintHandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;                    // no SA_RESTART so getline is interrupted
+    sigaction(SIGINT, &sa, nullptr);
+
+    // Configure readline
+    rl_attempted_completion_function = rhCompletion;
+    rl_bind_key('\t', rl_complete);
+
+    using_history();
+
+    std::cout << "\n"
+              << "  Rosenholz PM  —  Interaktive Shell\n"
+              << "  Tab=Vervollständigung  ↑↓=Verlauf  Ctrl+C=Abbruch  Ctrl+D=Beenden\n"
+              << "  Beispiel:  -f16        -f22 -n        -h        exit\n"
+              << "\n";
+
+    while (true) {
+        CLI::cliClearInterrupted();
+
+        char* raw = readline("  rh> ");
+        if (!raw) {
+            // EOF (Ctrl+D)
+            std::cout << "\n  Auf Wiedersehen.\n\n";
+            break;
+        }
+
+        std::string line(raw);
+        free(raw);
+
+        // Skip empty lines and Ctrl+C leftovers
+        if (line.empty()) continue;
+
+        // Add to history
+        add_history(line.c_str());
+
+        // Tokenise
+        std::vector<std::string> tokens;
+        std::istringstream ss(line);
+        std::string tok;
+        while (ss >> tok) tokens.push_back(tok);
+        if (tokens.empty()) continue;
+
+        // Exit keywords
+        if (tokens[0] == "exit" || tokens[0] == "quit" || tokens[0] == "q") {
+            std::cout << "  Auf Wiedersehen.\n\n";
+            break;
+        }
+
+        // Help shortcut
+        if (tokens[0] == "help" || tokens[0] == "h") { printHelp(); continue; }
+
+        // Dispatch
+        std::string cmd = tokens[0];
+        std::vector<std::string> rest(tokens.begin() + 1, tokens.end());
+        dispatch(cmd, rest);
+
+        // If a wizard was aborted with Ctrl+C, the flag is set — clear it
+        // so the next command starts fresh.
+        if (CLI::cliIsInterrupted()) {
+            CLI::cliClearInterrupted();
+            std::cout << "\n";
+        }
+    }
+
+    // Restore default SIGINT so the process can be killed normally afterwards
+    signal(SIGINT, SIG_DFL);
+}
+
+// ── dispatch ──────────────────────────────────────────────────
+//
+// Routes the command string to the correct module function.
+// All cmd* functions are declared in cli_common.h and defined
+// in their respective cli_*.cpp files.
+
+static void dispatch(const std::string& cmd, const std::vector<std::string>& rest) {
+    if (cmd == "-f16")              { CLI::cmdF16(rest);           return; }
+    if (cmd == "-f22")              { CLI::cmdF22(rest);           return; }
+    if (cmd == "-f18")              { CLI::cmdF18(rest);           return; }
+    if (cmd == "-dok")              { CLI::cmdDok(rest);           return; }
+    if (cmd == "-f77")              { CLI::cmdF77(rest);           return; }
+    if (cmd == "-per")              { CLI::cmdPer(rest);           return; }
+    if (cmd == "-de")               { CLI::cmdDe(rest);            return; }
+    if (cmd == "-status")           { CLI::cmdStatus();            return; }
+    if (cmd == "-backup")           { CLI::cmdBackup();            return; }
+    if (cmd == "-mfs")              { CLI::cmdMfs(rest);           return; }
+    if (cmd == "-h" || cmd == "--help") { printHelp();             return; }
+    if (cmd == "-log") {
+        if (rest.empty()) CLI::die("-log benoetigt einen Level: debug|info|warn|error");
+        CLI::cmdLog(rest[0]);
+        return;
+    }
+    if (cmd == "-search") {
+        std::string q;
+        for (auto& r : rest) {
+            if (!q.empty()) q += " ";
+            q += r;
+        }
+        CLI::cmdSearch(q);
+        return;
+    }
+
+    CLI::die("Unbekannter Befehl: " + cmd + "\n  Starte 'rh -h' fuer die vollstaendige Hilfe.");
+}
+
+// ── main ──────────────────────────────────────────────────────
+//
+// Argument parsing:
+//   1. Global flags (-s settings, -b basepath) must appear BEFORE
+//      the command. As soon as the first command token is seen,
+//      global pre-scanning stops and all remaining args are passed
+//      verbatim to the command handler as 'rest'.
+//   2. No command → printHelp without DB init.
+//   3. -h / --help → printHelp without DB init.
+//   4. All other commands → init AppController, dispatch, shutdown.
+
+int main(int argc, char** argv) {
+    std::string settingsPath = "settings.json";
+    std::vector<std::string> positional;
+    bool commandSeen = false;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string a(argv[i]);
+
+        if (!commandSeen && (a == "-s" || a == "--settings") && i + 1 < argc) {
+            settingsPath = argv[++i];
+        } else if (!commandSeen && (a == "-b" || a == "--basepath") && i + 1 < argc) {
+            setenv("RH_BASEPATH", argv[++i], 1);
+        } else {
+            positional.push_back(a);
+            if (!commandSeen && !a.empty()) commandSeen = true;
+        }
+    }
+
+    // -h / --help: print help without initialising the DB
+    if (!positional.empty()
+        && (positional[0] == "-h" || positional[0] == "--help")) {
+        printHelp();
+        return 0;
+    }
+
+    // Initialise the application (databases, LMDB, config)
+    bool initOk = AppController::instance().init(settingsPath, "", AppMode::CLI);
+    if (!initOk) {
+        std::cerr << "rh: AppController-Initialisierung fehlgeschlagen.\n";
         return 1;
     }
 
-    CLI::run();
+    // No command → interactive shell (useful in CLion debugger and bare invocation)
+    if (positional.empty()) {
+        runShell();
+        AppController::instance().shutdown();
+        return 0;
+    }
 
-    Rosenholz::AppController::instance().shutdown();
+    std::string cmd = positional[0];
+    std::vector<std::string> rest(positional.begin() + 1, positional.end());
+    dispatch(cmd, rest);
+
+    AppController::instance().shutdown();
     return 0;
 }

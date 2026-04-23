@@ -253,9 +253,9 @@ bool DatabasePool::initAll(const std::string& basePath, bool walMode, int cacheS
     const std::vector<DBDef> defs = {
         {"core",      "core.db"},
         {"f16",       "f16.db"},
+        {"f22",       "f22.db"},
         {"f77",       "f77.db"},
         {"dok",       "dok.db"},
-        {"tracking",  "tracking.db"},
         {"f18",       "f18.db"},
     };
 

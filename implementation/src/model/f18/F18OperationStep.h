@@ -38,6 +38,10 @@ public:
     // ── Bookend flags ─────────────────────────────────────────
     bool        isInitialize        { false };
     bool        isFinal             { false };
+    // isFree: free steps have no predecessor dependencies.
+    // canStart() always returns true for free steps regardless of
+    // other steps' states, and any status transition is always allowed.
+    bool        isFree              { false };
 
     // ── Assignment ────────────────────────────────────────────
     std::string assignedTo;
@@ -50,12 +54,16 @@ public:
 
     // ── Status & result ───────────────────────────────────────
     std::string status  { "pending" };
-    // pending|in_progress|approved|rejected|skipped|cancelled
+    // Lifecycle: pending → in_progress → waiting → blocked → skipped → done
+    // Terminal states: done, skipped
+    // waiting: blocked on external input (not predecessor steps)
+    // blocked: blocked by predecessor steps or hard constraint
     bool        autoApprove         { false };
     bool        requiresComment     { false };
     bool        requiresDocument    { false };
-    std::string decision;
-    std::string decisionBy;
+    // Outcome fields: populated when step transitions to done or skipped
+    std::string decision;        // why done/skipped
+    std::string decisionBy;      // person who set the terminal state
     std::string decisionDate;
     std::string comment;
 
@@ -81,7 +89,9 @@ public:
 
     // ── State predicates ──────────────────────────────────────
     bool isComplete() const {
-        return status == "approved" || status == "rejected" || status == "skipped";
+        // A step is complete when it reached a terminal state.
+        // waiting and blocked are NOT terminal — the step can resume.
+        return status == "done" || status == "skipped";
     }
 
     // ------------------------------

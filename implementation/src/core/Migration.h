@@ -30,9 +30,9 @@ namespace Rosenholz {
 struct SchemaVersions {
     static constexpr int core      = 2;  // v2 baseline
     static constexpr int f16       = 2;  // v2 baseline
+    static constexpr int f22       = 1;  // v1 initial
     static constexpr int f77       = 2;  // v2 baseline
     static constexpr int dok       = 2;  // v2 baseline
-    static constexpr int tracking  = 2;  // v2 baseline
     static constexpr int f18       = 2;  // v2 baseline (unified F18 schema)
 };
 

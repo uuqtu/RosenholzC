@@ -56,59 +56,12 @@ CREATE TABLE IF NOT EXISTS entity_documents (
     linked_at   TEXT
 );
 
-CREATE TABLE IF NOT EXISTS communication_plans (
-    plan_id                TEXT PRIMARY KEY,
-    workflow_instance_id   TEXT,
-    workflow_status        TEXT,
-    workflow_current_state TEXT,
-    release_workflow_id       TEXT,
-    project_id             TEXT,
-    owner_id               TEXT,
-    version                TEXT DEFAULT '1.0',
-    created_date           TEXT,
-    approved_date          TEXT,
-    objectives             TEXT,
-    escalation_path        TEXT,
-    links                  TEXT,
-    notes                  TEXT
-);
-
-CREATE TABLE IF NOT EXISTS communication_items (
-    item_id              TEXT PRIMARY KEY,
-    plan_id              TEXT NOT NULL,
-    sender_id            TEXT,
-    audience             TEXT,
-    title                TEXT,
-    content_description  TEXT,
-    format               TEXT,
-    channel              TEXT,
-    frequency            TEXT,
-    next_due_date        TEXT,
-    last_sent_date       TEXT,
-    status               TEXT DEFAULT 'active',
-    links                TEXT,
-    notes                TEXT
-);
-
 CREATE INDEX IF NOT EXISTS idx_docs_project  ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_docs_task     ON documents(task_id);
 CREATE INDEX IF NOT EXISTS idx_ent_docs_key  ON entity_documents(entity_type, entity_id);
 
 -- ── Dokument-Versionen ─────────────────────────────────────────
 -- Jede gespeicherte Version eines Dokuments (vor Änderung)
-CREATE TABLE IF NOT EXISTS document_versions (
-    version_id      TEXT PRIMARY KEY,
-    document_id     TEXT NOT NULL REFERENCES documents(document_id),
-    version_number  TEXT NOT NULL,          -- z.B. "1.0", "1.1", "2.0"
-    file_path       TEXT,                   -- Pfad zur versionierten Datei
-    file_size       INTEGER DEFAULT 0,
-    file_hash       TEXT,                   -- SHA-256 Prüfsumme
-    created_by      TEXT,
-    change_note     TEXT,
-    created_at      TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_doc_versions ON document_versions(document_id, version_number);
 
 
 -- ── Document Revisions ───────────────────────────────────────

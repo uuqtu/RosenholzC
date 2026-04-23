@@ -116,12 +116,30 @@ public:
     std::vector<std::string> scopeIds;
 
 
+
+    // ── State predicates ──────────────────────────────────────
+    // These are the authoritative guards — the CLI and any other UI
+    // must rely on these, never re-implement the logic themselves.
+
+    /// True when the project has been released and is now immutable.
+    bool isReleased() const { return status == "released"; }
+
+    /// True when the project can still be edited (not yet released).
+    bool canEdit()       const { return !isReleased(); }
+
+    /// True when new child entities (F22, F18, DOK) may be added.
+    bool canAddChildren() const { return !isReleased(); }
+
+    // ── Guarded update ────────────────────────────────────────
+    /// update() refuses silently if the project is released.
+    /// Returns false and logs a warning if the project is immutable.
+    bool update();
+
     // ── CRUD ──────────────────────────────────────────────
     bool save() const;
     void ensureReleaseWorkflow();  ///< Creates Main WFI on first save
     bool load(const std::string& id);
     bool remove();
-    bool update();
 
     // ── Factory ───────────────────────────────────────────
     // ------------------------------

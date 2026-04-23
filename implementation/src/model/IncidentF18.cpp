@@ -9,6 +9,7 @@
 #include "Utils.h"
 #include "../core/Repository.h"
 #ifndef _WIN32
+#include <sys/stat.h>
 #endif
 #include "../core/RegNumber.h"
 #include "../core/FileOps.h"
@@ -16,6 +17,7 @@
 #include <ctime>
 #include <sstream>
 #include <iomanip>
+#include <random>
 
 using json = nlohmann::json;
 
@@ -47,7 +49,7 @@ std::shared_ptr<IncidentF18> IncidentF18::create(
 }
 
 bool IncidentF18::save() const {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     if (!db) { LOG_ERROR("IncidentF18::save — projects DB not available"); return false; }
 
     bool ok = db->exec(R"(
@@ -137,7 +139,7 @@ void IncidentF18::fromRow(const Row& r) {
 }
 
 bool IncidentF18::load(const std::string& id) {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM incidents WHERE incident_id=?;", {BindParam::text(id)});
     if (rows.empty()) { LOG_WARN("IncidentF18 not found: " + id); return false; }
@@ -147,7 +149,7 @@ bool IncidentF18::load(const std::string& id) {
 }
 
 bool IncidentF18::remove() {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     if (!db) return false;
     db->exec("DELETE FROM incident_quality WHERE incident_id=?;", {BindParam::text(incidentId)});
     db->exec("DELETE FROM incident_cost    WHERE incident_id=?;", {BindParam::text(incidentId)});
@@ -165,7 +167,7 @@ std::shared_ptr<IncidentF18> IncidentF18::loadById(const std::string& id) {
 }
 
 std::vector<std::shared_ptr<IncidentF18>> IncidentF18::loadForProject(const std::string& pid) {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     std::vector<std::shared_ptr<IncidentF18>> result;
     if (!db) return result;
     auto rows = db->query("SELECT * FROM incidents WHERE project_id=? ORDER BY reported_date DESC;",
@@ -179,7 +181,7 @@ std::vector<std::shared_ptr<IncidentF18>> IncidentF18::loadForProject(const std:
 }
 
 std::vector<std::shared_ptr<IncidentF18>> IncidentF18::loadOpenIncidents() {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     std::vector<std::shared_ptr<IncidentF18>> result;
     if (!db) return result;
     auto rows = db->query("SELECT * FROM incidents WHERE status='open' ORDER BY severity, reported_date;");
@@ -195,31 +197,31 @@ std::vector<std::shared_ptr<IncidentF18>> IncidentF18::loadOpenIncidents() {
 // ── QTCS ─────────────────────────────────────────────────────
 bool IncidentF18::addQuality(const std::string& id) {
     qualityIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     return db ? db->exec("INSERT OR IGNORE INTO incident_quality VALUES (?,?);",
         {BindParam::text(incidentId), BindParam::text(id)}) : false;
 }
 bool IncidentF18::addCost(const std::string& id) {
     costIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     return db ? db->exec("INSERT OR IGNORE INTO incident_cost VALUES (?,?);",
         {BindParam::text(incidentId), BindParam::text(id)}) : false;
 }
 bool IncidentF18::addTime(const std::string& id) {
     timeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     return db ? db->exec("INSERT OR IGNORE INTO incident_time VALUES (?,?);",
         {BindParam::text(incidentId), BindParam::text(id)}) : false;
 }
 bool IncidentF18::addScope(const std::string& id) {
     scopeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     return db ? db->exec("INSERT OR IGNORE INTO incident_scope VALUES (?,?);",
         {BindParam::text(incidentId), BindParam::text(id)}) : false;
 }
 
 void IncidentF18::loadQTCSLinks() {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     if (!db) return;
     auto loadIds = [&](const std::string& table, const std::string& col) {
         std::vector<std::string> ids;
@@ -234,6 +236,14 @@ void IncidentF18::loadQTCSLinks() {
     scopeIds   = loadIds("incident_scope",   "scope_id");
 }
 
+// ── Trackable ────────────────────────────────────────────────
+std::shared_ptr<TrackableItem> IncidentF18::addTrackable(
+    const std::string& title_, const std::string& createdBy_) {
+    auto t = TrackableItem::create("incident", incidentId, title_, createdBy_);
+    t->save();
+    trackables.push_back(t);
+    return t;
+}
 
 // ── Reassign ─────────────────────────────────────────────────
 bool IncidentF18::reassignOwner(const std::string& newOwnerId) {
@@ -275,25 +285,6 @@ std::shared_ptr<IncidentF18> IncidentF18::fromJson(const json& j) {
 // ── MFS output ───────────────────────────────────────────────
 bool IncidentF18::writeMFSFile(const std::string& mfsRoot) const {
     return MFSWriter::writeIncident(*this, mfsRoot);
-}
-
-// ------------------------------
-// loadRecent
-// Returns the n most recently created IncidentF18 records.
-// Parameters:
-//   n : maximum number of results (default 20)
-// ------------------------------
-std::vector<std::shared_ptr<IncidentF18>> IncidentF18::loadRecent(int n) {
-    std::vector<std::shared_ptr<IncidentF18>> result;
-    auto* db = DatabasePool::instance().get("f16");
-    if (!db) return result;
-    auto rows = db->query("SELECT * FROM incidents ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
-    for (auto& r : rows) {
-        auto obj = std::make_shared<IncidentF18>();
-        obj->fromRow(r);
-        result.push_back(obj);
-    }
-    return result;
 }
 
 } // namespace Rosenholz

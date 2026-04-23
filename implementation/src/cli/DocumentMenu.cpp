@@ -7,8 +7,9 @@
 //   State transitions are driven by the Main Workflow End step.
 // ============================================================
 #include "cli_common.h"
+#include "../workflow/F77Workflow.h"
 #include "../repository/DocumentRevision.h"
-#include "../workflow/WorkflowEngine.h"
+#include "../workflow/F77Workflow.h"
 #include "../mfs/MFSWriter.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
@@ -176,7 +177,7 @@ static void revisionMenu(std::shared_ptr<Document> doc) {
             }
             if (!doc->releaseWorkflowId.empty()) {
                 int blockers=0;
-                WorkflowEngine::canReleaseEntity("dok", doc->documentId, doc->releaseWorkflowId, blockers);
+                F77_Engine::canRelease("dok", doc->documentId, doc->releaseWorkflowId, blockers);
                 std::cout << "  Main WFI  : " << doc->releaseWorkflowId.substr(0,36) << "\n";
                 std::cout << (blockers>0
                     ? "  ⚠ " + std::to_string(blockers) + " offene Sub-WFI(s)\n"
@@ -256,7 +257,7 @@ void documentMenu(std::shared_ptr<Document> doc) {
             }
             if (!doc->releaseWorkflowId.empty()) {
                 int bl=0;
-                WorkflowEngine::canReleaseEntity("dok",doc->documentId,doc->releaseWorkflowId,bl);
+                F77_Engine::canRelease("dok",doc->documentId,doc->releaseWorkflowId,bl);
                 std::cout << "  Main WFI: " << doc->releaseWorkflowId.substr(0,36) << "\n"
                           << (bl>0 ? "  ⚠ "+std::to_string(bl)+" Sub-WFI(s) offen\n"
                                    : "  ✓ Freigabe möglich\n");

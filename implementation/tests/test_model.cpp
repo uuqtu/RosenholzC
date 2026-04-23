@@ -2,11 +2,13 @@
 // test_model.cpp  —  Model entity tests with fixtures
 // ============================================================
 #include "TestFramework.h"
+#include <fstream>
 #include "TestFixtures.h"
 #include "../src/repository/ArchiveStore.h"
 #include "../src/repository/DocumentRevision.h"
 #include "../src/model/Utils.h"
 #include "../src/model/f18/F18Operation.h"
+#include "../src/workflow/F77Workflow.h"
 #include "../src/model/f18/Communication.h"
 #include "../src/core/FileOps.h"
 
@@ -186,7 +188,7 @@ void testSuiteModel() {
         // MFS filing refusal tested in testSuiteMFS
     }
 
-    SECTION("Document — version snapshot and loadVersions");
+    SECTION("Document — version snapshot via DocumentRevision");
     {
         ProjectFixture pfix("Doc-Version-Test");
         auto doc = R::Document::create("Testdokument V1", "report", pfix.project->projectId);
@@ -204,19 +206,26 @@ void testSuiteModel() {
         CHECK(doc->fileSize > 0, "fileSize set");
         CHECK(!doc->fileHash.empty(), "fileHash computed");
 
-        // Snapshot version 1.0
-        bool snapped = doc->snapshotVersion("Initiale Version", "system-test");
-        CHECK(snapped, "snapshotVersion persists to DB");
+        // revise() creates the first revision (in_work)
+        auto rev1 = doc->revise("Initiale Version", "system-test");
+        CHECK(rev1 != nullptr, "revise() creates Revision 1");
 
-        // Bump to 1.1 and snapshot again
-        doc->version = "1.1";
-        Rosenholz::FileOps::writeTextFile(tmpPath, "Testinhalt Version 1.1\n");
-        doc->importLocalFile(tmpPath);
-        doc->snapshotVersion("Aktualisierung auf 1.1");
+        // While Rev 1 is still in_work, a second revise() must be refused
+        auto rev1b = doc->revise("Versuch zweiter Revision waehrend in_work");
+        CHECK(rev1b == nullptr, "revise() refused while active revision is in_work");
+
+        // Transition Rev 1 to pre_released so a new revision can be created
+        bool transitioned = rev1->transitionState(Rosenholz::DocRevState::PRE_RELEASED);
+        CHECK(transitioned, "Revision transitioniert zu pre_released");
+
+        // Now revise() must succeed — creates Rev 2 branching from Rev 1
+        auto rev2 = doc->revise("Aktualisierung auf 1.1");
+        CHECK(rev2 != nullptr, "revise() erlaubt nach Freigabe der Vorgaenger-Revision");
+        CHECK(rev2->rev == 2, "Rev 2 angelegt");
+        CHECK(rev2->parentRev == 1, "Rev 2 verzweigt von Rev 1");
 
         auto versions = doc->loadVersions();
-        CHECK(versions.size() >= 2, "At least 2 version snapshots");
-        // Clean up tmp
+        CHECK(!versions.empty(), "loadVersions gibt Revisions-Eintraege zurueck");
         Rosenholz::FileOps::deleteFile(tmpPath);
     }
 
@@ -342,23 +351,22 @@ void testSuiteModel() {
         ProjectFixture pfix("Comm-Test");
         using Comm = R::Communication;
 
-        // F16 (project)
-        auto c16 = Comm::create(pfix.project->projectId, "project", "Kick-off Meeting", "meeting");
+        // F16
+        auto c16 = Comm::create(pfix.project->projectId, "f16", "Kick-off Meeting", "meeting");
         CHECK(c16 != nullptr, "Communication for F16 created");
-        CHECK(c16->ownerType == "project", "ownerType=project");
+        CHECK(c16->ownerType == "f16", "ownerType=f16");
         c16->scheduledDate = "2026-06-01";
         c16->update();
 
-        // F22 (task)
-        // Create a task for the F22 communication test
+        // F22
         auto taskComm = R::TaskF22::create(pfix.project->projectId, "Comm-Task", "", "");
         taskComm->save();
-        auto c22 = Comm::create(taskComm->taskId, "task", "Sprint Review", "meeting");
+        auto c22 = Comm::create(taskComm->taskId, "f22", "Sprint Review", "meeting");
         CHECK(c22 != nullptr, "Communication for F22 created");
 
-        // loadForOwner — project
-        auto comms = Comm::loadForOwner(pfix.project->projectId, "project");
-        CHECK(!comms.empty(), "loadForOwner returns communications for project");
+        // loadForOwner — f16
+        auto comms = Comm::loadForOwner(pfix.project->projectId, "f16");
+        CHECK(!comms.empty(), "loadForOwner returns communications for f16");
 
         // complete()
         c16->complete("Meeting abgeschlossen", "Aktionsplan erstellt");
@@ -403,107 +411,100 @@ void testSuiteModel() {
     }
 
 
-    SECTION("Lifecycle — F16 gets Main WFI on creation");
+    SECTION("Lifecycle — F16 starts without WFI, startDefault creates one");
     {
         ProjectFixture pfix("Lifecycle-F16-Test");
         auto p = pfix.project;
-        p->ensureReleaseWorkflow();  // wizard calls this; test must call explicitly
-        CHECK(!p->releaseWorkflowId.empty(), "F16 has releaseWorkflowId after ensureReleaseWorkflow");
+        CHECK(p->releaseWorkflowId.empty(), "F16 starts with no workflow");
         CHECK(p->status == "in_work", "F16 status=in_work");
-        auto inst = R::WorkflowInstance::loadById(p->releaseWorkflowId);
-        CHECK(inst != nullptr, "Main WFI loadable");
-        if (inst) {
-            CHECK(inst->name.find("F77") != std::string::npos, "F77 WFI name contains F77");
-            CHECK(inst->entityType == "f16", "Main WFI entityType=project");
-            CHECK(inst->entityId == p->projectId, "Main WFI entityId=projectId");
+        // Explicitly start a workflow
+        auto wf = R::F77_Engine::startDefault("f16", p->projectId);
+        CHECK(wf != nullptr, "startDefault creates F77 workflow");
+        if (wf) {
+            CHECK(wf->entityType == "f16", "WF entityType=f16");
+            CHECK(wf->entityId == p->projectId, "WF entityId=projectId");
+            CHECK(wf->status == "active", "WF status=active");
         }
     }
 
-    SECTION("Lifecycle — F22 gets Main WFI on creation");
+    SECTION("Lifecycle — F22 starts without WFI, startDefault creates one");
     {
         ProjectFixture pfix("Lifecycle-F22-Test");
         auto task = R::TaskF22::create(pfix.project->projectId, "Lifecycle-Task", "", "");
         task->save();
-        task->ensureReleaseWorkflow();
-        CHECK(!task->releaseWorkflowId.empty(), "F22 has releaseWorkflowId");
+        CHECK(task->releaseWorkflowId.empty(), "F22 starts with no workflow");
         CHECK(task->status == "in_work", "F22 status=in_work");
-        auto inst = R::WorkflowInstance::loadById(task->releaseWorkflowId);
-        CHECK(inst != nullptr, "F22 Main WFI loadable");
-        if (inst) CHECK(inst->entityType == "f22", "F22 Main WFI entityType=task");
+        auto wf = R::F77_Engine::startDefault("f22", task->taskId);
+        CHECK(wf != nullptr, "startDefault creates F77 workflow for F22");
+        if (wf) CHECK(wf->entityType == "f22", "WF entityType=f22");
     }
 
-    SECTION("Lifecycle — F18Operation gets Main WFI on creation");
+    SECTION("Lifecycle — F18Operation starts without WFI, startDefault creates one");
     {
         ProjectFixture pfix("Lifecycle-F18-Test");
-        // F18Operation::create calls ensureReleaseWorkflow() automatically
         auto v = R::F18Operation::create(pfix.project->projectId, "Lifecycle-Vorgang",
                                          R::F18OperationType::RISK);
         CHECK(v != nullptr, "F18Operation created");
-        CHECK(!v->releaseWorkflowId.empty(), "F18 has releaseWorkflowId (auto from create)");
-        CHECK(v->status == "in_work", "F18 status=in_work");
-        auto inst = R::WorkflowInstance::loadById(v->releaseWorkflowId);
-        CHECK(inst != nullptr, "F18 Main WFI loadable");
-        if (inst) CHECK(inst->entityType == "f18", "F18 Main WFI entityType=f18");
+        CHECK(v->releaseWorkflowId.empty(), "F18 starts with no workflow");
+        auto wf = R::F77_Engine::startDefault("f18", v->vorgangId);
+        CHECK(wf != nullptr, "startDefault creates F77 workflow for F18");
+        if (wf) CHECK(wf->entityType == "f18", "WF entityType=f18");
     }
 
-    SECTION("Lifecycle — canReleaseEntity blocks when WFIs open");
+    SECTION("Lifecycle — canRelease mit pending Mid-Schritt");
     {
+        // One workflow per entity. canRelease returns false while mid step is pending.
         ProjectFixture pfix("Release-Block-Test");
         auto p = pfix.project;
-        // Start an additional WFI on the project
-        auto extra = R::WorkflowEngine::startAdHoc("f16", p->projectId, "Extra-WF");
-        CHECK(extra != nullptr, "Extra WFI created");
-        // canReleaseEntity should report 1 blocker
+        auto mainWf = R::F77_Engine::startDefault("f16", p->projectId);
+        CHECK(mainWf != nullptr, "Workflow gestartet");
+        if (!mainWf) return;
+
+        // Second startDefault must be refused
+        auto refused = R::F77_Engine::startDefault("f16", p->projectId);
+        CHECK(refused == nullptr, "Zweiter Workflow korrekt verweigert");
+
+        // canRelease: mid step is pending -> blocked
         int blockers = 0;
-        bool canRelease = R::WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers);
-        CHECK(!canRelease, "canReleaseEntity=false with open extra WFI");
-        CHECK(blockers == 1, "1 blocker counted");
+        bool canRel = R::F77_Engine::canRelease("f16", p->projectId,
+                                                 mainWf->workflowId, blockers);
+        CHECK(!canRel, "canRelease=false solange Mid-Schritt pending");
     }
 
-    SECTION("Lifecycle — lockAllOpenWorkflows enables release");
+    SECTION("Lifecycle — lockAll (kein anderer Workflow)");
     {
+        // With one-workflow-per-entity: lockAll has nothing to lock besides the main workflow.
+        // canRelease returns true once the main workflow's steps are all complete.
         ProjectFixture pfix("Lock-Test");
         auto p = pfix.project;
-        p->ensureReleaseWorkflow();
+        auto mainWf = R::F77_Engine::startDefault("f16", p->projectId);
+        CHECK(mainWf != nullptr, "Workflow gestartet");
+        if (!mainWf) return;
 
-        // Start two WFIs with a mid-step so they stay "active" (don't auto-complete)
-        auto wf1 = R::WorkflowEngine::startAdHoc("f16", p->projectId, "Sub-WF-1");
-        auto wf2 = R::WorkflowEngine::startAdHoc("f16", p->projectId, "Sub-WF-2");
-        // Add mid-steps so End can't auto-approve (WFIs stay active)
-        if (wf1) {
-            std::string initId1;
-            for (auto& a : wf1->actions) if (a.isInitialize) initId1 = a.actionId;
-            R::WorkflowEngine::addAction(*wf1, "Pending-Step-1", "sequential", 1, initId1);
-        }
-        if (wf2) {
-            std::string initId2;
-            for (auto& a : wf2->actions) if (a.isInitialize) initId2 = a.actionId;
-            R::WorkflowEngine::addAction(*wf2, "Pending-Step-2", "sequential", 1, initId2);
-        }
-        // Both WFIs are now active with pending mid-steps
+        // lockAll: no other workflows → 0 locked
+        int locked = R::F77_Engine::lockAll("f16", p->projectId, mainWf->workflowId, true);
+        CHECK(locked == 0, "lockAll: kein anderer Workflow zu sperren");
+
+        // canRelease still false (mid step pending)
         int blockers = 0;
-        R::WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers);
-        CHECK(blockers == 2, "2 blockers before lock");
-        // Lock all open WFIs (requires explicit confirmation)
-        int locked = R::WorkflowEngine::lockAllOpenWorkflows("f16", p->projectId, p->releaseWorkflowId, true);
-        CHECK(locked == 2, "2 WFIs locked");
-        // Now canReleaseEntity should return true
-        int blockers2 = 0;
-        bool canNow = R::WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers2);
-        CHECK(canNow, "canReleaseEntity=true after locking all");
-        CHECK(blockers2 == 0, "0 blockers after lock");
+        bool canRel = R::F77_Engine::canRelease("f16", p->projectId, mainWf->workflowId, blockers);
+        CHECK(!canRel, "canRelease false solange Mid-Schritt nicht abgeschlossen");
     }
 
-    SECTION("Lifecycle — releaseEntity sets status=released");
+    SECTION("Lifecycle — applyTargetState sets status=released");
     {
         ProjectFixture pfix("Release-Test");
         auto p = pfix.project;
         CHECK(p->status == "in_work", "starts in_work");
-        bool ok = R::WorkflowEngine::releaseEntity("f16", p->projectId);
-        CHECK(ok, "releaseEntity succeeds");
+        auto wf = R::F77_Engine::startDefault("f16", p->projectId);
+        CHECK(wf != nullptr, "WF created");
+        if (!wf) return;
+        wf->targetState = "released";
+        bool ok = R::F77_Engine::applyTargetState(*wf);
+        CHECK(ok, "applyTargetState succeeds");
         auto reloaded = R::ProjectF16::loadById(p->projectId);
         CHECK(reloaded != nullptr, "reloaded after release");
-        CHECK(reloaded->status == "released", "status=released after releaseEntity");
+        CHECK(reloaded->status == "released", "status=released after applyTargetState");
     }
 
 
@@ -697,7 +698,7 @@ void testSuiteModel() {
         ProjectFixture pfix("DocRev-AutoCreate-Test");
         auto doc = R::Document::create("AutoRev-Doc", "spec", pfix.project->projectId);
         doc->save();
-        doc->ensureRevision1();
+        doc->revise("Revision 1 — Test");
         doc->ensureReleaseWorkflow();
 
         // Revision 1 must exist
@@ -714,7 +715,7 @@ void testSuiteModel() {
         if (cur) CHECK(cur->rev == 1, "currentRevision is Rev 1");
 
         // Calling ensureRevision1 again is idempotent
-        doc->ensureRevision1();
+        doc->revise("Revision 1 — Test");
         auto all = R::DocumentRevision::loadAllRevisions(doc->documentId);
         CHECK(all.size() == 1, "ensureRevision1 is idempotent — still 1 revision");
 
@@ -729,7 +730,7 @@ void testSuiteModel() {
         ProjectFixture pfix("DocState-Test");
         auto doc = R::Document::create("StateTest-Doc", "report", pfix.project->projectId);
         doc->save();
-        doc->ensureRevision1();
+        doc->revise("Revision 1 — Test");
 
         auto rev = R::DocumentRevision::currentRevision(doc->documentId);
         CHECK(rev != nullptr, "current revision exists");

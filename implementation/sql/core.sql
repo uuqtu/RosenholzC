@@ -107,22 +107,3 @@ CREATE TABLE IF NOT EXISTS reg_number_sequences (
     PRIMARY KEY (reg_dept, reg_year)
 );
 
-CREATE TABLE IF NOT EXISTS project_types (
-    type_code              TEXT PRIMARY KEY,
-    label                  TEXT NOT NULL,
-    rosenholz_equivalent   TEXT,
-    pm_equivalent          TEXT,
-    description            TEXT,
-    requires_au_archive    INTEGER DEFAULT 0,
-    default_methodology    TEXT,
-    default_workflow_def_id TEXT
-);
-
--- Pre-populate project types
-INSERT OR IGNORE INTO project_types VALUES
-  ('IM','IM-Vorgang','F16/IM','Ongoing contributor engagement','Inoffizieller Mitarbeiter file',0,'agile',NULL),
-  ('OV','Operativer Vorgang','F16/OV','Active investigation / audit','Full operational case',1,'waterfall',NULL),
-  ('OPK','Operative Personenkontrolle','F16/OPK','Due diligence / review','Person check file',0,'kanban',NULL),
-  ('GMS','GMS-Akte','F16/GMS','Advisory relationship','Gesellschaftlicher Mitarbeiter',0,'agile',NULL),
-  ('AU','Untersuchungsvorgang','F16/AU','Formal inquiry / closed case','Archived investigation',1,'waterfall',NULL),
-  ('SVG','Sicherungsvorgang','F16/SVG','Monitoring / watch brief','Security watch file',0,'kanban',NULL);

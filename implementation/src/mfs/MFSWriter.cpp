@@ -35,6 +35,7 @@
 #include "../model/f18/F18Operation.h"
 #include "../model/Person.h"
 #include "../model/Team.h"
+#include "../workflow/F77Workflow.h"
 #include "../model/Utils.h"
 
 #ifndef _WIN32
@@ -55,11 +56,6 @@ bool MFSWriter::ownerOnlyWrite(const std::string& path, const std::string& conte
     return ok;
 }
 
-// ── Config helpers ────────────────────────────────────────────
-static std::string deCode() {
-    const std::string& de = Config::instance().registratur().diensteinheitKuerzel;
-    return de.empty() ? "XX" : de;
-}
 
 // ── Entity folder helpers ─────────────────────────────────────
 static std::string f16Dir(const std::string& mfsRoot, const std::string& regNr) {
@@ -393,25 +389,51 @@ bool MFSWriter::writeF77(const std::string& wfiId,
 
 bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
     LOG_INFO("Rebuilding MFS tree at: " + mfsRoot);
-    // Create all four top-level type folders
-    for (auto& sub : {"F16","F22","F18","F77"})
+    for (auto& sub : {"F16","F22","F18","F77","DOK"})
         FileOps::makeDirs(FileOps::joinPath(mfsRoot, sub));
 
     // Reset owner key
     FileOps::deleteFile(FileOps::joinPath(mfsRoot, "owner_key.txt"));
 
     bool ok = true;
+    int nProj=0, nTask=0, nF18=0, nDok=0, nF77=0;
+
     auto projects = ProjectF16::loadAll();
-    LOG_INFO("Writing " + std::to_string(projects.size()) + " F16 entries");
     for (auto& p : projects) {
-        ok &= writeProject(*p, mfsRoot);
+        ok &= writeProject(*p, mfsRoot); ++nProj;
+
+        // Tasks (F22) — filed under F22/<reg>/
         auto tasks = TaskF22::loadForProject(p->projectId);
-        for (auto& t : tasks) ok &= writeTask(*t, mfsRoot);
-        // F18 Vorgänge
+        for (auto& t : tasks) { ok &= writeTask(*t, mfsRoot); ++nTask; }
+
+        // F18 operations — filed under F18/<id>/
         auto f18s = F18Operation::loadForProject(p->projectId);
-        for (auto& v : f18s) ok &= writeF18(*v, mfsRoot);
+        for (auto& v : f18s) { ok &= writeF18(*v, mfsRoot); ++nF18; }
+
+        // Documents — filed under their parent entity folder
+        auto docs = Document::loadForProject(p->projectId);
+        for (auto& d : docs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
     }
-    LOG_INFO("MFS rebuild complete. OK=" + std::string(ok?"yes":"NO"));
+
+    // F77 active workflows — filed under F77/<id>/
+    auto wfs = F77_Workflow::loadActive();
+    for (auto& wf : wfs) {
+        ok &= writeF77(wf->workflowId, wf->entityType, wf->templateName, mfsRoot);
+        ++nF77;
+    }
+
+    // Persons and teams — only owner_key.txt entries
+    auto persons = Person::loadAll();
+    for (auto& p : persons) ok &= writePerson(*p, mfsRoot);
+    auto teams = Team::loadAll();
+    for (auto& t : teams) ok &= writeTeam(*t, mfsRoot);
+
+    LOG_INFO("MFS rebuild: F16=" + std::to_string(nProj)
+             + " F22=" + std::to_string(nTask)
+             + " F18=" + std::to_string(nF18)
+             + " DOK=" + std::to_string(nDok)
+             + " F77=" + std::to_string(nF77)
+             + " OK=" + std::string(ok?"yes":"NO"));
     return ok;
 }
 

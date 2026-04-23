@@ -92,7 +92,7 @@ set(MODEL_SOURCES
 )
 
 set(WORKFLOW_SOURCES
-    src/workflow/WorkflowEngine.cpp
+    src/workflow/F77Workflow.cpp
     src/repository/ArchiveStore.cpp
     src/repository/DocumentRevision.cpp
 )
@@ -134,13 +134,26 @@ endif()
 
 # ── CLI binary ────────────────────────────────────────────────
 # Gather all CLI source files
-file(GLOB CLI_SOURCES "src/cli/*.cpp")
+# CLI sources are listed explicitly — this prevents old/renamed files
+# from being compiled if they still exist in the directory.
+set(CLI_SOURCES
+    src/cli/main_cli.cpp
+    src/cli/cli_utils.cpp
+    src/cli/cli_f16.cpp
+    src/cli/cli_f22.cpp
+    src/cli/cli_f18.cpp
+    src/cli/cli_dok.cpp
+    src/cli/cli_f77.cpp
+    src/cli/cli_per.cpp
+    src/cli/cli_de.cpp
+    src/cli/cli_comm.cpp
+    src/cli/cli_sys.cpp
+)
 
 add_executable(rosenholz_cli
-    src/cli/main_cli.cpp
     ${CLI_SOURCES}
 )
-target_link_libraries(rosenholz_cli PRIVATE rosenholz_lib)
+target_link_libraries(rosenholz_cli PRIVATE rosenholz_lib readline)
 target_include_directories(rosenholz_cli PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}/generated

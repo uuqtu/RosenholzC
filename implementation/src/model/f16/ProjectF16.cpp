@@ -4,8 +4,9 @@
 
 #include "../../mfs/MFSWriter.h"
 #include "ProjectF16.h"
-#include "../../workflow/WorkflowEngine.h"
+#include "../../workflow/F77Workflow.h"
 #include "../../core/Database.h"
+#include "../../workflow/F77Workflow.h"
 #include "../../core/Logger.h"
 #include "../Utils.h"
 #include "../../core/Repository.h"
@@ -249,6 +250,10 @@ bool ProjectF16::remove() {
 }
 
 bool ProjectF16::update() {
+    if (isReleased()) {
+        LOG_WARN("[F16] update() verweigert: Projekt ist released — " + projectId);
+        return false;
+    }
     updatedAt = nowIso();
     return save();
 }
@@ -390,7 +395,7 @@ bool ProjectF16::reassignWorkflowInstance(const std::string& newInstanceId) {
 // ── Convert to Task ───────────────────────────────────────────
 std::string ProjectF16::convertToTask(const std::string& parentProjectId) {
     LOG_INFO("Converting ProjectF16 " + projectId + " -> Task under " + parentProjectId);
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("f22");
     if (!db) return "";
 
     std::string taskId = "f22_" + projectId;
@@ -484,16 +489,17 @@ std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadRecent(int n) {
 
 void ProjectF16::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
-    auto inst = Rosenholz::WorkflowEngine::createReleaseWorkflow("f16", projectId, title);
-    if (!inst) return;
-    releaseWorkflowId = inst->instanceId;
+    auto wf = Rosenholz::F77_Engine::startDefault("f16", projectId);
+    if (!wf) return;
+    releaseWorkflowId = wf->workflowId;
     status         = "in_work";
     auto* db = DatabasePool::instance().get("f16");
     if (db) db->exec(
         "UPDATE projects SET release_workflow_id=?, status='in_work', updated_at=? "
-        "WHERE project_id=?;",
-        {BindParam::text(releaseWorkflowId), BindParam::text(nowIso()),
-         BindParam::text(projectId)});
+            "WHERE project_id=?;",
+            {BindParam::text(releaseWorkflowId),
+             BindParam::text(nowIso()),
+             BindParam::text(projectId)});
     LOG_INFO("[F77] Main WFI ensured for F16: " + projectId +
              " wfi=" + releaseWorkflowId);
 }

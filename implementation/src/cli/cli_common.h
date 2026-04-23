@@ -1,7 +1,15 @@
 #pragma once
 // ============================================================
-// cli_common.h  —  Shared CLI utilities and forward declarations
+// cli_common.h  —  Shared declarations for all CLI modules
+//
+// Every cli_*.cpp includes this header. It provides:
+//   - All model and workflow includes
+//   - Input primitives (readLine, readInt, …)
+//   - Display primitives (hdr, hr, fval, fdate)
+//   - Helper predicates (isId)
+//   - Forward declarations for every public CLI function
 // ============================================================
+
 #include "../model/f16/ProjectF16.h"
 #include "../model/f22/TaskF22.h"
 #include "../model/dok/Document.h"
@@ -10,7 +18,7 @@
 #include "../model/f18/F18Operation.h"
 #include "../model/f18/F18OperationStep.h"
 #include "../model/f18/Communication.h"
-#include "../workflow/WorkflowEngine.h"
+#include "../workflow/F77Workflow.h"
 #include <string>
 #include <vector>
 #include <iostream>
@@ -19,77 +27,113 @@
 
 namespace CLI {
 
-// ── Input helpers (defined in Utilities.cpp) ──────────────
+// ── Input / output primitives (cli_utils.cpp) ─────────────────
 std::string readLine(const std::string& prompt);
 std::string readOpt(const std::string& prompt);
-int  readInt(const std::string& prompt, int lo, int hi);
-bool yesno(const std::string& prompt);
+int         readInt(const std::string& prompt, int lo, int hi);
+bool        yesno(const std::string& prompt);
 std::string fval(const std::string& v);
 std::string fdate(const std::string& d);
-void hdr(const std::string& title);
-void hr();
+void        hdr(const std::string& title);
+void        hr();
 
-// ── Forward menu declarations ──────────────────────────────
-void projectMenu(std::shared_ptr<Rosenholz::ProjectF16>);
-void taskMenu(std::shared_ptr<Rosenholz::TaskF22>);
-void documentMenu(std::shared_ptr<Rosenholz::Document>);
-void documentBrowserMenu(const std::string& projectId = "",
-                         const std::string& taskId    = "");
-void workflowMenu();
-void instanceMenu(const std::string& instanceId);
-void communicationMenu(const std::string& ownerId,
-                       const std::string& ownerType);
+// Returns true when s contains '/' — the marker of a genId/RegNumber string.
+bool isId(const std::string& s);
 
-std::shared_ptr<Rosenholz::Document> createDocumentWizard(
-    const std::string& projectId = "",
-    const std::string& taskId    = "");
-std::string startWfInstanceWizard(const std::string& entityType = "",
-                                   const std::string& entityId   = "");
-void listWfInstances(const std::string& entityType = "",
-                     const std::string& entityId   = "");
-void run();
+// Ctrl+C interrupt state — set by SIGINT handler, cleared by runShell after each command.
+void cliMarkInterrupted();
+void cliClearInterrupted();
+bool cliIsInterrupted();
 
-// Print/list helpers (defined in Utilities.cpp and PersonMenu.cpp)
-void printDocument(const Rosenholz::Document&);
-void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Document>>& docs, const std::string& title = "DOCUMENTS");
-void printPerson(const Rosenholz::Person&);
-void listPersons();
+// Print a one-line confirmation. Writes to stdout.
+void printOk(const std::string& msg);
+
+// Print error to stderr and exit(1).
+void die(const std::string& msg);
+
+// ── F16 project commands (cli_f16.cpp) ────────────────────────
+void cmdF16(const std::vector<std::string>& args);
 void listProjects();
-void printProject(const Rosenholz::ProjectF16&);
-std::shared_ptr<Rosenholz::Person>      createPersonWizard();
-std::shared_ptr<Rosenholz::ProjectF16>  createProjectWizard();
-std::shared_ptr<Rosenholz::TaskF22>     createTaskWizard(const std::string& projectId);
+void printProject(const Rosenholz::ProjectF16& p);
+void projectMenu(std::shared_ptr<Rosenholz::ProjectF16> p);
+std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard();
+
+// ── F22 task commands (cli_f22.cpp) ───────────────────────────
+void cmdF22(const std::vector<std::string>& args);
+void listTasks(const std::string& projectId);
+void printTask(const Rosenholz::TaskF22& t);
+void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t);
+std::shared_ptr<Rosenholz::TaskF22> createTaskWizard(const std::string& projectId);
+
+// Guided wizard: asks user to pick F16 from list, then creates F22.
+std::shared_ptr<Rosenholz::TaskF22> createTaskWizardGuided();
+
+// ── F18 operation commands (cli_f18.cpp) ──────────────────────
+void cmdF18(const std::vector<std::string>& args);
+void printF18Operation(const Rosenholz::F18Operation& v);
+void f18Menu(std::shared_ptr<Rosenholz::F18Operation> v);
+void f18BrowserMenu(const std::string& projectId = "",
+                    const std::string& taskId    = "",
+                    const std::string& typeFilter = "");
 std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& projectId,
     const std::string& taskId = "",
     const std::string& type   = "");
 
-// Additional shared display/list functions (defined in Utilities.cpp)
-void listTasks(const std::string& projectId);
-void printTask(const Rosenholz::TaskF22&);
+// Guided wizard: asks user to pick F16 (and optionally F22), then creates F18.
+std::shared_ptr<Rosenholz::F18Operation> createF18WizardGuided();
 
-// Global search across all entity categories
-void globalSearch(const std::string& query);
+// ── Document commands (cli_dok.cpp) ───────────────────────────
+void cmdDok(const std::vector<std::string>& args);
+void printDocument(const Rosenholz::Document& d);
+void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Document>>& docs,
+                   const std::string& title = "DOKUMENTE");
+void documentMenu(std::shared_ptr<Rosenholz::Document> doc);
+void documentBrowserMenu(const std::string& projectId = "",
+                         const std::string& taskId    = "");
 
-// Show last 20 items across all entity types (for link/attach dialogs)
-void showRecentItems(const std::string& filter = "");
+// Create document with known parent.
+std::shared_ptr<Rosenholz::Document> createDocumentWizard(
+    const std::string& projectId = "",
+    const std::string& taskId    = "");
 
-// F18 Workflow display
-void printF18Operation(const Rosenholz::F18Operation&);
+// Guided: asks user which F16/F22/F18 to attach to.
+std::shared_ptr<Rosenholz::Document> createDocumentWizardGuided();
 
-// F18 Workflow menu
-void f18Menu(std::shared_ptr<Rosenholz::F18Operation> v);
-void f18BrowserMenu(const std::string& projectId = "",
-                    const std::string& taskId    = "",
-                    const std::string& typeFilter = "");
-
-// Universal document attachment dialog
+// Attach-or-create dialog (called from entity menus).
 std::shared_ptr<Rosenholz::Document> attachDocumentDialog(
-    const std::string& projectId = "", const std::string& taskId = "");
+    const std::string& projectId = "",
+    const std::string& taskId    = "");
 
-// Incident detail
+// ── F77 workflow commands (cli_f77.cpp) ───────────────────────
+void cmdF77(const std::vector<std::string>& args);
+void workflowMenu();
+void instanceMenu(const std::string& workflowId);
+void listWfInstances(const std::string& entityType = "",
+                     const std::string& entityId   = "");
+std::string startWfInstanceWizard(const std::string& entityType = "",
+                                  const std::string& entityId   = "");
 
-// Team menu
+// ── Person commands (cli_per.cpp) ─────────────────────────────
+void cmdPer(const std::vector<std::string>& args);
+void listPersons();
+void printPerson(const Rosenholz::Person& p);
+std::shared_ptr<Rosenholz::Person> createPersonWizard();
+
+// ── Team / Diensteinheit commands (cli_de.cpp) ────────────────
+void cmdDe(const std::vector<std::string>& args);
 void teamMenu();
+
+// ── Communication menu (cli_comm.cpp) ────────────────────────
+void communicationMenu(const std::string& ownerId,
+                       const std::string& ownerType);
+
+// ── System commands (cli_sys.cpp) ─────────────────────────────
+void cmdStatus();
+void cmdBackup();
+void cmdMfs(const std::vector<std::string>& args);
+void cmdLog(const std::string& level);
+void cmdSearch(const std::string& query);
+void globalSearch(const std::string& query);
 
 } // namespace CLI

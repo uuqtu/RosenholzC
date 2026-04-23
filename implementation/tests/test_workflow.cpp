@@ -2,7 +2,8 @@
 #include "TestFramework.h"
 #include "TestFixtures.h"
 #include "../src/model/f18/F18Operation.h"
-#include "../src/workflow/WorkflowEngine.h"
+#include "../src/workflow/F77Workflow.h"
+#include "../src/workflow/F77Workflow.h"
 #include "../src/core/FileOps.h"
 #include "../src/mfs/MFSWriter.h"
 #include "../src/core/Migration.h"
@@ -12,357 +13,214 @@ namespace R = Rosenholz;
 using namespace Rosenholz::Test;
 
 void testSuiteWorkflow() {
-    SECTION("WorkflowTemplate — create, actions, save, load");
+    // ── F77 Template (declarative) ───────────────────────────
+    SECTION("F77_WorkflowTemplate — create, steps, save, load");
     {
-        auto tpl = R::WorkflowTemplate::create("Test-Genehmigung","sequential");
+        auto tpl = R::F77_WorkflowTemplate::create("Test-Freigabe","released","f16,f22");
+        CHECK(tpl != nullptr, "F77_WorkflowTemplate::create");
         tpl->description = "Testvorlage";
-        tpl->entityTypes = "f16,f22";
-        CHECK(tpl->save(), "WorkflowTemplate::save()");
-        CHECK(!tpl->templateId.empty(), "Template has ID");
-        CHECK(tpl->templateId.find("/WFD/") != std::string::npos,
-              "Template ID contains /WFD/");
+        CHECK(tpl->save(), "F77_WorkflowTemplate::save");
 
-        // Add template actions
-        R::WorkflowTemplateAction init;
-        init.tplActionId = R::genId("WFT");
-        init.templateId  = tpl->templateId;
-        init.title = "Initialisierung"; init.isInitialize = true; init.autoApprove = true;
+        // Add template steps
+        auto init = tpl->addTemplateStep("Init","sequential",true,false);
         init.save();
-        tpl->templateActions.push_back(init);
-
-        R::WorkflowTemplateAction step;
-        step.tplActionId = R::genId("WFT");
-        step.templateId  = tpl->templateId;
-        step.title = "Prüfschritt"; step.sequenceOrder = 1;
-        step.predecessorIds = init.tplActionId;
-        step.save();
-        tpl->templateActions.push_back(step);
-
-        R::WorkflowTemplateAction final_;
-        final_.tplActionId = R::genId("WFT");
-        final_.templateId  = tpl->templateId;
-        final_.title = "Abschluss"; final_.sequenceOrder = 2; final_.isFinal = true;
-        final_.requiresDecisionLogEntry = true;
-        final_.predecessorIds = step.tplActionId;
-        final_.save();
-        tpl->templateActions.push_back(final_);
-
-        auto loaded = R::WorkflowTemplate::loadById(tpl->templateId);
-        CHECK(loaded != nullptr, "WorkflowTemplate::loadById");
-        CHECK(loaded->name == "Test-Genehmigung", "Template name persisted");
-        CHECK(loaded->templateActions.size() == 3, "3 template actions loaded");
-    }
-
-    SECTION("WorkflowEngine — Init and End bookends always present");
-    {
-        ProjectFixture pfix("WF-Bookend-Test");
-
-        // Ad-hoc instance must have Init + End
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Bookend-Test");
-        CHECK(inst != nullptr, "Instance created");
-
-        bool hasInit = false, hasEnd = false;
-        for (auto& a : inst->actions) {
-            if (a.isInitialize) hasInit = true;
-            if (a.isFinal)      hasEnd  = true;
-        }
-        CHECK(hasInit, "Init action present in ad-hoc instance");
-        CHECK(hasEnd,  "End action present in ad-hoc instance");
-        CHECK(inst->actions.size() >= 2, "At least 2 actions (Init + End)");
-
-        // Init must be auto-approved after tick
-        R::WorkflowEngine::tick(*inst);
-        bool initApproved = false;
-        for (auto& a : inst->actions)
-            if (a.isInitialize && a.status == "approved") initApproved = true;
-        CHECK(initApproved, "Init auto-approved after tick");
-
-        // Add a mid-step — End should update its predecessor
-        auto step = R::WorkflowEngine::addAction(*inst, "Zwischenschritt",
-                                                  "sequential", 0, "", "", "", 0);
-        CHECK(step != nullptr, "Mid-step added");
-
-        // End's predecessor should include the new step
-        bool endHasNewPred = false;
-        for (auto& a : inst->actions) {
-            if (a.isFinal) {
-                endHasNewPred = a.predecessorActionIds.find(step->actionId) != std::string::npos;
-                break;
-            }
-        }
-        CHECK(endHasNewPred, "End action updated to wait for new mid-step");
-    }
-
-    SECTION("WorkflowEngine — End auto-approves when all predecessors done");
-    {
-        ProjectFixture pfix("WF-End-Auto-Test");
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "End-Auto-Test");
-        CHECK(inst != nullptr, "Instance created");
-
-        // Add one mid-step
-        std::string initId;
-        for (auto& a : inst->actions) if (a.isInitialize) initId = a.actionId;
-        auto step = R::WorkflowEngine::addAction(*inst, "Freigabe",
-                                                  "sequential", 1, initId, "", "", 0);
-
-        // Fire the mid-step → fireAction auto-ticks, End should auto-approve
-        R::WorkflowEngine::fireAction(*inst, step->actionId, "approved", "tester");
-
-        // After firing the mid-step, fireAction auto-ticks → End auto-approves
-        bool endApproved = false;
-        for (auto& a : inst->actions)
-            if (a.isFinal && a.isComplete()) endApproved = true;
-        CHECK(endApproved, "End action auto-approved after mid-step completion");
-        CHECK(inst->status == "completed",
-              "Instance completed after mid-step done + End auto-approved");
-    }
-
-    SECTION("WorkflowInstance — ad-hoc start, auto-initialize");
-    {
-        ProjectFixture pfix("WF-Test-Vorgang");
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId,
-            "Ad-hoc Testinstanz", "sequential", "system");
-        CHECK(inst != nullptr, "startAdHoc returns instance");
-        CHECK(!inst->instanceId.empty(), "Instance has ID");
-        CHECK(inst->instanceId.find("/WFI/") != std::string::npos,
-              "Instance ID contains /WFI/");
-        // An instance with only the auto-approved initialize step completes immediately
-        CHECK(inst->status == "active" || inst->status == "completed",
-              "Instance is active or auto-completed");
-        CHECK(!inst->actions.empty(), "Initialize action created");
-
-        // First action (initialize) must be auto-approved after tick
-        bool initApproved = false;
-        for (auto& a : inst->actions)
-            if (a.isInitialize && a.status == "approved") initApproved = true;
-        CHECK(initApproved, "Initialize action auto-approved on tick");
-    }
-
-    SECTION("WorkflowEngine — add steps, fire, complete");
-    {
-        ProjectFixture pfix("WF-Steps-Test");
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Steps-Test", "sequential");
-        CHECK(inst != nullptr, "Instance started");
-
-        // Add a step with the initialize as predecessor
-        std::string initId = inst->actions[0].actionId;
-        auto step1 = R::WorkflowEngine::addAction(
-            *inst, "Prüfschritt", "sequential", 1, initId,
-            pfix.lead->personId, "2025-06-30", 48);
-        CHECK(step1 != nullptr, "addAction returns action");
-        CHECK(step1->actionId.find("/WFA/") != std::string::npos,
-              "Action ID contains /WFA/");
-
-        // Tick to advance initialize to in_progress state for step1
-        R::WorkflowEngine::tick(*inst);
-
-        // Fire step1 as approved
-        bool ok = R::WorkflowEngine::fireAction(
-            *inst, step1->actionId, "approved",
-            pfix.lead->personId, "Alles in Ordnung");
-        CHECK(ok, "fireAction succeeds");
+        auto mid  = tpl->addTemplateStep("Prüfung","sequential",false,false);
+        mid.predecessorTplStepIds = init.tplStepId;
+        mid.save();
+        auto end  = tpl->addTemplateStep("End","sequential",false,true);
+        end.predecessorTplStepIds = mid.tplStepId;
+        end.autoApprove = true;
+        end.save();
 
         // Reload and verify
-        auto reloaded = R::WorkflowInstance::loadById(inst->instanceId);
-        CHECK(reloaded != nullptr, "Instance reloadable");
-        bool step1done = false;
-        for (auto& a : reloaded->actions)
-            if (a.actionId == step1->actionId && a.status == "approved")
-                step1done = true;
-        CHECK(step1done, "Step1 approved in DB");
-    }
-
-    SECTION("WorkflowEngine — parallel execution");
-    {
-        TaskFixture tfix("WF-Parallel-Task");
-        auto inst = R::WorkflowEngine::startAdHoc("f22", tfix.task->taskId, "Parallel-Test", "parallel");
-        CHECK(inst != nullptr, "Parallel instance started");
-
-        std::string initId = inst->actions[0].actionId;
-        // Add 3 parallel actions (no predecessor dependency between them)
-        auto a1 = R::WorkflowEngine::addAction(*inst,"Review A","parallel",1,"","","",24);
-        auto a2 = R::WorkflowEngine::addAction(*inst,"Review B","parallel",2,"","","",24);
-        auto a3 = R::WorkflowEngine::addAction(*inst,"Review C","parallel",3,"","","",24);
-        R::WorkflowEngine::tick(*inst);
-
-        // Fire all three
-        R::WorkflowEngine::fireAction(*inst,a1->actionId,"approved","user1");
-        R::WorkflowEngine::fireAction(*inst,a2->actionId,"approved","user2");
-        R::WorkflowEngine::fireAction(*inst,a3->actionId,"approved","user3");
-        // fireAction auto-ticks; after last fire, End approves and instance completes
-        CHECK(inst->status == "completed", "Instance completed when all parallel actions done");
-    }
-
-    SECTION("WorkflowEngine — standard templates seeded");
-    {
-        R::WorkflowEngine::createStandardTemplates();
-        auto templates = R::WorkflowTemplate::loadAll();
-        bool hasStandard = false, hasClosure = false;
-        for (auto& t : templates) {
-            if (t->name == "Standardgenehmigung") hasStandard = true;
-            if (t->name == "Projektabschluss")    hasClosure  = true;
+        auto loaded = R::F77_WorkflowTemplate::loadById(tpl->templateId);
+        CHECK(loaded != nullptr, "F77_WorkflowTemplate::loadById");
+        if (loaded) {
+            CHECK(loaded->name == "Test-Freigabe", "template name persisted");
+            CHECK(loaded->targetState == "released", "targetState persisted");
+            CHECK(loaded->steps.size() == 3, "3 steps saved");
         }
-        CHECK(hasStandard, "Standardgenehmigung template exists");
-        CHECK(hasClosure,  "Projektabschluss template exists");
     }
 
-    SECTION("WorkflowEngine — document attachment to instance and action");
+    // ── F77 Workflow from template ────────────────────────────
+    SECTION("F77_Engine — startFromTemplate creates workflow with steps");
     {
-        ProjectFixture pfix("WF-Doc-Attach-Test");
+        ProjectFixture pfix("F77-Template-Test");
 
-        // Create a document with proper project ref
-        auto doc = R::Document::create("Anforderungsdokument","specification",
-                                        pfix.project->projectId);
-        doc->version = "1.0";
-        CHECK(doc->save(), "Document for attachment saved");
+        // Build a minimal template
+        auto tpl = R::F77_WorkflowTemplate::create("Minimal","released","f16");
+        tpl->save();
+        auto init = tpl->addTemplateStep("Init","sequential",true,false);
+        init.save();
+        auto mid  = tpl->addTemplateStep("Freigabe","sequential",false,false);
+        mid.predecessorTplStepIds = init.tplStepId;
+        mid.save();
+        auto end  = tpl->addTemplateStep("End","sequential",false,true);
+        end.predecessorTplStepIds = mid.tplStepId;
+        end.autoApprove = true;
+        end.save();
 
-        // Start a workflow instance
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Doc-Attach-Instanz");
-        CHECK(inst != nullptr, "Instance created");
+        auto wf = R::F77_Engine::startFromTemplate(tpl->templateId,"f16",
+                                                     pfix.project->projectId,"tester");
+        CHECK(wf != nullptr, "startFromTemplate returns workflow");
+        if (wf) {
+            CHECK(wf->entityType == "f16", "entityType correct");
+            CHECK(wf->status == "active", "workflow is active");
+            CHECK(wf->steps.size() == 3, "3 steps created from template");
 
-        // Verify ptrs valid before attach
-        CHECK(!inst->instanceId.empty(), "instanceId non-empty before attach");
-        CHECK(!doc->documentId.empty(), "documentId non-empty before attach");
-        // Attach document to instance level
-        bool ok = R::WorkflowEngine::attachDocumentToInstance(
-            inst->instanceId, doc->documentId, "mandatory", "Pflichtdokument");
-        CHECK(ok, "attachDocumentToInstance succeeds");
+            // Init step auto-approved
+            bool initOk = false;
+            for (auto& s : wf->steps) if (s.isInitialize) { initOk = s.isComplete(); break; }
+            CHECK(initOk, "Init step auto-approved");
 
-        // Attach document to specific action
-        std::string initId = inst->actions[0].actionId;
-        bool ok2 = R::WorkflowEngine::attachDocumentToAction(
-            initId, doc->documentId, "reference");
-        CHECK(ok2, "attachDocumentToAction succeeds");
-
-        // Load documents back
-        auto docs = R::WorkflowEngine::loadDocumentsForInstance(inst->instanceId);
-        CHECK(!docs.empty(), "loadDocumentsForInstance returns documents");
-
-        auto actionDocs = R::WorkflowEngine::loadDocumentsForAction(initId);
-        CHECK(!actionDocs.empty(), "loadDocumentsForAction returns documents");
-
-        // Verify the document ID is correct
-        bool foundDoc = false;
-        for (auto& d : docs) if (d->documentId == doc->documentId) foundDoc = true;
-        CHECK(foundDoc, "Correct document returned from instance query");
+            // Mid step has F18_Operation
+            bool midHasF18 = false;
+            for (auto& s : wf->steps)
+                if (!s.isInitialize && !s.isFinal && !s.f18OperationId.empty())
+                    midHasF18 = true;
+            CHECK(midHasF18, "Mid step linked to F18_Operation");
+        }
     }
 
-    SECTION("WorkflowEngine — escalation and participants");
+    // ── F77 default workflow ──────────────────────────────────
+    SECTION("F77_Engine — startDefault creates minimal workflow");
     {
-        ProjectFixture pfix("WF-Escalation-Test");
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Eskalations-Test");
-
-        PersonFixture escalateTo("Eskalations","Empfaenger","ee@test.de","internal");
-        CHECK(R::WorkflowEngine::escalate(*inst, escalateTo.person->personId, "SLA verletzt"),
-              "escalate() succeeds");
-
-        auto reloaded = R::WorkflowInstance::loadById(inst->instanceId);
-        CHECK(reloaded->escalatedTo == escalateTo.person->personId, "escalatedTo persisted");
-
-        PersonFixture watcher("Watch","Er","we@test.de","internal");
-        CHECK(R::WorkflowEngine::addParticipant(*inst, watcher.person->personId, "watcher"),
-              "addParticipant() succeeds");
-
-        auto inst2 = R::WorkflowInstance::loadById(inst->instanceId);
-        inst2->loadParticipants();
-        CHECK(!inst2->participants.empty(), "Participant stored");
+        ProjectFixture pfix("F77-Default-Test");
+        auto wf = R::F77_Engine::startDefault("f16", pfix.project->projectId,
+                                               "released", "system");
+        CHECK(wf != nullptr, "startDefault returns workflow");
+        if (wf) {
+            CHECK(wf->steps.size() >= 3, "at least Init+Mid+End");
+            bool hasInit=false, hasEnd=false;
+            for (auto& s : wf->steps) {
+                if (s.isInitialize) hasInit = true;
+                if (s.isFinal)      hasEnd  = true;
+            }
+            CHECK(hasInit, "Init step present");
+            CHECK(hasEnd,  "End step present");
+        }
     }
 
-    SECTION("WorkflowEngine — decision log entry from action");
+    // ── F77 fireStep ─────────────────────────────────────────
+    SECTION("F77_Engine — fireStep completes workflow and applies targetState");
     {
-        ProjectFixture pfix("WF-DL-Test");
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "DL-Test");
-        auto action = R::WorkflowEngine::addAction(*inst, "Entscheidungsschritt",
-                                                    "sequential", 1,
-                                                    inst->actions[0].actionId);
-        action->requiresDecisionLogEntry = true;
-        action->save();
-        R::WorkflowEngine::tick(*inst);
+        ProjectFixture pfix("F77-Fire-Test");
+        auto wf = R::F77_Engine::startDefault("f16", pfix.project->projectId,
+                                               "released", "system");
+        CHECK(wf != nullptr, "workflow created");
+        if (!wf) return;
 
-        CHECK(R::WorkflowEngine::createDecisionLogEntry(
-            action->actionId, "project", pfix.project->projectId,
-            "Architektur: Microservices gewählt",
-            "Bessere Skalierbarkeit und unabhängige Deployments"),
-            "createDecisionLogEntry succeeds");
+        // Find the mid step (not Init, not End)
+        std::string midStepId;
+        for (auto& s : wf->steps)
+            if (!s.isInitialize && !s.isFinal) { midStepId = s.stepId; break; }
+        CHECK(!midStepId.empty(), "mid step found");
+        if (midStepId.empty()) return;
 
-        // createDecisionLogEntry now no-ops gracefully (F18 architecture)
-        // Decision logs are F18Operation entities — the stub returns true
-        auto* f18db = R::DatabasePool::instance().get("f18");
-        CHECK(f18db != nullptr, "f18 DB accessible");
+        // Fire mid step
+        bool ok = R::F77_Engine::fireStep(*wf, midStepId, "approved", "tester", "ok");
+        CHECK(ok, "fireStep succeeds");
+
+        // Reload — workflow should be completed
+        auto fresh = R::F77_Workflow::loadById(wf->workflowId);
+        CHECK(fresh != nullptr, "workflow reloadable");
+        if (fresh) CHECK(fresh->status == "completed", "workflow completed after End auto-approved");
     }
 
-    SECTION("WorkflowFixture — from-template instance");
+    // ── F77 snapshot isolation ────────────────────────────────
+    SECTION("F77_Engine — template changes don't affect running workflow");
     {
-        WorkflowFixture fix;
-        CHECK(fix.instance != nullptr, "WorkflowFixture creates instance");
-        CHECK(!fix.instance->actions.empty(), "Instance has actions");
+        ProjectFixture pfix("F77-Snapshot-Test");
 
-        // The initialize action should be auto-approved
-        bool initOk = false;
-        for (auto& a : fix.instance->actions)
-            if (a.isInitialize) { initOk = a.status == "approved"; break; }
-        CHECK(initOk, "Fixture initialize action auto-approved");
+        auto tpl = R::F77_WorkflowTemplate::create("Snapshot-Test","released","f16");
+        tpl->save();
+        auto init = tpl->addTemplateStep("Init","sequential",true,false); init.save();
+        auto mid  = tpl->addTemplateStep("Original Step","sequential",false,false);
+        mid.predecessorTplStepIds=init.tplStepId; mid.save();
+        auto end  = tpl->addTemplateStep("End","sequential",false,true);
+        end.predecessorTplStepIds=mid.tplStepId; end.autoApprove=true; end.save();
+
+        auto wf = R::F77_Engine::startFromTemplate(tpl->templateId,"f16",
+                                                     pfix.project->projectId,"system");
+        CHECK(wf != nullptr, "workflow started");
+        if (!wf) return;
+
+        // Mutate template AFTER workflow started
+        tpl->name = "Changed Template";
+        tpl->save();
+        // Add extra step to template
+        auto extra = tpl->addTemplateStep("Extra Step","sequential",false,false);
+        extra.save();
+
+        // Reload running workflow — should still have original 3 steps
+        auto fresh = R::F77_Workflow::loadById(wf->workflowId);
+        CHECK(fresh != nullptr, "workflow reloadable");
+        if (fresh) {
+            CHECK(fresh->steps.size() == 3, "running workflow has original 3 steps (not 4)");
+            CHECK(fresh->templateName == "Snapshot-Test", "templateName snapshotted at start");
+        }
     }
 
-    SECTION("WorkflowEngine — End action cannot be predecessor");
+    // ── F77 canRelease ────────────────────────────────────────
+    SECTION("F77_Engine — canRelease und lockAll");
     {
-        ProjectFixture pfix("WF-Guard-Test");
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "Guard-Test");
-        CHECK(inst != nullptr, "Instance created");
-        std::string endId;
-        for (auto& a : inst->actions)
-            if (a.isFinal) { endId = a.actionId; break; }
-        CHECK(!endId.empty(), "End action exists");
-        auto bad = R::WorkflowEngine::addAction(
-            *inst, "Bad Step", "sequential", 0, endId, "", "", 0);
-        CHECK(bad == nullptr, "addAction rejects End as predecessor");
-        auto good = R::WorkflowEngine::addAction(
-            *inst, "Normal Step", "sequential", 0, "", "", "", 0);
-        CHECK(good != nullptr, "addAction accepts empty predecessor");
+        // One workflow per entity. canRelease checks if the main workflow
+        // is complete (all steps done). fireStep completes it.
+        ProjectFixture pfix("F77-Release-Test");
+        auto wf1 = R::F77_Engine::startDefault("f16", pfix.project->projectId, "released", "system");
+        CHECK(wf1 != nullptr, "Workflow gestartet");
+        if (!wf1) return;
+
+        // Second startDefault on same entity must be refused (one-workflow rule)
+        auto wf2 = R::F77_Engine::startDefault("f16", pfix.project->projectId, "released", "system");
+        CHECK(wf2 == nullptr, "Zweiter Workflow korrekt verweigert (one-workflow-rule)");
+
+        // canRelease: mid step still pending -> not releasable
+        int blockers = 0;
+        bool canRel = R::F77_Engine::canRelease("f16", pfix.project->projectId,
+                                                 wf1->workflowId, blockers);
+        CHECK(!canRel, "canRelease false solange Mid-Schritt pending");
     }
 
-    SECTION("WorkflowEngine — searchInstances filter");
+
+    SECTION("F77_Engine — seedDefaultTemplates is idempotent");
     {
-        // Use a project created directly so we control the entityId
-        auto proj = R::ProjectF16::create("Suchbarer Vorgang");
-        proj->save();
-
-        auto inst = R::WorkflowEngine::startAdHoc("f16", proj->projectId, "Suchbarer Workflow XYZ");
-        CHECK(inst != nullptr, "Instance created for search");
-
-        // Add a mid-step so the instance doesn't auto-complete immediately
-        std::string initId;
-        for (auto& a : inst->actions) if (a.isInitialize) initId = a.actionId;
-        R::WorkflowEngine::addAction(*inst, "Prüfen", "sequential", 1, initId, "", "", 0);
-
-        // Reload instance to confirm it's in DB
-        auto reloaded = R::WorkflowInstance::loadById(inst->instanceId);
-        CHECK(reloaded != nullptr, "Instance confirmed in DB");
-        // Status is active (has pending mid-step)
-        CHECK(reloaded->status == "active", "Instance is active with pending step");
-
-        // Name search
-        auto res = R::WorkflowEngine::searchInstances("", "", "Suchbarer", false);
-        bool found = false;
-        for (auto& r : res) if (r->instanceId == inst->instanceId) found = true;
-        CHECK(found, "searchInstances finds by name substring");
-
-        // Entity type filter
-        auto res2 = R::WorkflowEngine::searchInstances("f16", "", "", false);
-        bool found2 = false;
-        for (auto& r : res2) if (r->instanceId == inst->instanceId) found2 = true;
-        CHECK(found2, "searchInstances finds by entityType=project");
-
-        // Wrong entity type must not match
-        auto res3 = R::WorkflowEngine::searchInstances("f22", "", "", false);
-        bool found3 = false;
-        for (auto& r : res3) if (r->instanceId == inst->instanceId) found3 = true;
-        CHECK(!found3, "searchInstances excludes wrong entityType");
+        R::F77_Engine::seedDefaultTemplates();
+        R::F77_Engine::seedDefaultTemplates(); // second call must not crash or duplicate
+        auto all = R::F77_WorkflowTemplate::loadAll();
+        CHECK(!all.empty(), "templates exist after seed");
     }
 
-}
+    // ── F77 wait condition ────────────────────────────────────
+    SECTION("F77_Engine — wait condition spawns F18_Operation");
+    {
+        ProjectFixture pfix("F77-WaitCond-Test");
 
-void testSuiteMFS() {
+        auto tpl = R::F77_WorkflowTemplate::create("WaitCond-Test","released","f16");
+        tpl->save();
+        auto init = tpl->addTemplateStep("Init","sequential",true,false); init.save();
+        auto mid  = tpl->addTemplateStep("Mit Wartebedingung","sequential",false,false);
+        mid.predecessorTplStepIds=init.tplStepId;
+        mid.waitConditionF18Type = "measure";
+        mid.waitConditionTitle   = "Prüfmaßnahme";
+        mid.save();
+        auto end  = tpl->addTemplateStep("End","sequential",false,true);
+        end.predecessorTplStepIds=mid.tplStepId; end.autoApprove=true; end.save();
+
+        auto wf = R::F77_Engine::startFromTemplate(tpl->templateId,"f16",
+                                                     pfix.project->projectId,"system");
+        CHECK(wf != nullptr, "workflow with wait condition created");
+        if (!wf) return;
+
+        // Tick should spawn the wait condition F18_Operation
+        R::F77_Engine::tick(*wf);
+        wf->loadSteps();
+        bool waitSpawned = false;
+        for (auto& s : wf->steps)
+            if (!s.waitF18OperationId.empty()) waitSpawned = true;
+        CHECK(waitSpawned, "wait condition F18_Operation spawned by tick");
+    }
+
     SECTION("MFS — rebuild all with correct flat root structure");
     {
         FullProjectFixture fix;
@@ -418,6 +276,9 @@ void testSuiteMFS() {
         }
     }
 
+}
+
+void testSuiteMFS() {
     SECTION("MFS — owner_key.txt is 600 permissions");
     {
         FullProjectFixture fix;
@@ -435,6 +296,7 @@ void testSuiteMFS() {
     }
 }
 
+
 void testSuiteReporting() {
     SECTION("F18Operation — LessonsLearned type");
     {
@@ -451,23 +313,23 @@ void testSuiteReporting() {
         CHECK(reloaded->lessonType == "positive", "lessonType persisted");
     }
 
-    SECTION("F18Operation — DecisionLog type via WorkflowEngine");
+    SECTION("F18Operation — DecisionLog type");
     {
         ProjectFixture pfix("DL-Test-Vorgang");
-        auto inst = R::WorkflowEngine::startAdHoc("f16", pfix.project->projectId, "DL-Test-WF");
-        auto action = R::WorkflowEngine::addAction(
-            *inst,"Entscheidung","sequential",1,inst->actions[0].actionId);
-        R::WorkflowEngine::tick(*inst);
-
-        bool ok = R::WorkflowEngine::createDecisionLogEntry(
-            action->actionId, "project", pfix.project->projectId,
-            "Entscheidung: SQLite statt PostgreSQL",
-            "Kein Netzwerk erforderlich, einfachere Deployment");
-        CHECK(ok, "createDecisionLogEntry via WorkflowEngine");
-
-        // Decision log entries now stored as F18Operation entities
-        auto* f18db = R::DatabasePool::instance().get("f18");
-        CHECK(f18db != nullptr, "f18 db accessible for DL check");
+        // Create a DecisionLog F18 Operation
+        auto dl = Rosenholz::F18Operation::create(
+            pfix.project->projectId, "Test-Entscheidung",
+            Rosenholz::F18OperationType::DECISION_LOG);
+        CHECK(dl != nullptr, "DecisionLog F18Operation created");
+        if (dl) {
+            dl->rationale = "Structured approach chosen";
+            dl->decisionBy = "tester";
+            dl->update();
+            auto reloaded = Rosenholz::F18Operation::loadById(dl->vorgangId);
+            CHECK(reloaded != nullptr, "DecisionLog reloadable");
+            if (reloaded)
+                CHECK(reloaded->rationale == "Structured approach chosen", "rationale persisted");
+        }
     }
 
     SECTION("Migration — idempotent re-run");
@@ -488,7 +350,7 @@ void testSuiteMigration() {
     SECTION("Migration — schema versions");
     {
         // v2 baseline: all schemas start at version 2
-        std::vector<std::string> allDbs = {"core","f16","f77","dok","tracking","f18"};
+        std::vector<std::string> allDbs = {"core","f16","f77","dok","f18"};
         for (auto& name : allDbs) {
             int ver = R::MigrationEngine::currentVersion(name);
             CHECK(ver >= 2, "schema version >= 2 for db: " + name);
@@ -503,7 +365,7 @@ void testSuiteMigration() {
 
     SECTION("Migration — all pool DBs accessible");
     {
-        std::vector<std::string> dbs = {"core","f16","f77","dok","tracking","f18"};
+        std::vector<std::string> dbs = {"core","f16","f77","dok","f18"};
         for (auto& name : dbs) {
             auto* db = R::DatabasePool::instance().get(name);
             CHECK(db != nullptr, "DB accessible: " + name);

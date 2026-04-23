@@ -166,7 +166,7 @@ void Meeting::fromRow(const Row& r) {
 }
 
 bool Meeting::save() const {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     if (!db) return false;
     return db->exec(R"SQL(
         INSERT OR REPLACE INTO meetings
@@ -189,7 +189,7 @@ bool Meeting::save() const {
 }
 
 bool Meeting::load(const std::string& id) {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM meetings WHERE meeting_id=?;",
                           {BindParam::text(id)});
@@ -201,7 +201,7 @@ bool Meeting::load(const std::string& id) {
 bool Meeting::update() { return save(); }
 
 bool Meeting::remove() {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     return db && db->exec("DELETE FROM meetings WHERE meeting_id=?;",
                           {BindParam::text(meetingId)});
 }
@@ -213,7 +213,7 @@ std::shared_ptr<Meeting> Meeting::loadById(const std::string& id) {
 }
 
 std::vector<std::shared_ptr<Meeting>> Meeting::loadForProject(const std::string& pid) {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     std::vector<std::shared_ptr<Meeting>> res;
     if (!db) return res;
     for (auto& r : db->query(
@@ -225,7 +225,7 @@ std::vector<std::shared_ptr<Meeting>> Meeting::loadForProject(const std::string&
 }
 
 std::vector<std::shared_ptr<Meeting>> Meeting::loadForTask(const std::string& tid) {
-    auto* db = DatabasePool::instance().get("f16");
+    auto* db = DatabasePool::instance().get("projects");
     std::vector<std::shared_ptr<Meeting>> res;
     if (!db) return res;
     for (auto& r : db->query(
@@ -242,170 +242,6 @@ bool Meeting::complete(const std::string& dec, const std::string& act) {
     decisions = dec;
     actions   = act;
     return update();
-}
-
-// ═════════════════════════════════════════════════════════════
-// CHANGE REQUEST
-// ═════════════════════════════════════════════════════════════
-std::shared_ptr<ChangeRequest> ChangeRequest::create(
-    const std::string& projectId, const std::string& title, const std::string& type)
-{
-    auto cr = std::make_shared<ChangeRequest>();
-    cr->crId       = genId("AEA");
-    cr->projectId  = projectId;
-    cr->title      = title;
-    cr->changeType = type.empty() ? "general" : type;
-    cr->status     = "draft";
-    cr->raisedDate = nowIso();
-    cr->createdAt  = nowIso();
-    return cr;
-}
-
-void ChangeRequest::fromRow(const Row& r) {
-    crId                = rowGet(r,"cr_id");
-    workflowInstanceId  = rowGet(r,"workflow_instance_id");
-    workflowStatus      = rowGet(r,"workflow_status");
-    workflowCurrentState= rowGet(r,"workflow_current_state");
-    projectId           = rowGet(r,"project_id");
-    taskId              = rowGet(r,"task_id");
-    raisedBy            = rowGet(r,"raised_by");
-    title               = rowGet(r,"title");
-    description         = rowGet(r,"description");
-    changeType          = rowGetOr(r,"change_type","general");
-    status              = rowGetOr(r,"status","draft");
-    raisedDate          = rowGet(r,"raised_date");
-    decisionDate        = rowGet(r,"decision_date");
-    implementedDate     = rowGet(r,"implemented_date");
-    costImpact          = rowGetDbl(r,"cost_impact");
-    scheduleImpactDays  = rowGetInt(r,"schedule_impact_days");
-    scopeImpact         = rowGet(r,"scope_impact");
-    qualityImpact       = rowGet(r,"quality_impact");
-    justification       = rowGet(r,"justification");
-    decisionRationale   = rowGet(r,"decision_rationale");
-    links               = rowGet(r,"links");
-    notes               = rowGetOr(r,"notes","{}");
-    createdAt           = rowGet(r,"created_at");
-}
-
-bool ChangeRequest::save() const {
-    auto* db = DatabasePool::instance().get("tracking");
-    if (!db) return false;
-    return db->exec(R"SQL(
-        INSERT OR REPLACE INTO change_requests
-        (cr_id,workflow_instance_id,workflow_status,workflow_current_state,
-         project_id,task_id,raised_by,title,description,change_type,status,
-         raised_date,decision_date,implemented_date,cost_impact,
-         schedule_impact_days,scope_impact,quality_impact,
-         justification,decision_rationale,links,notes,created_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    )SQL", {
-        BindParam::text(crId), textOrNull(workflowInstanceId),
-        textOrNull(workflowStatus), textOrNull(workflowCurrentState),
-        textOrNull(projectId), textOrNull(taskId), textOrNull(raisedBy),
-        BindParam::text(title), textOrNull(description),
-        BindParam::text(changeType), BindParam::text(status),
-        textOrNull(raisedDate), textOrNull(decisionDate), textOrNull(implementedDate),
-        BindParam::real(costImpact), BindParam::int64(scheduleImpactDays),
-        textOrNull(scopeImpact), textOrNull(qualityImpact),
-        textOrNull(justification), textOrNull(decisionRationale),
-        textOrNull(links), BindParam::text(notes.empty()?"{}":notes),
-        BindParam::text(createdAt)
-    });
-}
-
-bool ChangeRequest::load(const std::string& id) {
-    auto* db = DatabasePool::instance().get("tracking");
-    if (!db) return false;
-    auto rows = db->query("SELECT * FROM change_requests WHERE cr_id=?;",
-                          {BindParam::text(id)});
-    if (rows.empty()) return false;
-    fromRow(rows[0]);
-    return true;
-}
-
-bool ChangeRequest::update() { return save(); }
-
-bool ChangeRequest::remove() {
-    auto* db = DatabasePool::instance().get("tracking");
-    return db && db->exec("DELETE FROM change_requests WHERE cr_id=?;",
-                          {BindParam::text(crId)});
-}
-
-std::shared_ptr<ChangeRequest> ChangeRequest::loadById(const std::string& id) {
-    auto cr = std::make_shared<ChangeRequest>();
-    if (!cr->load(id)) return nullptr;
-    return cr;
-}
-
-std::vector<std::shared_ptr<ChangeRequest>> ChangeRequest::loadForProject(
-    const std::string& pid)
-{
-    auto* db = DatabasePool::instance().get("tracking");
-    std::vector<std::shared_ptr<ChangeRequest>> result;
-    if (!db) return result;
-    for (auto& r : db->query(
-            "SELECT * FROM change_requests WHERE project_id=? ORDER BY raised_date DESC;",
-            {BindParam::text(pid)})) {
-        auto cr = std::make_shared<ChangeRequest>(); cr->fromRow(r); result.push_back(cr);
-    }
-    return result;
-}
-
-std::vector<std::shared_ptr<ChangeRequest>> ChangeRequest::loadOpen() {
-    auto* db = DatabasePool::instance().get("tracking");
-    std::vector<std::shared_ptr<ChangeRequest>> result;
-    if (!db) return result;
-    for (auto& r : db->query(
-            "SELECT * FROM change_requests WHERE status NOT IN "
-            "('approved','rejected','implemented','withdrawn') "
-            "ORDER BY raised_date DESC;")) {
-        auto cr = std::make_shared<ChangeRequest>(); cr->fromRow(r); result.push_back(cr);
-    }
-    return result;
-}
-
-// ------------------------------
-// approve
-//
-// Parameters:
-//   rationale            : text explaining the approval decision
-//
-// Behavior:
-//   Sets status="approved", decisionDate=now, decisionRationale
-//   Calls update() to persist
-//
-// Returns:
-//   true on success
-// ------------------------------
-bool ChangeRequest::approve(const std::string& rationale) {
-    status           = "approved";
-    decisionDate     = nowIso();
-    decisionRationale= rationale;
-    return update();
-}
-
-// ------------------------------
-// reject
-//
-// Parameters:
-//   rationale            : text explaining the rejection
-//
-// Behavior:
-//   Sets status="rejected", decisionDate=now, decisionRationale
-//   Calls update() to persist
-//
-// Returns:
-//   true on success
-// ------------------------------
-bool ChangeRequest::reject(const std::string& rationale) {
-    status           = "rejected";
-    decisionDate     = nowIso();
-    decisionRationale= rationale;
-    return update();
-}
-
-nlohmann::json ChangeRequest::toJson() const {
-    return {{"crId",crId},{"title",title},{"status",status},{"changeType",changeType}};
 }
 
 } // namespace Rosenholz

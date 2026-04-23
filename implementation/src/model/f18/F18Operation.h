@@ -51,6 +51,7 @@ namespace F18OperationType {
     constexpr const char* DECISION_LOG         = "decisionLog";
     constexpr const char* CHANGE_REQUEST       = "changeRequest";
     constexpr const char* CHANGE_OBJECT        = "changeObject";
+    constexpr const char* F77_STEP             = "f77_step";  ///< F77 workflow step
 }
 
 class F18OperationStep; // forward
@@ -164,6 +165,11 @@ public:
     // ── Lazy-loaded children ──────────────────────────────────
     std::vector<F18OperationStep> steps;  ///< Lazy-loaded, value type for iteration
 
+
+    // ── State predicates ──────────────────────────────────────
+    bool isReleased() const { return status == "released"; }
+    bool canEdit()    const { return !isReleased(); }
+
     // ── CRUD ──────────────────────────────────────────────────
     bool save()   const;
     void ensureReleaseWorkflow();  ///< Called after first save to create Main WFI
@@ -215,10 +221,13 @@ public:
     // Always inserts between Init and End bookends.
     // ------------------------------
     /// Default: appends new step before the End step.
+    // addStep: append a regular step (connected in the linear chain) or a
+    // free step (isFree=true, no predecessor dependencies, always startable).
     std::shared_ptr<F18OperationStep> addStep(
         const std::string& title,
         const std::string& stepType   = "task",
-        const std::string& assigneeId = "");
+        const std::string& assigneeId = "",
+        bool               isFree     = false);
 
     /// Custom: inserts between predecessorStepId and its successor.
     /// The old successor then points to the new step.

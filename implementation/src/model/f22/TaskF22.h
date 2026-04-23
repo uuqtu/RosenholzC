@@ -94,6 +94,12 @@ public:
     std::string createdAt;
     std::string updatedAt;
 
+
+    // ── State predicates ──────────────────────────────────────
+    bool isReleased()     const { return status == "released"; }
+    bool canEdit()        const { return !isReleased(); }
+    bool canAddChildren() const { return !isReleased(); }
+
     // ── CRUD ──────────────────────────────────────────────
     bool save() const;
     void ensureReleaseWorkflow();  ///< Creates Main WFI on first save

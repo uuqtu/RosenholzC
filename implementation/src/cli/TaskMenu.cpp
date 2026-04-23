@@ -2,9 +2,10 @@
 // TaskMenu.cpp  —  F22 Aufgaben-Detailmenü
 // ============================================================
 #include "cli_common.h"
+#include "../workflow/F77Workflow.h"
 #include "../mfs/MFSWriter.h"
 #include "../core/Config.h"
-#include "../workflow/WorkflowEngine.h"
+#include "../workflow/F77Workflow.h"
 #include <iomanip>
 
 namespace CLI {
@@ -104,14 +105,27 @@ static void mainWorkflowMenu(std::shared_ptr<TaskF22> t) {
     hdr("F77 FREIGABE-WORKFLOW — " + t->regNumber.toString());
     std::cout << "  Status    : " << t->status << "\n";
     if (t->releaseWorkflowId.empty()) {
-        std::cout << "  (kein Main Workflow — wird angelegt)\n";
-        t->ensureReleaseWorkflow();
-        auto rt = TaskF22::loadById(t->taskId);
-        if (rt) *t = *rt;
+        std::cout << "  (kein F77-Workflow aktiv)\n";
+        std::cout << "  1.Workflow starten  0.Abbrechen\n";
+        int wfc = readInt("Wahl",0,1);
+        if (wfc==1) {
+            auto wf = Rosenholz::F77_Engine::startDefault("f22", t->taskId);
+            if (wf) {
+                auto* t22db = Rosenholz::DatabasePool::instance().get("f22");
+                if (t22db) t22db->exec(
+                    "UPDATE tasks SET release_workflow_id=?, status=\'in_work\', updated_at=? WHERE task_id=?;",
+                    {Rosenholz::BindParam::text(wf->workflowId),
+                     Rosenholz::BindParam::text(Rosenholz::nowIso()),
+                     Rosenholz::BindParam::text(t->taskId)});
+                t->releaseWorkflowId = wf->workflowId;
+                std::cout << "  >> Workflow gestartet: " << wf->workflowId << "\n";
+            }
+        }
+        if (t->releaseWorkflowId.empty()) return;
     }
     if (!t->releaseWorkflowId.empty()) {
         int blockers = 0;
-        bool canRel = WorkflowEngine::canReleaseEntity("f22", t->taskId, t->releaseWorkflowId, blockers);
+        bool canRel = F77_Engine::canRelease("f22", t->taskId, t->releaseWorkflowId, blockers);
         std::cout << "  Main WFI  : " << t->releaseWorkflowId.substr(0,36) << "\n";
         if (blockers > 0)
             std::cout << "  ⚠ " << blockers << " offene WFI(s) blockieren die Freigabe\n";
@@ -124,7 +138,7 @@ static void mainWorkflowMenu(std::shared_ptr<TaskF22> t) {
             std::cout << "  'ja' eingeben zum Sperren: ";
             std::string conf; std::getline(std::cin, conf);
             if (conf=="ja") {
-                int locked = WorkflowEngine::lockAllOpenWorkflows("f22", t->taskId, t->releaseWorkflowId, true);
+                int locked = F77_Engine::lockAll("f22", t->taskId, t->releaseWorkflowId, true);
                 std::cout << "  >> " << locked << " WFI(s) gesperrt.\n";
             }
         }

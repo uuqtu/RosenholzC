@@ -16,9 +16,11 @@ public:
     }
 
     void check(bool condition, const std::string& desc) {
+        std::cout.flush();
         if (condition) {
             ++pass_;
             std::cout << "  PASS: " << desc << "\n";
+            std::cout.flush();
         } else {
             ++fail_;
             std::cout << "  FAIL: " << desc << "  [" << section_ << "]\n";

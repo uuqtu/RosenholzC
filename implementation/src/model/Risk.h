@@ -1,11 +1,3 @@
-// ============================================================
-// Risk.h  —  Risk entity (Risiko-Akte RSK)
-//
-// DDR-Aktenzeichen: XV/RSK/{seq}/{year}
-// 5×5 impact scoring (Time/Cost/Quality/Scope)
-// Strategies: avoid|mitigate|transfer|accept
-// Risk level auto-set: >=15=critical, >=9=high, >=4=medium
-// ============================================================
 #pragma once
 #include "Utils.h"
 // ============================================================
@@ -15,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include "Trackable.h"
 #include "../core/Database.h"
 #include <nlohmann/json.hpp>
 
@@ -42,6 +35,7 @@ public:
     std::string links, notes;
     std::string createdAt, updatedAt;
 
+    std::vector<std::shared_ptr<TrackableItem>> trackables;
 
     bool save() const;
     bool load(const std::string& id);
@@ -50,7 +44,6 @@ public:
 
     static std::shared_ptr<Risk> create(const std::string& projectId,
         const std::string& title, const std::string& riskLevel = "medium");
-    static std::vector<std::shared_ptr<Risk>> loadRecent(int n = 20);
     static std::shared_ptr<Risk> loadById(const std::string& id);
     static std::vector<std::shared_ptr<Risk>> loadForProject(const std::string& projectId);
     static std::vector<std::shared_ptr<Risk>> loadHighRisks();
@@ -61,6 +54,8 @@ public:
     bool reassignOwner(const std::string& newOwnerId);
     bool reassignToProject(const std::string& newProjectId);
 
+    std::shared_ptr<TrackableItem> addTrackable(const std::string& title, const std::string& by = "");
+    void loadTrackables();
 
     nlohmann::json toJson() const;
 

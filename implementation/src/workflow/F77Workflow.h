@@ -1,0 +1,283 @@
+#pragma once
+// ============================================================
+// F77Workflow.h — F77 Freigabe-Workflow Engine
+//
+// Two object groups:
+//
+//   DECLARATIVE (admin-time, never changed during execution):
+//     F77_WorkflowTemplate      — named template with target state
+//     F77_WorkflowTemplateStep  — step definition in a template
+//
+//   RUNTIME (created from template snapshot on start):
+//     F77_Workflow              — running instance; template changes don't affect it
+//     F77_WorkflowStep          — running step; each backed by one F18_Operation
+//
+// Step execution model:
+//   - Init step: auto-approved immediately on workflow start
+//   - Mid steps: sequential or parallel; each is an F18_Operation of type "f77_step"
+//   - Wait conditions: a step can require a separate F18_Operation (any type) to be
+//     completed before the step itself can start
+//   - End step: auto-approved by engine when all mid-steps are done
+//   - On End approval: entity transitions to template's target_state
+//
+// F77 applies to: F16 (project), F22 (task), F18 (operation), DOK (document)
+// ============================================================
+#include "../core/Database.h"
+#include "../model/f18/F18Operation.h"
+#include <string>
+#include <vector>
+#include <memory>
+
+namespace Rosenholz {
+
+// ── F77_WorkflowTemplateStep ──────────────────────────────────
+struct F77_WorkflowTemplateStep {
+    std::string tplStepId;
+    std::string templateId;
+    std::string title;
+    std::string description;
+    int         sequenceOrder      { 0 };
+    bool        isInitialize       { false };
+    bool        isFinal            { false };
+    std::string executionMode      { "sequential" }; // sequential|parallel
+    std::string predecessorTplStepIds;  // comma-sep tpl_step_ids
+
+    // Wait condition: before this step starts, a separate F18_Operation
+    // of the given type must be completed.
+    std::string waitConditionF18Type;   // e.g. "measure","qualityGate" or ""
+    std::string waitConditionTitle;     // title for the auto-spawned F18 Operation
+
+    std::string requiredRole;
+    int         slaHours           { 0 };
+    bool        autoApprove        { false };
+    bool        requiresComment    { false };
+    bool        requiresDocument   { false };
+
+    std::string createdAt;
+    std::string updatedAt;
+
+    bool save()   const;
+    bool remove() const;
+    void fromRow(const Row& r);
+};
+
+// ── F77_WorkflowTemplate ─────────────────────────────────────
+struct F77_WorkflowTemplate {
+    std::string templateId;
+    std::string name;
+    std::string version         { "1.0" };
+    std::string description;
+    std::string entityTypes;    // comma-sep: "f16,f22,f18,dok"
+    std::string targetState     { "released" }; // in_work|pre_released|released|locked|closed
+    std::string status          { "active" };   // active|inactive
+    std::string createdBy;
+    std::string createdAt;
+    std::string updatedAt;
+
+    std::vector<F77_WorkflowTemplateStep> steps;
+
+    bool save()   const;
+    bool remove() const;
+    bool loadSteps();
+    void fromRow(const Row& r);
+
+    /// Add a step to this template (admin-time only).
+    F77_WorkflowTemplateStep addTemplateStep(
+        const std::string& title,
+        const std::string& executionMode = "sequential",
+        bool isInit  = false,
+        bool isFinal = false);
+
+    static std::shared_ptr<F77_WorkflowTemplate> create(
+        const std::string& name,
+        const std::string& targetState = "released",
+        const std::string& entityTypes = "f16,f22,f18,dok");
+    static std::shared_ptr<F77_WorkflowTemplate> loadById(const std::string& id);
+    static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadAll();
+    static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadForEntityType(
+        const std::string& entityType);
+
+private:
+    static Database* db();
+};
+
+// ── F77_WorkflowStep ─────────────────────────────────────────
+struct F77_WorkflowStep {
+    std::string stepId;
+    std::string workflowId;
+    std::string tplStepId;      // soft ref; snapshot source (template may have changed)
+    std::string title;
+    int         sequenceOrder   { 0 };
+    bool        isInitialize    { false };
+    bool        isFinal         { false };
+    std::string executionMode   { "sequential" };
+    std::string predecessorStepIds; // comma-sep f77_workflow_steps.step_id
+
+    // The F18_Operation that executes this step (NULL for Init/End)
+    std::string f18OperationId;
+
+    // Optional wait-condition F18_Operation that must complete before this step starts
+    std::string waitF18OperationId;
+    std::string waitConditionF18Type;
+
+    std::string status          { "pending" }; // pending|in_progress|approved|rejected|skipped|cancelled
+    bool        autoApprove     { false };
+    bool        requiresComment { false };
+    bool        requiresDocument{ false };
+    std::string completedDate;
+    std::string createdAt;
+    std::string updatedAt;
+
+    /// True if status is a terminal state.
+    bool isComplete() const {
+        return status == "approved" || status == "rejected" || status == "skipped";
+    }
+
+    /// Sync status from the linked F18_Operation.
+    void syncFromF18();
+
+    /// Check if all predecessor steps are complete.
+    bool canStart(const std::vector<F77_WorkflowStep>& allSteps) const;
+
+    bool save()   const;
+    bool remove() const;
+    void fromRow(const Row& r);
+
+    static std::shared_ptr<F77_WorkflowStep> loadById(const std::string& id);
+    static std::vector<F77_WorkflowStep>     loadForWorkflow(const std::string& workflowId);
+
+private:
+    static Database* db();
+};
+
+// ── F77_Workflow ──────────────────────────────────────────────
+struct F77_Workflow {
+    std::string workflowId;
+    std::string templateId;     // soft ref only; template may have changed
+    std::string templateName;   // snapshot of name at start
+    std::string entityType;     // f16|f22|f18|dok
+    std::string entityId;
+    std::string targetState     { "released" }; // snapshot from template
+    std::string status          { "active" };   // active|completed|cancelled|locked
+    std::string initiatedBy;
+    std::string initiatedDate;
+    std::string completedDate;
+    std::string notes           { "{}" };
+    std::string createdAt;
+    std::string updatedAt;
+
+    std::vector<F77_WorkflowStep> steps;
+
+    bool save()   const;
+    bool update() const;
+    bool remove() const;
+    bool loadSteps();
+    void fromRow(const Row& r);
+
+    bool isComplete() const;
+    std::vector<F77_WorkflowStep*> readySteps();
+
+    static std::shared_ptr<F77_Workflow> create(
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& templateName = "Standard-Freigabe",
+        const std::string& targetState  = "released",
+        const std::string& initiatedBy  = "system");
+
+    static std::shared_ptr<F77_Workflow> loadById(const std::string& id);
+    static std::vector<std::shared_ptr<F77_Workflow>> loadForEntity(
+        const std::string& entityType, const std::string& entityId);
+    static std::vector<std::shared_ptr<F77_Workflow>> loadActive();
+
+private:
+    static Database* db();
+};
+
+// ── F77_Engine ────────────────────────────────────────────────
+// Stateless coordinator. All methods are static.
+class F77_Engine {
+public:
+    /// Start a F77_Workflow from a named template.
+    /// Snapshots the template; template changes won't affect the running workflow.
+    static std::shared_ptr<F77_Workflow> startFromTemplate(
+        const std::string& templateId,
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& initiatedBy = "system");
+
+    /// Start a minimal F77_Workflow (Init → "Freigabe vorbereiten" → End).
+    /// Used when no template is configured for the entity type.
+    static std::shared_ptr<F77_Workflow> startDefault(
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& targetState  = "released",
+        const std::string& initiatedBy  = "system");
+
+    /// Engine tick: auto-approve Init/autoApprove steps, sync F18 status,
+    /// spawn wait-condition F18 Operations, auto-approve End when all done.
+    static bool tick(F77_Workflow& wf);
+
+    /// Fire (approve/reject/skip) a specific step of a running workflow.
+    /// Validates prerequisites (canStart, wait condition done), then
+    /// sets status on the linked F18_Operation.
+    static bool fireStep(
+        F77_Workflow& wf,
+        const std::string& stepId,
+        const std::string& decision,    // approved|rejected|skipped
+        const std::string& actorId,
+        const std::string& comment = "");
+
+    /// Check if all blocking sub-workflows for an entity are done.
+    static bool canRelease(
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& releaseWorkflowId,
+        int& blockerCount);
+
+    /// Lock all open F77 workflows on an entity (except the release WFI).
+    static int lockAll(
+        const std::string& entityType,
+        const std::string& entityId,
+        const std::string& releaseWorkflowId,
+        bool confirmLock);
+
+    /// Validate whether a step can be fired — dry-run, no state change.
+    /// Returns a human-readable status string starting with "OK:" or "BLOCKED:".
+    static std::string validateStep(
+        const F77_Workflow& wf,
+        const std::string& stepId);
+
+    /// Apply the target state to the entity (called automatically by tick on End).
+    static bool applyTargetState(const F77_Workflow& wf);
+
+    /// Seed built-in templates (idempotent).
+    static void seedDefaultTemplates();
+
+private:
+    static Database* db();
+    static std::string nowIso();
+    static void spawnWaitConditionF18(
+        F77_WorkflowStep& step,
+        const std::string& projectId);
+    static bool checkAndComplete(F77_Workflow& wf);
+};
+
+
+struct Version {
+    static constexpr int  major       = 2;
+    static constexpr int  minor       = 0;
+    static constexpr int  patch       = 0;
+    static constexpr char tag[]       = "refactor";
+    static constexpr char buildDate[] = __DATE__;
+
+    static std::string toString() {
+        return std::to_string(major) + "." +
+               std::to_string(minor) + "." +
+               std::to_string(patch) + "-" + tag;
+    }
+    static std::string full() {
+        return "Rosenholz PM v" + toString() + " (built " + buildDate + ")";
+    }
+};
+
+} // namespace Rosenholz

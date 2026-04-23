@@ -29,7 +29,6 @@ class F18Operation;  // forward declaration
 // Forward declarations — avoids pulling in all model headers
 class ProjectF16;
 class TaskF22;
-class IncidentF18;
 class Document;
 class Person;
 class Team;

@@ -2,9 +2,10 @@
 // F18Operation.cpp  —  Implementation of the unified F18Operation entity
 // ============================================================
 #include "F18Operation.h"
-#include "../../workflow/WorkflowEngine.h"
+#include "../../workflow/F77Workflow.h"
 #include "F18OperationStep.h"
 #include "../../core/Database.h"
+#include "../../workflow/F77Workflow.h"
 #include "../../core/Logger.h"
 #include "../../core/RegNumber.h"
 #include "../../core/Repository.h"
@@ -206,6 +207,10 @@ bool F18Operation::save() const {
 }
 
 bool F18Operation::update() {
+    if (isReleased()) {
+        LOG_WARN("[F18] update() verweigert: Vorgang ist released — " + vorgangId);
+        return false;
+    }
     updatedAt = nowIso();
     return save();
 }
@@ -266,7 +271,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     initStep->isInitialize  = true;
     initStep->autoApprove   = true;
     // Init step is always auto-approved immediately
-    initStep->status        = "approved";
+    initStep->status        = "done";   // auto-approved at creation
     initStep->decision      = "approved";
     initStep->decisionDate  = nowIso();
     initStep->completedDate = nowIso();
@@ -292,8 +297,6 @@ std::shared_ptr<F18Operation> F18Operation::create(
     v->steps.push_back(*initStep);
     v->steps.push_back(*endStep);
     LOG_INFO("[F18Operation] Created: " + v->vorgangId + " type=" + type);
-    // Auto-create the Main WFI that controls this F18Operation's lifecycle
-    v->ensureReleaseWorkflow();
     return v;
 }
 
@@ -350,7 +353,8 @@ std::vector<std::shared_ptr<F18Operation>> F18Operation::loadRecent(int n) {
 std::shared_ptr<F18OperationStep> F18Operation::addStep(
     const std::string& title,
     const std::string& stepType,
-    const std::string& assigneeId)
+    const std::string& assigneeId,
+    bool               isFree)
 {
     // Find End step index and max sequence order
     int endIdx = -1, maxSeq = 0;
@@ -375,16 +379,23 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     newStep.title              = title;
     newStep.stepType           = stepType;
     newStep.sequenceOrder      = maxSeq + 1;
-    newStep.predecessorStepIds = predId;
+    newStep.isFree             = isFree;
     newStep.assignedTo         = assigneeId;
     newStep.status             = "pending";
     newStep.createdAt          = nowIso();
     newStep.updatedAt          = nowIso();
+
+    // Free steps have no predecessor dependencies and are not wired into
+    // the main chain.  Regular steps are connected to the last non-End
+    // step and also become a predecessor of the End step.
+    if (!isFree) {
+        newStep.predecessorStepIds = predId;
+    }
     newStep.save();
     auto step = std::make_shared<F18OperationStep>(newStep);
 
-    // Update End's predecessors (use index — push_back may reallocate)
-    if (endIdx >= 0) {
+    // Only wire regular steps into the End step's predecessor list
+    if (!isFree && endIdx >= 0) {
         auto& endRef = steps[endIdx];
         if (endRef.predecessorStepIds.empty())
             endRef.predecessorStepIds = step->stepId;
@@ -502,16 +513,17 @@ bool F18Operation::addNote(const std::string& authorId,
 
 void F18Operation::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
-    auto inst = Rosenholz::WorkflowEngine::createReleaseWorkflow("f18", vorgangId, title);
-    if (!inst) return;
-    releaseWorkflowId = inst->instanceId;
+    auto wf = Rosenholz::F77_Engine::startDefault("f18", vorgangId);
+    if (!wf) return;
+    releaseWorkflowId = wf->workflowId;
     status         = "in_work";
     auto* db = F18Operation::db();
     if (db) db->exec(
         "UPDATE f18_operations SET release_workflow_id=?, status='in_work', updated_at=? "
-        "WHERE vorgang_id=?;",
-        {BindParam::text(releaseWorkflowId), BindParam::text(nowIso()),
-         BindParam::text(vorgangId)});
+            "WHERE vorgang_id=?;",
+            {BindParam::text(releaseWorkflowId),
+             BindParam::text(nowIso()),
+             BindParam::text(vorgangId)});
     LOG_INFO("[F77] Main WFI ensured for F18: " + vorgangId +
              " wfi=" + releaseWorkflowId);
 }

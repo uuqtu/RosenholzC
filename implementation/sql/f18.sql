@@ -138,7 +138,6 @@ CREATE TABLE IF NOT EXISTS f18_operation_steps (
     description         TEXT,
     step_type           TEXT DEFAULT 'task',
     sequence_order      INTEGER DEFAULT 0,
-    execution_type      TEXT DEFAULT 'sequential',  -- always sequential
     predecessor_step_ids TEXT,          -- comma-separated step IDs
 
     -- bookends
@@ -156,8 +155,12 @@ CREATE TABLE IF NOT EXISTS f18_operation_steps (
 
     -- status & result
     status              TEXT DEFAULT 'pending'
-                             CHECK(status IN ('pending','in_progress','approved',
-                                              'rejected','skipped','cancelled')),
+                             CHECK(status IN ('pending','in_progress','waiting',
+                                              'blocked','skipped','done')),
+
+    -- is_free: free steps have no predecessor dependencies and can
+    -- transition to any status at any time regardless of other steps.
+    is_free             INTEGER DEFAULT 0,
     auto_approve        INTEGER DEFAULT 0,
     requires_comment    INTEGER DEFAULT 0,
     requires_document   INTEGER DEFAULT 0,
@@ -192,7 +195,7 @@ CREATE TABLE IF NOT EXISTS communications (
     comm_id         TEXT PRIMARY KEY,
     owner_id        TEXT NOT NULL,
     owner_type      TEXT NOT NULL
-                         CHECK(owner_type IN ('project','task','f18step')),
+                         CHECK(owner_type IN ('f16','f22','f18','f18step')),
     comm_type       TEXT DEFAULT 'meeting'
                          CHECK(comm_type IN ('message','call','meeting','email','report')),
     title           TEXT NOT NULL,

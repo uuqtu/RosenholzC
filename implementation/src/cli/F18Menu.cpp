@@ -8,6 +8,7 @@
 //   changeRequest, changeObject, generic
 // ============================================================
 #include "cli_common.h"
+#include "../workflow/F77Workflow.h"
 #include "../model/f18/F18Operation.h"
 #include "../model/f18/F18OperationStep.h"
 #include "../model/f18/Communication.h"
@@ -220,7 +221,16 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
             // Note: use vorgangId as ownerId with type project to allow flexible lookup
 
         } else if (ch==6) {
-            documentBrowserMenu(v->projectId, v->taskId);
+            // Documents for this F18 Operation
+            documentBrowserMenu(v->projectId, "");
+            // Also show docs attached via f18OperationId
+            auto f18docs = Rosenholz::Document::loadForEntity("f18", v->vorgangId);
+            if (!f18docs.empty()) {
+                hdr("DOKUMENTE AN F18 " + v->vorgangId.substr(0,22));
+                for (auto& d : f18docs)
+                    std::cout << "  " << d->documentId.substr(0,26)
+                              << "  " << d->title.substr(0,28) << "\n";
+            }
 
         } else if (ch==7) {
             std::cout << "  Status: 1.draft 2.active 3.completed 4.archived\n";
@@ -233,12 +243,23 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
             // F77 Freigabe-Workflow
             hdr("F77 FREIGABE-WORKFLOW — " + v->vorgangId.substr(0,22));
             std::cout << "  Status: " << v->status << "\n";
-            if (v->releaseWorkflowId.empty()) { v->ensureReleaseWorkflow();
-                auto rv = F18Operation::loadById(v->vorgangId);
-                if (rv) *v = *rv; }
+            if (v->releaseWorkflowId.empty()) {
+                std::cout << "  (kein F77-Workflow aktiv)\n";
+                std::cout << "  1.Workflow starten  0.Abbrechen\n";
+                int wfc = readInt("Wahl",0,1);
+                if (wfc==1) {
+                    auto wf = Rosenholz::F77_Engine::startDefault("f18", v->vorgangId);
+                    if (wf) {
+                        v->releaseWorkflowId = wf->workflowId;
+                        v->update();
+                        std::cout << "  >> Workflow gestartet: " << wf->workflowId << "\n";
+                    }
+                }
+                if (v->releaseWorkflowId.empty()) continue;
+            }
             if (!v->releaseWorkflowId.empty()) {
                 int blockers=0;
-                Rosenholz::WorkflowEngine::canReleaseEntity(
+                Rosenholz::F77_Engine::canRelease(
                     "f18",v->vorgangId,v->releaseWorkflowId,blockers);
                 std::cout << "  Main WFI: " << v->releaseWorkflowId.substr(0,36) << "\n";
                 std::cout << (blockers>0 ? "  ⚠ " + std::to_string(blockers)

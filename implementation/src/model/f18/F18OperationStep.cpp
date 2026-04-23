@@ -30,6 +30,7 @@ void F18OperationStep::fromRow(const Row& r) {
     predecessorStepIds= g("predecessor_step_ids");
     isInitialize      = gb("is_initialize");
     isFinal           = gb("is_final");
+    isFree            = gb("is_free");
     assignedTo        = g("assigned_to");
     requiredRole      = g("required_role");
     dueDate           = g("due_date");
@@ -67,7 +68,7 @@ bool F18OperationStep::save() const {
         INSERT OR REPLACE INTO f18_operation_steps
         (step_id, vorgang_id, tpl_step_id, title, description, step_type,
          sequence_order, predecessor_step_ids,
-         is_initialize, is_final,
+         is_initialize, is_final, is_free,
          assigned_to, required_role, due_date, started_date, completed_date,
          sla_hours, sla_breached,
          status, auto_approve, requires_comment, requires_document,
@@ -75,14 +76,14 @@ bool F18OperationStep::save() const {
          tracking_status, focus_date, in_work_since,
          priority, assigned_to_group, progress_note, percent_complete,
          notes, created_at, updated_at)
-        VALUES(?,?,?,?,?,?, ?,?, ?,?, ?,?,?,?,?, ?,?,
+        VALUES(?,?,?,?,?,?, ?,?, ?,?,?, ?,?,?,?,?, ?,?,
                ?,?,?,?, ?,?,?,?,
                ?,?,?, ?,?,?,?,
                ?,?,?)
     )SQL", {
         t(stepId), t(vorgangId), n(tplStepId), t(title), n(description), t(stepType),
         i(sequenceOrder), n(predecessorStepIds),
-        i(isInitialize?1:0), i(isFinal?1:0),
+        i(isInitialize?1:0), i(isFinal?1:0), i(isFree?1:0),
         n(assignedTo), n(requiredRole), n(dueDate), n(startedDate), n(completedDate),
         i(slaHours), i(slaBreached?1:0),
         t(status), i(autoApprove?1:0), i(requiresComment?1:0), i(requiresDocument?1:0),
@@ -102,8 +103,7 @@ bool F18OperationStep::remove() const {
 
 // ── computeTrackingStatus ────────────────────────────────────
 void F18OperationStep::computeTrackingStatus() {
-    if (status == "approved" || status == "rejected" ||
-        status == "skipped"  || status == "cancelled") {
+    if (status == "done" || status == "skipped") {
         trackingStatus = "archived";
     } else if (!inWorkSince.empty()) {
         trackingStatus = "in_work";
@@ -122,7 +122,11 @@ void F18OperationStep::computeTrackingStatus() {
 
 // ── canStart ─────────────────────────────────────────────────
 bool F18OperationStep::canStart(const std::vector<F18OperationStep>& allSteps) const {
-    if (status != "pending" && status != "in_progress") return false;
+    // Terminal states can never be restarted
+    if (status == "done" || status == "skipped") return false;
+    // Free steps have no predecessor dependencies — always startable
+    if (isFree) return true;
+    // Non-free steps in waiting/blocked can still be started once deps clear
     if (predecessorStepIds.empty()) return true;
 
     std::istringstream ss(predecessorStepIds);

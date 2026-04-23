@@ -22,6 +22,7 @@
 #include <memory>
 #include "../../core/Database.h"
 #include <nlohmann/json.hpp>
+#include "../../repository/DocumentRevision.h"
 
 namespace Rosenholz {
 
@@ -60,10 +61,43 @@ public:
     std::string notes;          // JSON
     std::string createdAt, updatedAt;
 
+
+    // ── State predicates ──────────────────────────────────────
+    // The CLI and any other UI must call these — never inspect
+    // revState or status directly to make business decisions.
+
+    /// True if the active revision is in_work (the only mutable state).
+    bool isInWork() const;
+
+    /// True if the active revision is in a frozen state
+    /// (pre_released, released, locked, or closed).
+    bool isFrozen() const;
+
+    /// True if a new revision may be created via revise().
+    /// Requires: active revision exists and is NOT in_work.
+    bool canRevise() const;
+
+    /// True if checkout() may be called.
+    /// Requires: active revision is in_work and no checkout is already open.
+    bool canCheckout() const;
+
+    /// True if checkin() may be called.
+    /// Requires: active revision is in_work and a checkout is open.
+    bool canCheckin() const;
+
+    /// True if revertChanges() may be called.
+    /// Requires: active revision is in_work, a checkout is open,
+    ///           and a parent revision exists.
+    bool canRevert() const;
+
+    /// True if the document may be edited (fields, metadata).
+    /// Requires: active revision is in_work.
+    bool canEdit() const;
+
     // ── CRUD ──────────────────────────────────────────────
     bool save() const;
     void ensureReleaseWorkflow();  ///< Creates Main WFI on first save
-    void ensureRevision1();     ///< Creates Rev 1 on first save
+
     bool load(const std::string& id);
     bool remove();
     bool update();
@@ -137,25 +171,29 @@ public:
         std::string createdBy, changeNote, createdAt;
     };
 
-    /// Snapshot current file as a new version before editing.
-    // ------------------------------
-    // Snapshot the current file version before making changes.
+    // ── revise ────────────────────────────────────────────────
+    // The SOLE entry point for creating new document revisions.
+    //
+    // Rules enforced:
+    //   1. If no revisions exist yet: creates Revision 1 (in_work).
+    //   2. If a revision exists and is in_work: refuses — only one
+    //      in_work revision is allowed at a time.
+    //   3. If the active revision is NOT in_work (i.e. it was frozen
+    //      by completing a workflow): creates the next revision (in_work).
+    //
+    // All other revision-creating operations (ensureRevision1,
+    // snapshotVersion, checkout) have been removed. revise() is the
+    // only method that calls DocumentRevision::createRevision.
     //
     // Parameters:
-    //   changeNote : description of why this version was created
-    //   createdBy  : Person-ID who triggered the change (optional)
-    //
-    // Behavior:
-    //   - Copies current filePath to a versioned name
-    //     ({DOK-ID}_{Title}_v{Version}-snap.{ext}) in the same MFS dir
-    //   - Inserts a document_versions record with version number,
-    //     file path, size, and hash
-    //
-    // Returns:
-    //   true if the DB insert succeeded; false on error or missing file
-    // ------------------------------
-    bool snapshotVersion(const std::string& changeNote = "",
-                         const std::string& createdBy  = "");
+    //   changeNote : description of why this revision was created
+    //   createdBy  : Person-ID (optional)
+    // Returns: new revision, or nullptr if rules prevent creation.
+    std::shared_ptr<DocumentRevision> revise(
+        const std::string& changeNote = "",
+        const std::string& createdBy  = "");
+
+
     /// List all saved versions (newest first).
     // ------------------------------
     // Load all historical versions of this document.
@@ -198,6 +236,17 @@ public:
     // checkedOutPath: local path of the currently checked-out file.
     // Empty if not checked out.
     std::string checkedOutPath;
+
+    // preCheckoutRevId: revision number that was current when checkout()
+    // was called.  Used by revertChanges() to restore the pre-edit state.
+    // Zero means no checkout is in progress.
+    uint32_t preCheckoutRevId { 0 };
+
+    // revertChanges: restore document to the state recorded at checkout time.
+    // Creates a new revision from the pre-checkout snapshot so history is
+    // preserved.  Discards the current checked-out working copy.
+    // Returns false if no checkout was in progress or the snapshot is missing.
+    bool revertChanges();
 
     bool importLocalFile(const std::string& srcPath);
     /// Re-download fileUrl, snapshot current, update filePath.

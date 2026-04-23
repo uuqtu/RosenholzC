@@ -1,0 +1,393 @@
+// ============================================================
+// cli_f16.cpp  —  F16 Projekt: Befehlshandler, Wizard, Menü
+//
+// Public functions:
+//   cmdF16(args)        — dispatch for 'rh -f16 ...'
+//   listProjects()      — see cli_utils.cpp
+//   printProject(p)     — see cli_utils.cpp
+//   projectMenu(p)      — interactive detail menu
+//   createProjectWizard — step-by-step project creation
+// ============================================================
+#include "cli_common.h"
+#include "../core/Config.h"
+#include "../core/FileOps.h"
+#include "../core/Logger.h"
+#include "../mfs/MFSWriter.h"
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
+
+namespace CLI {
+
+using namespace Rosenholz;
+
+// ── cmdF16 ────────────────────────────────────────────────────
+//
+// Dispatch table for 'rh -f16 [args]':
+//
+//   rh -f16                    → list all projects (listProjects)
+//   rh -f16 -s <query>         → search by title / reg-number
+//   rh -f16 -status <status>   → filter by status string
+//   rh -f16 <id>               → open projectMenu for that project
+//   rh -f16 -n                 → guided creation wizard
+//   rh -f16 (anything else)    → direct creation wizard
+
+void cmdF16(const std::vector<std::string>& args) {
+
+    // No arguments: list all projects
+    if (args.empty()) {
+        listProjects();
+        return;
+    }
+
+    // -s <query>  —  search by title or registration number
+    if (args[0] == "-s" || args[0] == "--search") {
+        std::string q = args.size() > 1 ? args[1] : readLine("Suche: ");
+        if (q.empty()) return;
+        std::string ql = q;
+        std::transform(ql.begin(), ql.end(), ql.begin(), ::tolower);
+
+        auto all = ProjectF16::loadAll();
+        int found = 0;
+        for (auto& p : all) {
+            std::string t = p->title, r = p->regNumber.toString();
+            std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+            std::transform(r.begin(), r.end(), r.begin(), ::tolower);
+            if (t.find(ql) != std::string::npos || r.find(ql) != std::string::npos) {
+                std::cout << "  " << std::left << std::setw(26) << p->regNumber.toString()
+                          << "  " << std::setw(36) << p->title.substr(0, 35)
+                          << "  [" << p->status << "]\n";
+                ++found;
+            }
+        }
+        if (!found) std::cout << "  (keine Treffer für \"" << q << "\")\n";
+        return;
+    }
+
+    // -status <status>  —  filter by lifecycle status
+    if (args[0] == "-status" || args[0] == "--status") {
+        std::string st = args.size() > 1 ? args[1] : readLine("Status: ");
+        auto list = ProjectF16::loadByStatus(st);
+        if (list.empty()) {
+            std::cout << "  (keine Projekte mit status=" << st << ")\n";
+            return;
+        }
+        for (auto& p : list)
+            std::cout << "  " << std::left << std::setw(26) << p->regNumber.toString()
+                      << "  " << p->title.substr(0, 38) << "\n";
+        std::cout << "  " << list.size() << " Treffer.\n";
+        return;
+    }
+
+    // -n  —  guided creation (same as direct wizard; kept for symmetry)
+    if (args[0] == "-n" || args[0] == "--neu") {
+        auto p = createProjectWizard();
+        if (p) printOk("  >> Projekt angelegt: " + p->regNumber.toString() + "  " + p->title);
+        return;
+    }
+
+    // <id>  —  open project menu
+    if (isId(args[0])) {
+        auto p = ProjectF16::loadById(args[0]);
+        if (!p) die("F16 nicht gefunden: " + args[0]);
+        projectMenu(p);
+        return;
+    }
+
+    // Anything else → direct creation wizard
+    auto p = createProjectWizard();
+    if (p) printOk("  >> Projekt angelegt: " + p->regNumber.toString() + "  " + p->title);
+}
+
+
+// ── editMenu (static helper for projectMenu) ──────────────────
+//
+// Handles all field-editing for a project.
+// Called from projectMenu when the project is not yet released.
+
+static void editMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
+    using namespace Rosenholz;
+    hdr("PROJEKT BEARBEITEN — " + p->regNumber.toString());
+
+    // Title and core fields
+    std::string title = readOpt("Titel (leer = behalten): ");
+    if (!title.empty()) p->title = title;
+
+    std::string phase = readOpt("Phase (leer = behalten): ");
+    if (!phase.empty()) p->phase = phase;
+
+    std::cout << "  Priorität: 1.low  2.medium  3.high  4.critical  (leer = behalten)\n";
+    std::string pr = readOpt("Priorität: ");
+    static const char* prios[] = {"low","medium","high","critical"};
+    if (pr == "1") p->priority = prios[0];
+    else if (pr == "2") p->priority = prios[1];
+    else if (pr == "3") p->priority = prios[2];
+    else if (pr == "4") p->priority = prios[3];
+
+    std::string complex = readOpt("Komplexität (simple/moderate/complex, leer = behalten): ");
+    if (!complex.empty()) p->complexity = complex;
+
+    std::string meth = readOpt("Methodik (agile/waterfall/kanban, leer = behalten): ");
+    if (!meth.empty()) p->methodology = meth;
+
+    // Scope
+    std::string scope = readOpt("Scope-Beschreibung (leer = behalten): ");
+    if (!scope.empty()) {
+        p->scopeStatement  = scope;
+        p->scopeVersion    = readOpt("Scope-Version (leer = behalten): ");
+        p->scopeChangeReason = readOpt("Änderungsgrund: ");
+        p->scopeChangeCount++;
+        p->scopeLastChanged = nowIso();
+    }
+
+    // Dates
+    std::string startP = readOpt("Geplanter Start (YYYY-MM-DD, leer = behalten): ");
+    if (!startP.empty()) p->startDatePlanned = startP;
+
+    std::string endP = readOpt("Geplantes Ende (YYYY-MM-DD, leer = behalten): ");
+    if (!endP.empty()) p->endDatePlanned = endP;
+
+    // Budget
+    std::string bgt = readOpt("Budget geplant EUR (leer = behalten): ");
+    if (!bgt.empty()) { try { p->budgetPlanned = std::stod(bgt); } catch(...) {} }
+
+    std::string bga = readOpt("Budget genehmigt EUR (leer = behalten): ");
+    if (!bga.empty()) { try { p->budgetApproved = std::stod(bga); } catch(...) {} }
+
+    std::string bact = readOpt("Budget ist EUR (leer = behalten): ");
+    if (!bact.empty()) {
+        try { p->budgetActual = std::stod(bact); } catch(...) {}
+        p->recalcEarnedValue();
+    }
+
+    // Notes, ext ref, links
+    std::string ext = readOpt("Externe Referenz (leer = behalten): ");
+    if (!ext.empty()) p->externalRef = ext;
+
+    std::string links = readOpt("Links (leer = behalten): ");
+    if (!links.empty()) p->links = links;
+
+    if (p->update()) std::cout << "  >> Gespeichert.\n";
+    else             std::cout << "  >> Fehler beim Speichern.\n";
+}
+
+// ── mainWorkflowMenu (static helper for projectMenu) ──────────
+//
+// Shows the F77 release workflow sub-menu for a project.
+// Called from projectMenu option 6 (F77-Workflow).
+
+static void mainWorkflowMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
+    using namespace Rosenholz;
+    while (true) {
+        hdr("F77 WORKFLOW — " + p->regNumber.toString());
+        std::cout << "  Status       : " << p->status << "\n";
+
+        if (p->releaseWorkflowId.empty()) {
+            std::cout << "  (kein F77-Workflow aktiv — Status bleibt in_work)\n";
+            std::cout << "  1. Workflow starten    0. Zurück\n";
+            int ch = readInt("Wahl", 0, 1);
+            if (ch == 0) return;
+            auto wf = F77_Engine::startDefault("f16", p->projectId);
+            if (wf) {
+                p->releaseWorkflowId = wf->workflowId;
+                p->update();
+                std::cout << "  >> Workflow gestartet: " << wf->workflowId << "\n";
+                instanceMenu(wf->workflowId);
+            }
+            return;
+        }
+
+        int blockers = 0;
+        F77_Engine::canRelease("f16", p->projectId, p->releaseWorkflowId, blockers);
+        std::cout << "  Workflow-ID  : " << p->releaseWorkflowId.substr(0, 36) << "\n";
+        if (blockers > 0)
+            std::cout << "  ! " << blockers << " offene Sub-Workflow(s) blockieren Freigabe\n";
+        else
+            std::cout << "  OK Freigabe möglich\n";
+
+        std::cout << "  1. Workflow öffnen    2. Alle sperren    0. Zurück\n";
+        int ch = readInt("Wahl", 0, 2);
+        if (ch == 0) return;
+        if (ch == 1) { instanceMenu(p->releaseWorkflowId); return; }
+        if (ch == 2 && blockers > 0) {
+            if (yesno("Alle " + std::to_string(blockers) + " Workflows sperren?")) {
+                int locked = F77_Engine::lockAll("f16", p->projectId, p->releaseWorkflowId, true);
+                std::cout << "  >> " << locked << " Workflow(s) gesperrt.\n";
+            }
+        }
+        return;
+    }
+}
+
+// ── createProjectWizard ───────────────────────────────────────
+//
+// Step-by-step wizard for new F16 projects.
+// Asks for: title, type, size, codename, priority, complexity,
+//           methodology, scope, start/end dates, budget.
+// Saves to DB and writes MFS file if MFS is enabled.
+
+std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
+    hdr("CREATE NEW PROJECT (F16)");
+    std::string title = readLine("Title: ");
+    std::cout << "  Project type:\n"
+              << "    1. OV  (Operativer Vorgang — active investigation)\n"
+              << "    2. IM  (IM-Vorgang — contributor engagement)\n"
+              << "    3. OPK (Operative Personenkontrolle — due diligence)\n"
+              << "    4. GMS (GMS-Akte — advisory relationship)\n"
+              << "    5. AU  (Untersuchungsvorgang — formal inquiry)\n"
+              << "    6. SVG (Sicherungsvorgang — monitoring)\n";
+    int tc = readInt("Choose type", 1, 6);
+    static const char* types[] = {"OV","IM","OPK","GMS","AU","SVG"};
+    std::string ptype = types[tc-1];
+
+    std::cout << "  Size class:\n"
+              << "    1. large   2. medium   3. small\n";
+    int sc = readInt("Choose size", 1, 3);
+    static const char* sizes[] = {"large","medium","small"};
+    std::string size = sizes[sc-1];
+
+    std::string codename   = readOpt("Codename (optional): ");
+    std::string priority   = readOpt("Priority (high/medium/low, optional): ");
+    std::string complexity = readOpt("Complexity (complex/moderate/simple, optional): ");
+    std::string method     = readOpt("Methodology (agile/waterfall/kanban, optional): ");
+    std::string scope      = readOpt("Scope statement (optional): ");
+    std::string startPlan  = readOpt("Planned start date (YYYY-MM-DD, optional): ");
+    std::string endPlan    = readOpt("Planned end date  (YYYY-MM-DD, optional): ");
+
+    std::string budgetStr  = readOpt("Budget planned (EUR, optional): ");
+    double budget = 0.0;
+    if (!budgetStr.empty()) try { budget = std::stod(budgetStr); } catch(...) {}
+
+    auto p = Rosenholz::ProjectF16::create(title, ptype, size);
+    p->codename        = codename;
+    p->priority        = priority;
+    p->complexity      = complexity;
+    p->methodology     = method;
+    p->scopeStatement  = scope;
+    p->startDatePlanned= startPlan;
+    p->endDatePlanned  = endPlan;
+    p->budgetPlanned   = budget;
+
+    if (p->save()) {
+        std::cout << "\n  >> Project created: " << p->regNumber.toString()
+                  << " (" << p->projectId << ")\n\n";
+        // write MFS file
+        auto& cfg = Rosenholz::Config::instance();
+        if (cfg.mfs().enabled) p->writeMFSFile(cfg.mfsPath());
+        return p;
+    } else {
+        std::cout << "\n  >> ERROR: Project could not be saved.\n\n";
+        return nullptr;
+    }
+}
+
+
+
+
+
+
+// ── projectMenu ───────────────────────────────────────────────
+//
+// Interactive detail menu for a single F16 project.
+// Re-loads the project each loop iteration to pick up any
+// changes made by sub-menus.
+
+void projectMenu(std::shared_ptr<ProjectF16> p) {
+    while (true) {
+        // Reload to show current state
+        if (auto fresh = ProjectF16::loadById(p->projectId)) *p = *fresh;
+        printProject(*p);
+
+        // Block editing if released
+        if (p->isReleased())
+            std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n\n";
+
+        std::cout
+            << "  [PROJEKT]\n"
+            << "    1. Bearbeiten (Edit-Untermenü)\n"
+            << "\n  [F22 AUFGABEN]\n"
+            << "    2. Aufgaben anzeigen\n"
+            << "    3. Neue Aufgabe anlegen\n"
+            << "\n  [DOKUMENTE]\n"
+            << "    4. Dokumente anzeigen\n"
+            << "    5. Neues Dokument anlegen\n"
+            << "\n  [F18 VORGÄNGE]\n"
+            << "    6. F18 Vorgänge anzeigen / öffnen\n"
+            << "    7. Neuen F18 Vorgang anlegen\n"
+            << "\n  [KOMMUNIKATION]\n"
+            << "    8. Communications (Meetings, Calls, ...)\n"
+            << "\n  [MEILENSTEINE]\n"
+            << "    9. Meilenstein-Notizen bearbeiten\n"
+            << "\n  [MAIN WORKFLOW]\n"
+            << "   10. Main Workflow / Freigabe\n"
+            << "\n    0. Zurück\n";
+        hr();
+
+        int ch = readInt("Wahl", 0, 10); if (ch==0) break;
+
+        if (ch==1) {
+            if (p->canEdit()) editMenu(p);
+            else std::cout << "  >> Released — kein Bearbeiten moeglich.\n";
+
+        } else if (ch==2) {
+            listTasks(p->projectId);
+
+        } else if (ch==3) {
+            if (!p->canAddChildren()) { std::cout << "  >> Released — keine neuen Aufgaben.\n"; continue; }
+            auto task = createTaskWizard(p->projectId);
+            if (task) {
+                std::cout << "  Aufgabe jetzt öffnen? (j/n): ";
+                std::string yn; std::getline(std::cin, yn);
+                if (yn=="j"||yn=="J") taskMenu(task);
+            }
+
+        } else if (ch==4) {
+            documentBrowserMenu(p->projectId, "");
+
+        } else if (ch==5) {
+            if (!p->canAddChildren()) { std::cout << "  >> Released — keine neuen Dokumente.\n"; continue; }
+            auto doc = createDocumentWizard(p->projectId, "");
+            if (doc) documentMenu(doc);
+
+        } else if (ch==6) {
+            f18BrowserMenu(p->projectId, "");
+
+        } else if (ch==7) {
+            if (!p->canAddChildren()) { std::cout << "  >> Released — keine neuen F18-Vorgaenge.\n"; continue; }
+            auto v = createF18Wizard(p->projectId, "");
+            if (v) f18Menu(v);
+
+        } else if (ch==8) {
+            communicationMenu(p->projectId, "project");
+
+        } else if (ch==9) {
+            hdr("MEILENSTEIN-NOTIZEN — " + p->projectId.substr(0,20));
+            if (!p->milestones.empty())
+                std::cout << "  Aktuell:\n" << p->milestones << "\n\n";
+            else
+                std::cout << "  (keine Notizen)\n\n";
+            std::cout << "  1.Neu schreiben  2.Anfügen  0.Zurück\n";
+            int ms = readInt("Wahl",0,2);
+            if (ms==1) {
+                std::cout << "  Text (leere Zeile = fertig):\n";
+                std::string all, line;
+                while (std::getline(std::cin, line) && !line.empty())
+                    all += line + "\n";
+                p->milestones = all; p->update();
+                std::cout << "  >> Gespeichert.\n";
+            } else if (ms==2) {
+                std::string add = readLine("Anfügen: ");
+                if (!add.empty()) {
+                    if (!p->milestones.empty()) p->milestones += "\n";
+                    p->milestones += add; p->update();
+                    std::cout << "  >> Angefügt.\n";
+                }
+            }
+
+        } else if (ch==10) {
+            mainWorkflowMenu(p);
+        }
+    }
+}
+
+} // namespace CLI

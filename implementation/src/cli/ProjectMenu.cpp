@@ -11,9 +11,10 @@
 //   [MEILENSTEINE] — Free-text Notizen
 // ============================================================
 #include "cli_common.h"
+#include "../workflow/F77Workflow.h"
 #include "../mfs/MFSWriter.h"
 #include "../core/Config.h"
-#include "../workflow/WorkflowEngine.h"
+#include "../workflow/F77Workflow.h"
 #include <iomanip>
 
 namespace CLI {
@@ -126,29 +127,41 @@ static void mainWorkflowMenu(std::shared_ptr<ProjectF16> p) {
     hdr("F77 FREIGABE-WORKFLOW — " + p->regNumber.toString());
     std::cout << "  Status    : " << p->status << "\n";
     if (p->releaseWorkflowId.empty()) {
-        std::cout << "  (kein Main Workflow — wird angelegt)\n";
-        p->ensureReleaseWorkflow();
-        auto rp = ProjectF16::loadById(p->projectId);
-        if (rp) *p = *rp;
+        std::cout << "  (kein F77-Workflow aktiv)\n";
+        std::cout << "  1.Workflow starten  0.Zurueck\n";
+        int ch0 = readInt("Wahl",0,1);
+        if (ch0==1) {
+            auto wf = Rosenholz::F77_Engine::startDefault("f16", p->projectId);
+            if (wf) {
+                p->releaseWorkflowId = wf->workflowId;
+                auto* pdb = Rosenholz::DatabasePool::instance().get("f16");
+                if (pdb) pdb->exec(
+                    "UPDATE projects SET release_workflow_id=?, status=\'in_work\', updated_at=? WHERE project_id=?;",
+                    {Rosenholz::BindParam::text(wf->workflowId),
+                     Rosenholz::BindParam::text(Rosenholz::nowIso()),
+                     Rosenholz::BindParam::text(p->projectId)});
+                std::cout << "  >> F77-Workflow gestartet: " << wf->workflowId << "\n";
+            }
+        }
+        return;
     }
     if (!p->releaseWorkflowId.empty()) {
         int blockers = 0;
-        bool canRel = WorkflowEngine::canReleaseEntity("f16", p->projectId, p->releaseWorkflowId, blockers);
-        std::cout << "  Main WFI  : " << p->releaseWorkflowId.substr(0,36) << "\n";
+        Rosenholz::F77_Engine::canRelease("f16", p->projectId, p->releaseWorkflowId, blockers);
+        std::cout << "  Workflow  : " << p->releaseWorkflowId.substr(0,36) << "\n";
         if (blockers > 0)
-            std::cout << "  ⚠ " << blockers << " offene WFI(s) blockieren die Freigabe\n";
+            std::cout << "  ! " << blockers << " offene Workflow(s) blockieren Freigabe\n";
         else
-            std::cout << "  ✓ Alle Sub-WFIs abgeschlossen — Freigabe möglich\n";
-
-        std::cout << "\n  1.Main WFI öffnen  2.Alle Sub-WFIs sperren  0.Zurück\n";
-        int ch = readInt("Wahl",0,2); 
+            std::cout << "  OK Freigabe moeglich\n";
+        std::cout << "\n  1.Workflow oeffnen  2.Alle Workflows sperren  0.Zurueck\n";
+        int ch = readInt("Wahl",0,2);
         if (ch==1) instanceMenu(p->releaseWorkflowId);
         else if (ch==2 && blockers>0) {
-            std::cout << "  " << blockers << " WFI(s) sperren? 'ja' eingeben: ";
+            std::cout << "  " << blockers << " Workflow(s) sperren? (ja/nein): ";
             std::string conf; std::getline(std::cin, conf);
             if (conf=="ja") {
-                int locked = WorkflowEngine::lockAllOpenWorkflows("f16", p->projectId, p->releaseWorkflowId, true);
-                std::cout << "  >> " << locked << " WFI(s) gesperrt.\n";
+                int locked = Rosenholz::F77_Engine::lockAll("f16", p->projectId, p->releaseWorkflowId, true);
+                std::cout << "  >> " << locked << " Workflow(s) gesperrt.\n";
             }
         }
     }

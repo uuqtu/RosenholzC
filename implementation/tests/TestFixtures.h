@@ -7,13 +7,12 @@
 // ============================================================
 #include "../src/model/Person.h"
 #include "../src/model/Team.h"
-#include "../src/model/ProjectF16.h"
-#include "../src/model/TaskF22.h"
-#include "../src/model/Document.h"
-#include "../src/model/Milestone.h"
+#include "../src/model/f16/ProjectF16.h"
+#include "../src/model/f22/TaskF22.h"
+#include "../src/model/dok/Document.h"
 #include "../src/model/f18/F18Operation.h"
 #include "../src/model/f18/F18OperationStep.h"
-#include "../src/workflow/WorkflowEngine.h"
+#include "../src/workflow/F77Workflow.h"
 #include <memory>
 #include <vector>
 #include <string>
@@ -189,41 +188,20 @@ struct FullProjectFixture : Fixture {
 
 // ── Workflow fixture ──────────────────────────────────────────
 struct WorkflowFixture : Fixture {
-    std::shared_ptr<WorkflowTemplate> templ;
-    std::shared_ptr<WorkflowInstance> instance;
-    ProjectFixture                    projFix;
+    ProjectFixture projFix;
+    std::shared_ptr<F77_WorkflowTemplate> templ;
+    std::shared_ptr<F77_Workflow>         instance;
 
-    WorkflowFixture() : projFix() {
-        templ = WorkflowTemplate::create("Fixture-Workflow","sequential");
-        templ->entityTypes = "f16";
-
-        WorkflowTemplateAction init;
-        init.tplActionId = genId("WFT"); init.templateId = templ->templateId;
-        init.title = "Initialisierung"; init.sequenceOrder = 0;
-        init.isInitialize = true; init.autoApprove = true;
-        templ->templateActions.push_back(init);
-
-        WorkflowTemplateAction step;
-        step.tplActionId = genId("WFT"); step.templateId = templ->templateId;
-        step.title = "Prüfschritt"; step.sequenceOrder = 1;
-        step.predecessorIds = init.tplActionId;
-        templ->templateActions.push_back(step);
-
-        WorkflowTemplateAction final_;
-        final_.tplActionId = genId("WFT"); final_.templateId = templ->templateId;
-        final_.title = "Abschluss"; final_.sequenceOrder = 2;
-        final_.predecessorIds = step.tplActionId;
-        final_.isFinal = true; final_.requiresDecisionLogEntry = true;
-        templ->templateActions.push_back(final_);
-
+    WorkflowFixture() : projFix("WF-Fixture-Project") {
+        templ = F77_WorkflowTemplate::create("Fixture-Workflow","released","f16");
         templ->save();
-        trackId(templ->templateId);
-
-        instance = WorkflowEngine::startFromTemplate(
-            templ->templateId,
-            "project", projFix.project->projectId,
-            "Fixture-Instanz");
-        if (instance) trackId(instance->instanceId);
+        auto init = templ->addTemplateStep("Init","sequential",true,false); init.save();
+        auto step = templ->addTemplateStep("Pruefung","sequential",false,false);
+        step.predecessorTplStepIds = init.tplStepId; step.save();
+        auto fin  = templ->addTemplateStep("End","sequential",false,true);
+        fin.predecessorTplStepIds = step.tplStepId; fin.autoApprove = true; fin.save();
+        instance = F77_Engine::startFromTemplate(
+            templ->templateId, "f16", projFix.project->projectId, "fixture");
     }
 };
 

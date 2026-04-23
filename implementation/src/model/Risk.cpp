@@ -4,6 +4,11 @@
 #include "../core/Logger.h"
 #include "Utils.h"
 #include "../core/Repository.h"
+#include <chrono>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
+#include <random>
 
 namespace Rosenholz {
 
@@ -108,14 +113,6 @@ std::vector<std::shared_ptr<Risk>> Risk::loadHighRisks() {
     LOG_INFO("Loaded "+std::to_string(result.size())+" high/critical open risks");
     return result;
 }
-// ------------------------------
-// recalcScore
-//
-// Behavior:
-//   overallRiskScore = probabilityScore × max(impactScoreTime,
-//     impactScoreCost, impactScoreQuality, impactScoreScope)
-//   Sets riskLevel: ≥15→critical ≥9→high ≥4→medium else→low
-// ------------------------------
 void Risk::recalcScore() {
     overallRiskScore = probabilityScore *
         std::max({impactScoreTime, impactScoreCost, impactScoreQuality, impactScoreScope});
@@ -123,27 +120,12 @@ void Risk::recalcScore() {
 }
 bool Risk::reassignOwner(const std::string& id) { ownerId=id; return update(); }
 bool Risk::reassignToProject(const std::string& id) { projectId=id; return update(); }
+std::shared_ptr<TrackableItem> Risk::addTrackable(const std::string& t, const std::string& by) {
+    auto ti=TrackableItem::create("risk",riskId,t,by); ti->save(); trackables.push_back(ti); return ti;
+}
+void Risk::loadTrackables() { trackables=TrackableItem::loadForEntity("risk",riskId); }
 nlohmann::json Risk::toJson() const {
     return {{"riskId",riskId},{"title",title},{"riskLevel",riskLevel},{"status",status},
             {"overallRiskScore",overallRiskScore},{"projectId",projectId}};
 }
-// ------------------------------
-// loadRecent
-// Returns the n most recently created Risk records.
-// Parameters:
-//   n : maximum number of results (default 20)
-// ------------------------------
-std::vector<std::shared_ptr<Risk>> Risk::loadRecent(int n) {
-    std::vector<std::shared_ptr<Risk>> result;
-    auto* db = DatabasePool::instance().get("reporting");
-    if (!db) return result;
-    auto rows = db->query("SELECT * FROM risks ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
-    for (auto& r : rows) {
-        auto obj = std::make_shared<Risk>();
-        obj->fromRow(r);
-        result.push_back(obj);
-    }
-    return result;
-}
-
 } // namespace Rosenholz
