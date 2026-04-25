@@ -96,6 +96,7 @@ static void printHelp() {
 "  rh -de                        Diensteinheiten-Browser öffnen\n"
 "\n"
 "SYSTEM\n"
+"  rh -indexdok                  MFS-Ordner scannen — nicht registrierte Dateien finden\n"
 "  rh -search <suche>            Globale Suche: F16, F22, F18, DOK, F77\n"
 "                                  Ergebnisse nummeriert — Nummer eingeben zum Öffnen\n"
 "  rh -backup                    Vollständiges Backup (Datenbanken + MFS)\n"
@@ -150,7 +151,7 @@ static void sigintHandler(int) {
 static const char* const kCommands[] = {
     "-f16", "-f22", "-f18", "-dok", "-f77",
     "-per", "-de",  "-search", "-backup", "-status",
-    "-mfs", "-log", "-h", "--help",
+    "-mfs", "-log", "-indexdok", "-h", "--help",
     "exit", "quit", "help",
     nullptr
 };

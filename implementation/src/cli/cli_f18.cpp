@@ -10,6 +10,7 @@
 //   createF18WizardGuided()     — guided: pick F16/F22 first
 // ============================================================
 #include "cli_common.h"
+#include "../core/OperationResult.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
 #include "../core/Logger.h"
@@ -119,7 +120,7 @@ void cmdF18(const std::vector<std::string>& args) {
 
     // Try as project ID
     auto p = ProjectF16::loadById(args[0]);
-    if (!p) die("ID nicht gefunden: " + args[0]);
+    if (!p) { printErr("ID nicht gefunden: " + args[0]); return; }
 
     // Check for -t <type> flag anywhere in remaining args
     std::string typeArg;
@@ -288,7 +289,7 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
 
 void printF18Operation(const Rosenholz::F18Operation& v) {
     using namespace Rosenholz;
-    hdr("F18 WORKFLOW  " + v.vorgangId.substr(0, 22));
+    hdr("F18 VORGANG  " + v.vorgangId.substr(0, 22));
     auto row = [](const std::string& k, const std::string& val) {
         std::cout << "  | " << std::left << std::setw(22) << k
                   << std::setw(30) << val.substr(0,29) << "|\n";
@@ -364,7 +365,7 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& type)
 {
     using namespace Rosenholz;
-    hdr("NEUEN F18 WORKFLOW ANLEGEN");
+    hdr("NEUEN F18 VORGANG ANLEGEN");
 
     // Step 1: Title
     std::string title = readLine("Titel des Vorgangs: ");
@@ -399,7 +400,7 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
 
     auto v = Rosenholz::F18Operation::create(projectId, title, chosenType, taskId);
     if (!v) {
-        std::cout << "  >> FEHLER: F18 Workflow konnte nicht angelegt werden.\n";
+        std::cout << "  >> FEHLER: F18 Vorgang konnte nicht angelegt werden.\n";
         return nullptr;
     }
     if (!owner.empty()) v->ownerId   = owner;
@@ -427,7 +428,7 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
         if (v_released) std::cout << "  ⚠ RELEASED — nur Lesezugriff\n";
         std::cout << "  1.Bearbeiten     2.Schritt hinzufügen  3.Schritt öffnen\n"
                      "  4.Notiz          5.Communications       6.Dokumente\n"
-                     "  7.Status ändern  8.Main Workflow        0.Zurück\n";
+                     "  7.Notes anfügen  8.Starte Workflow...   0.Zurück\n";
         int ch = readInt("Wahl",0,8); if (ch==0) break;
 
         if (ch==1) {
@@ -530,31 +531,28 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
             v->update();
             std::cout << "  >> Status: " << v->status << "\n";
         } else if (ch==8) {
-            // F77 Freigabe-Workflow
-            hdr("F77 FREIGABE-WORKFLOW — " + v->vorgangId.substr(0,22));
+            // Starte Workflow...
+            hdr("WORKFLOW — " + v->vorgangId.substr(0,22));
             std::cout << "  Status: " << v->status << "\n";
             if (v->releaseWorkflowId.empty()) {
-                std::cout << "  (kein F77-Workflow aktiv)\n";
-                std::cout << "  1.Workflow starten  0.Abbrechen\n";
+                std::cout << "  Kein Workflow aktiv.\n";
+                std::cout << "  1. Workflow starten...    0. Zurück\n";
                 int wfc = readInt("Wahl",0,1);
                 if (wfc==1) {
-                    auto wf = Rosenholz::F77_Engine::startDefault("f18", v->vorgangId);
-                    if (wf) {
-                        v->releaseWorkflowId = wf->workflowId;
-                        v->update();
-                        std::cout << "  >> Workflow gestartet: " << wf->workflowId << "\n";
-                    }
+                    std::string wid = startWfInstanceWizard("f18", v->vorgangId);
+                    if (!wid.empty()) instanceMenu(wid);
                 }
-                if (v->releaseWorkflowId.empty()) continue;
-            }
-            if (!v->releaseWorkflowId.empty()) {
+            } else {
+                auto wf = Rosenholz::F77_Workflow::loadById(v->releaseWorkflowId);
+                std::string wfStatus = wf ? wf->status : "unbekannt";
                 int blockers=0;
                 Rosenholz::F77_Engine::canRelease(
                     "f18",v->vorgangId,v->releaseWorkflowId,blockers);
-                std::cout << "  Main WFI: " << v->releaseWorkflowId.substr(0,36) << "\n";
-                std::cout << (blockers>0 ? "  ⚠ " + std::to_string(blockers)
-                    + " WFI(s) offen\n" : "  ✓ Freigabe möglich\n");
-                std::cout << "  1.Main WFI öffnen  0.Zurück\n";
+                std::cout << "  WFI    : " << v->releaseWorkflowId.substr(0,36) << "\n";
+                std::cout << "  Status : " << wfStatus << "\n";
+                std::cout << (blockers>0 ? "  ! " + std::to_string(blockers)
+                    + " Schritte blockieren\n" : "  ✓ Freigabe moeglich\n");
+                std::cout << "  1.Workflow öffnen  0.Zurück\n";
                 int mch = readInt("Wahl",0,1);
                 if (mch==1) instanceMenu(v->releaseWorkflowId);
             }
@@ -588,7 +586,20 @@ void f18BrowserMenu(const std::string& projectId, const std::string& taskId,
                           << "  " << v->status << "\n";
         }
 
-        std::cout << "\n  1.Öffnen  2.Neu anlegen  0.Zurück\n";
+        // Check whether the parent entity is released (no new children allowed)
+        bool parentReleased = false;
+        if (!taskId.empty()) {
+            auto t = TaskF22::loadById(taskId);
+            parentReleased = t && (t->isReleased() || t->isWorkflowComplete());
+        } else if (!projectId.empty()) {
+            auto p = ProjectF16::loadById(projectId);
+            parentReleased = p && (p->isReleased() || p->isWorkflowComplete());
+        }
+
+        if (parentReleased)
+            std::cout << "\n  1.Öffnen  0.Zurück  (Released — kein Neu anlegen)\n";
+        else
+            std::cout << "\n  1.Öffnen  2.Neu anlegen  0.Zurück\n";
         int ch = readInt("Wahl",0,2); if (ch==0) break;
 
         if (ch==1) {
@@ -596,7 +607,7 @@ void f18BrowserMenu(const std::string& projectId, const std::string& taskId,
             int pick = readInt("Nummer",1,(int)items.size());
             f18Menu(items[pick-1]);
         } else if (ch==2) {
-            // createF18Wizard asks for title then type
+            if (parentReleased) { std::cout << "  >> Released — kein Neu anlegen.\n"; continue; }
             auto v = createF18Wizard(projectId, taskId, "");
             if (v) f18Menu(v);
         }

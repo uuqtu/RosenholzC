@@ -6,41 +6,47 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 CREATE TABLE IF NOT EXISTS documents (
+    -- Core identity
     document_id            TEXT PRIMARY KEY,
-    workflow_instance_id   TEXT,
-    workflow_status        TEXT,
-    workflow_current_state TEXT,
-    release_workflow_id       TEXT,
-    project_id             TEXT,
-    task_id                TEXT,
-    f18_operation_id       TEXT,   -- F18 Operation reference
-    f18_step_id            TEXT,   -- F18 Operation Step reference
+    release_workflow_id    TEXT,               -- F77 Main-Workflow instance
+    project_id             TEXT,               -- Mandatory: filing parent
+    task_id                TEXT,               -- Optional: task-scoped
+
+    -- Authorship
     author_id              TEXT,
     approved_by            TEXT,
-    doc_type               TEXT,
+
+    -- Classification
+    doc_type               TEXT,               -- report|specification|contract|...
     doc_category           TEXT,
     title                  TEXT NOT NULL,
     version                TEXT DEFAULT '1.0',
+
+    -- Dates
     date_created           TEXT,
     date_modified          TEXT,
     date_approved          TEXT,
     date_expires           TEXT,
-    status                 TEXT DEFAULT 'draft',
+
+    -- Properties (status removed — computed from DocumentRevision.revState)
     classification         TEXT,
     volume_number          INTEGER DEFAULT 1,
     page_count             INTEGER,
     language               TEXT DEFAULT 'EN',
     format                 TEXT,
+
+    -- File tracking
     file_path              TEXT,
     file_size              INTEGER DEFAULT 0,
     file_hash              TEXT,
     file_url               TEXT,
     external_ref           TEXT,
-    storage_system         TEXT,
+
+    -- Metadata
     tags                   TEXT,
     summary                TEXT,
     links                  TEXT,
-    notes                  TEXT,   -- JSON
+    notes                  TEXT,               -- JSON
     created_at             TEXT DEFAULT (datetime('now')),
     updated_at             TEXT DEFAULT (datetime('now'))
 );
@@ -97,3 +103,60 @@ CREATE INDEX IF NOT EXISTS idx_docrev_state
     ON document_revisions(document_id, rev_state);
 -- ── Dokument-Datei-Metadaten ────────────────────────────────────
 -- Ergänzt documents-Tabelle um Datei-spezifische Informationen
+
+-- ── Document Objects ─────────────────────────────────────────────────────
+-- A DocumentRevision is a container for one or more physical files (objects).
+-- Each object belongs to exactly one (document_id, rev) pair.
+-- Objects in in_work state reside in MFS; on workflow execution the
+-- "Create DB Objects" step commits them to LMDB.
+--
+-- Naming convention:  {docRegNr}_{revNNN}_{originalFilename}
+-- Example:            XV_DOK_0018_2026_r001_tests-example.xls
+CREATE TABLE IF NOT EXISTS document_objects (
+    -- PK: documentId + ":" + 5-char objectId  e.g. "XV/DOK/0018/2026:A1B2C"
+    object_id       TEXT    PRIMARY KEY,
+    document_id     TEXT    NOT NULL,       -- XV/DOK/0018/2026
+    rev             INTEGER NOT NULL,       -- revision number (1,2,3,...)
+    original_name   TEXT    NOT NULL,       -- original filename as uploaded
+    mfs_filename    TEXT,                   -- {docRegNr}_{objectId}_r{revNr}.{ext}
+    mfs_path        TEXT,                   -- full MFS path (in_work only)
+    content_hash    TEXT,                   -- SHA-256 in LMDB (when committed)
+    content_size    INTEGER DEFAULT 0,
+    format          TEXT,                   -- file extension without dot
+    committed       INTEGER NOT NULL DEFAULT 0,  -- 1 = in LMDB, 0 = MFS only
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (document_id, rev) REFERENCES document_revisions(document_id, rev)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_objects_docrev
+    ON document_objects (document_id, rev);
+
+CREATE TABLE IF NOT EXISTS document_objects (
+    -- Primary key: documentId + ":" + 5-char alphanumeric objectId
+    -- e.g. "XV/DOK/0018/2026:A1B2C"
+    -- objectId is unique per document, not globally. Same ID can exist in different documents.
+    object_id       TEXT    PRIMARY KEY,
+
+    document_id     TEXT    NOT NULL,       -- XV/DOK/0018/2026
+    rev             INTEGER NOT NULL,       -- revision number in which this object was created
+    original_name   TEXT    NOT NULL,       -- original filename as uploaded (for display/decryption)
+    mfs_filename    TEXT,                   -- MFS filename: {docRegNr}_{objectId}_r{revNr}.{ext}
+    mfs_path        TEXT,                   -- full MFS path (valid in in_work state)
+    content_hash    TEXT,                   -- SHA-256 in LMDB after commit (committed=1)
+    content_size    INTEGER DEFAULT 0,
+    format          TEXT,                   -- file extension without dot (e.g. "xls")
+    committed       INTEGER NOT NULL DEFAULT 0,  -- 0=MFS only, 1=in LMDB
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (document_id, rev) REFERENCES document_revisions(document_id, rev)
+        ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS document_object_sequences (
+    -- Tracks the next objectId sequence number per document.
+    -- objectId is generated as base-36 zero-padded to 5 chars.
+    document_id     TEXT    PRIMARY KEY,
+    next_seq        INTEGER NOT NULL DEFAULT 1
+);

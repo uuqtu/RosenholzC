@@ -12,6 +12,8 @@
 //   attachDocumentDialog(proj, task) — attach-or-create dialog
 // ============================================================
 #include "cli_common.h"
+#include "../core/OperationResult.h"
+#include "../model/dok/DocumentObject.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
 #include "../core/Logger.h"
@@ -105,7 +107,7 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
         auto doc = createDocumentWizard(op->projectId, "");
         if (doc) {
             doc->f18OperationId = op->vorgangId;
-            doc->update();
+            { auto r = doc->update(); (void)r; }
         }
         return doc;
     }
@@ -140,7 +142,7 @@ void cmdDok(const std::vector<std::string>& args) {
                   << "  " << std::string(70, '-') << "\n";
         for (auto& d : all)
             std::cout << "  " << std::setw(26) << d->documentId.substr(0, 24)
-                      << std::setw(14) << ("[" + d->status + "]")
+                      << std::setw(14) << (std::string("[") + revStateToString(d->currentRevisionState()) + "]")
                       << std::setw(12) << ("v" + d->version)
                       << d->title.substr(0, 32) << "\n";
         std::cout << "  " << all.size() << " Dokument(e)\n";
@@ -213,7 +215,7 @@ void cmdDok(const std::vector<std::string>& args) {
         auto doc = createDocumentWizard(op->projectId, "");
         if (doc) {
             doc->f18OperationId = op->vorgangId;
-            doc->update();
+            { auto r = doc->update(); (void)r; }
             printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
         }
         return;
@@ -232,7 +234,7 @@ void cmdDok(const std::vector<std::string>& args) {
 
     // Try as project ID
     auto proj = ProjectF16::loadById(args[0]);
-    if (!proj) die("ID nicht gefunden: " + args[0]);
+    if (!proj) { printErr("ID nicht gefunden: " + args[0]); return; }
 
     if (args.size() > 1) {
         // Additional argument → create document under this project
@@ -275,7 +277,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
     std::cout << "\n  Quelle:\n"
               << "    1. Lokale Datei (Pfad angeben → in MFS kopieren)\n"
               << "    2. Link / URL   (herunterladen → in MFS ablegen)\n"
-              << "    3. Neu anlegen  (Leer-Datei in MFS erstellen)\n";
+              << "    2. Neu anlegen  (Leer-Datei in MFS erstellen)\n";
     int src = readInt("Quelle", 1, 3);
 
     // ── Dokument-Objekt erzeugen ─────────────────────────────────
@@ -296,13 +298,11 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         // Detect format from file extension
         std::string ext = FileOps::extension(srcPath);
         if (!ext.empty()) doc->format = ext.substr(1);
-        doc->version    = readOpt("Version (leer=1.0): ");
-        if (doc->version.empty()) doc->version = "1.0";
         doc->dateCreated = nowIso();
-        if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
+        if (!opOk(doc->save())) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
         doc->revise("Revision 1 — Erstanlage");
         // Copy to MFS
-        if (!doc->importLocalFile(srcPath)) {
+        if (!opOk(doc->importLocalFile(srcPath))) {
             std::cout << "  >> Warnung: MFS-Import fehlgeschlagen.\n";
         } else {
             std::cout << "  >> Datei in MFS abgelegt: " << doc->filePath << "\n";
@@ -311,33 +311,54 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
 
     // ── Quelle 2: URL / Link ──────────────────────────────────────
     else if (src == 2) {
+        // Step 1: URL
         std::string url = readLine("URL: ");
-        if (url.empty()) return nullptr;
-        doc->fileUrl    = url;
-        doc->version    = readOpt("Version (leer=1.0): ");
-        if (doc->version.empty()) doc->version = "1.0";
-        doc->dateCreated = nowIso();
+        if (url.empty() || cliIsInterrupted()) return nullptr;
+
+        // Step 2: Download immediately — abort if it fails
         std::cout << "  Herunterladen...\n";
-        if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
-        doc->revise("Revision 1 — Erstanlage");
-        // Download and import
         const std::string& base = Config::instance().basePath();
         std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
         FileOps::makeDirs(tmpDir);
         std::string downloaded = FileOps::downloadUrl(url, tmpDir);
         if (downloaded.empty()) {
-            std::cout << "  >> Download fehlgeschlagen — URL gespeichert, Datei fehlt.\n";
-        } else {
-            // Detect format
-            std::string ext = FileOps::extension(downloaded);
-            if (!ext.empty()) doc->format = ext.substr(1);
-            if (!doc->importLocalFile(downloaded)) {
-                std::cout << "  >> MFS-Import fehlgeschlagen.\n";
-            } else {
-                std::cout << "  >> Heruntergeladen und in MFS abgelegt: " << doc->filePath << "\n";
-            }
-            FileOps::deleteFile(downloaded); // clean up tmp
+            std::cout << "  >> Download fehlgeschlagen — bitte URL prüfen.\n";
+            return nullptr;   // abort, nothing saved yet
         }
+
+        // Step 3: Detect format from downloaded filename — no question if clear
+        std::string detectedExt;
+        {
+            std::string ext = FileOps::extension(downloaded);
+            if (!ext.empty()) detectedExt = ext.substr(1); // strip leading dot
+        }
+        if (!detectedExt.empty()) {
+            // Format is unambiguous — use it, only offer override
+            std::cout << "  Format erkannt: " << detectedExt << "\n";
+            std::string override = readOpt("Anderes Format verwenden? (leer='" + detectedExt + "'): ");
+            doc->format = override.empty() ? detectedExt : override;
+        } else {
+            // No extension detectable — must ask
+            std::string fmtInput = readOpt("Format (pdf/docx/xlsx/txt/png/..., leer=bin): ");
+            doc->format = fmtInput.empty() ? "bin" : fmtInput;
+        }
+
+        doc->fileUrl     = url;
+        doc->dateCreated = nowIso();
+        if (!opOk(doc->save())) {
+            FileOps::deleteFile(downloaded);
+            std::cout << "  >> DB-Fehler.\n";
+            return nullptr;
+        }
+        doc->revise("Revision 1 — Erstanlage");
+
+        // Step 4: Import into MFS
+        if (!opOk(doc->importLocalFile(downloaded))) {
+            std::cout << "  >> MFS-Import fehlgeschlagen.\n";
+        } else {
+            std::cout << "  >> Heruntergeladen und in MFS abgelegt: " << doc->filePath << "\n";
+        }
+        FileOps::deleteFile(downloaded);
     }
 
     // ── Quelle 3: Neu anlegen ─────────────────────────────────────
@@ -347,10 +368,8 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
                   << "    3.Excel-Tabelle (.xlsx)  4.Präsentation (.pptx)\n"
                   << "    5.PDF-Vorlage (.pdf)  6.Weiteres Format\n";
         int nf = readInt("Art", 1, 6);
-        doc->version     = readOpt("Version (leer=1.0): ");
-        if (doc->version.empty()) doc->version = "1.0";
         doc->dateCreated = nowIso();
-        if (!doc->save()) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
+        if (!opOk(doc->save())) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
         doc->revise("Revision 1 — Erstanlage");
 
         // Create empty file in MFS
@@ -382,7 +401,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         doc->filePath = fpath;
         doc->fileSize = FileOps::fileSize(fpath);
         doc->fileHash = ""; // no hash for stub
-        doc->update();
+        { auto r = doc->update(); (void)r; }
         std::cout << "  >> Leer-Datei angelegt: " << fpath << "\n";
     }
 
@@ -391,20 +410,16 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
     doc->authorId   = readOpt("Autor Person-ID (optional): ");
     doc->classification = readOpt("Einstufung (intern/vertraulich/öffentlich, leer=intern): ");
     if (doc->classification.empty()) doc->classification = "intern";
-    doc->update();
+    { auto r = doc->update(); (void)r; }
 
     std::cout << "  >> Dokument registriert: " << doc->documentId << "\n";
     std::cout << "  >> Titel   : " << doc->title << "\n";
     std::cout << "  >> MFS-Pfad: " << (doc->filePath.empty() ? "(kein)" : doc->filePath) << "\n";
 
-    // Lifecycle: ensure Rev 1 and Main WFI on first creation
-    doc->revise("Revision 1 — Erstanlage");
-
     // Write MFS index file (the .txt metadata card)
     MFSWriter::writeDocument(*doc, Config::instance().mfsPath());
 
     std::cout << "  >> Revision 1 angelegt (in_work)\n";
-    std::cout << "  >> Main Workflow gestartet\n";
     return doc;
 }
 
@@ -425,7 +440,7 @@ static void revisionMenu(std::shared_ptr<Document> doc) {
             return;
         }
         hdr("REVISION " + std::to_string(rev->rev) + "  — " + doc->documentId.substr(0, 22));
-        std::cout << "  Zustand    : " << rev->revState << "\n";
+        std::cout << "  Zustand    : " << rev->revStateStr() << "\n";
         std::cout << "  Inhalt-SHA : " << (rev->contentHash.empty() ? "—" : rev->contentHash.substr(0, 20)) << "\n";
         std::cout << "  Groesse    : " << rev->contentSize << " Bytes\n";
         std::cout << "  Erstellt   : " << fdate(rev->createdAt) << "\n";
@@ -435,19 +450,23 @@ static void revisionMenu(std::shared_ptr<Document> doc) {
                      "  Erlaubte Übergänge:\n"
                      "    1. in_work        4. locked\n"
                      "    2. pre_released   5. closed\n"
-                     "    3. released       0. Zurück\n";
+                     "    2. released       0. Zurück\n";
         static const char* states[] = {"in_work","pre_released","released","locked","closed"};
         int ch = readInt("Zielzustand", 0, 5);
         if (ch == 0) return;
         std::string target = states[ch - 1];
-        if (!DocumentRevision::isTransitionAllowed(rev->revState, target)) {
-            std::cout << "  >> Übergang von '" << rev->revState
-                      << "' nach '" << target << "' nicht erlaubt.\n";
+        if (!DocumentRevision::isTransitionAllowed(rev->revState,
+                revStateFromString(target),
+                Config::instance().admin().enabled)) {
+            std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_TRANSITION_NOT_ALLOWED)
+                      << "\n";
+            std::cout << "  >> Aktuell: " << rev->revStateStr()
+                      << " → Ziel: " << target << "\n";
             continue;
         }
         if (rev->transitionState(target)) {
-            doc->status = target;
-            doc->update();
+            // status is now computed from revision — no manual assignment needed
+            { auto r = doc->update(); (void)r; }
             std::cout << "  >> Revision in Zustand: " << target << "\n";
         } else {
             std::cout << "  >> Fehler beim Zustandswechsel.\n";
@@ -469,80 +488,74 @@ void documentMenu(std::shared_ptr<Document> doc) {
         bool inWork      = doc->isInWork();
         bool immutable   = doc->isFrozen();
         bool hasCheckout = !doc->checkedOutPath.empty();
+        uint32_t curRevNum = cur ? cur->rev : 0;
+        auto curObjs     = curRevNum > 0
+            ? DocumentObject::loadForRevision(doc->documentId, curRevNum)
+            : std::vector<std::shared_ptr<DocumentObject>>{};
 
         printDocument(*doc);
+        if (cur)
+            std::cout << "  Rev " << curRevNum << "  [" << cur->revStateStr() << "]"
+                      << (immutable ? "  ⚠ unveraenderlich" : "  ✏ bearbeitbar")
+                      << "  |  " << curObjs.size() << " Objekt(e)\n\n";
 
-        if (immutable)
-            std::cout << "  ⚠  Rev " << cur->rev << " ist " << cur->revState
-                      << " — unveraenderlich\n\n";
-
-        std::cout
-            << "  [DOKUMENT]\n"
-            << "    1. Bearbeiten (Felder)\n"
-            << "    2. Revision: Zustand wechseln\n"
-            << "    3. Neue Revision anlegen"
-            << (inWork ? "  [GESPERRT — Revision noch in_work]" : "") << "\n"
-            << "\n  [WORKFLOW]\n"
-            << "    4. F77-Workflow anzeigen / starten\n"
-            << "\n  [DATEI]\n"
-            << "    5. Datei oeffnen (Lesen)\n";
-
+        // ── Menü ────────────────────────────────────────────────
+        std::cout << "  [DOKUMENT]\n"
+                  << "    1. Felder bearbeiten\n"
+                  << "    2. Neue Revision anlegen"
+                  << (inWork ? "  [GESPERRT — erst Workflow starten]" : "") << "\n"
+                  << "\n  [WORKFLOW / FREIGABE]\n"
+                  << "    3. Workflow starten / anzeigen\n"
+                  << "\n  [OBJEKTE (" << curObjs.size() << " Datei(en) in Rev " << curRevNum << ")]\n"
+                  << "    4. Objekte auflisten\n";
         if (inWork) {
-            std::cout
-                << "    6. Checkout — Datei zum Bearbeiten holen\n";
-            if (hasCheckout) {
-                std::cout
-                    << "    7. Checkin — Datei zurueckgeben (aktualisiert Revisions-Inhalt)\n"
-                    << "    8. Aenderungen verwerfen (Revert auf Vorgaenger-Revision)\n";
-            }
+            std::cout << "    5. Objekt hinzufügen (Datei importieren)\n";
+            if (!curObjs.empty())
+                std::cout << "    6. Objekt entfernen\n";
         }
-        std::cout
-            << "    9. URL neu herunterladen\n"
-            << "   10. Versionsverlauf\n"
-            << "\n  [SYSTEM]\n"
-            << "   11. MFS-Datei schreiben\n"
-            << "   12. Dokument loeschen\n"
-            << "\n    0. Zurueck\n";
+        std::cout << "\n  [DATEI-OPERATIONEN]\n"
+                  << "    7. Objekt öffnen (Lesen)\n";
+        if (inWork) {
+            std::cout << "    8. Checkout — Objekt zum Bearbeiten holen\n";
+            if (hasCheckout)
+                std::cout << "    9. Checkin — Objekt zurückgeben\n"
+                          << "   10. Änderungen verwerfen (Revert)\n";
+        }
+        std::cout << "   11. URL neu herunterladen\n"
+                  << "   12. Versionsverlauf\n"
+                  << "\n  [SYSTEM]\n"
+                  << "   13. MFS-Datei schreiben\n"
+                  << "   14. Dokument löschen\n"
+                  << "\n    0. Zurück\n";
         hr();
 
-        int ch = readInt("Wahl", 0, 12);
+        int ch = readInt("Wahl", 0, 14);
         if (ch == 0) break;
 
         if (ch == 1) {
-            // Field editing — blocked when immutable
+            // Felder bearbeiten
             if (!doc->canEdit()) {
-                std::cout << "  >> Eingefroren — kein Bearbeiten moeglich.\n";
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
                 continue;
             }
             hdr("BEARBEITEN — " + doc->documentId.substr(0, 24));
-            std::string t = readOpt("Titel (leer=behalten): ");
-            if (!t.empty()) doc->title = t;
-            std::string cat = readOpt("Kategorie (leer=behalten): ");
-            if (!cat.empty()) doc->docCategory = cat;
-            std::string ver = readOpt("Version (leer=behalten): ");
-            if (!ver.empty()) doc->version = ver;
-            std::string cls = readOpt("Einstufung (intern/vertraulich/oeffentlich): ");
-            if (!cls.empty()) doc->classification = cls;
-            std::string sum = readOpt("Kurzbeschreibung: ");
-            if (!sum.empty()) doc->summary = sum;
-            std::string auth = readOpt("Autor-ID: ");
-            if (!auth.empty()) doc->authorId = auth;
-            std::string approv = readOpt("Genehmiger-ID: ");
-            if (!approv.empty()) doc->approvedBy = approv;
-            doc->update();
+            auto s = [](const std::string& p) { return readOpt(p + " (leer=behalten): "); };
+            auto apply = [](std::string& f, const std::string& v) { if (!v.empty()) f = v; };
+            apply(doc->title,          s("Titel"));
+            apply(doc->docCategory,    s("Kategorie"));
+            apply(doc->version,        s("Version"));
+            apply(doc->classification, s("Einstufung (intern/vertraulich/oeffentlich)"));
+            apply(doc->summary,        s("Kurzbeschreibung"));
+            apply(doc->authorId,       s("Autor-ID"));
+            apply(doc->approvedBy,     s("Genehmiger-ID"));
+            { auto r = doc->update(); (void)r; }
             std::cout << "  >> Gespeichert.\n";
 
         } else if (ch == 2) {
-            // Revision lifecycle: 5-state transition
-            revisionMenu(doc);
-
-        } else if (ch == 3) {
-            // New revision — refused if current revision is still in_work
+            // Neue Revision anlegen
             if (!doc->canRevise()) {
-                std::cout
-                    << "  >> Neue Revision nicht moeglich: aktive Revision ist noch in_work.\n"
-                    << "  >> Erst F77-Workflow starten (rh -f77 -start " << doc->documentId
-                    << ") und Revision freigeben.\n";
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_IS_IN_WORK) << "\n";
+                std::cout << "  >> Starten Sie: rh -f77 -start " << doc->documentId << "\n";
                 continue;
             }
             std::string note = readLine("Revisionsnotiz (Pflicht): ");
@@ -552,106 +565,284 @@ void documentMenu(std::shared_ptr<Document> doc) {
             if (newRev)
                 std::cout << "  >> Revision " << newRev->rev << " angelegt (in_work).\n";
             else
-                std::cout << "  >> Fehler: Revision konnte nicht angelegt werden.\n";
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_SAVE_FAILED) << "\n";
 
-        } else if (ch == 4) {
-            // Workflow section
-            hdr("F77-WORKFLOW — " + doc->documentId.substr(0, 26));
+        } else if (ch == 3) {
+            // Workflow starten / anzeigen
+            hdr("WORKFLOW / FREIGABE — " + doc->documentId.substr(0, 26));
             if (doc->releaseWorkflowId.empty()) {
-                std::cout << "  Kein Workflow aktiv.\n";
-                std::cout << "  Workflow jetzt starten? (ja/nein): ";
-                std::string yn; std::getline(std::cin, yn);
-                if (yn == "ja" || yn == "j") {
+                std::cout << "  Kein aktiver Workflow.\n";
+                if (readInt("  1.Workflow starten  0.Zurueck", 0, 1) == 1) {
                     std::string wid = startWfInstanceWizard("dok", doc->documentId);
                     if (!wid.empty()) instanceMenu(wid);
                 }
             } else {
                 auto wf = F77_Workflow::loadById(doc->releaseWorkflowId);
-                std::cout << "  Workflow-ID : " << doc->releaseWorkflowId.substr(0, 36) << "\n";
-                std::cout << "  Status      : " << (wf ? wf->status : "unbekannt") << "\n";
-                if (wf && (wf->status == "active")) {
+                std::cout << "  Workflow-ID : " << doc->releaseWorkflowId.substr(0, 36) << "\n"
+                          << "  Status      : " << (wf ? wf->status : "unbekannt") << "\n";
+                if (wf && wf->status == "active") {
                     if (readInt("  1.Oeffnen  0.Zurueck", 0, 1) == 1)
                         instanceMenu(doc->releaseWorkflowId);
                 } else {
-                    // Cancelled or completed — allow starting a new one
-                    std::cout << "  Neuen Workflow starten? (ja/nein): ";
-                    std::string yn; std::getline(std::cin, yn);
-                    if (yn == "ja" || yn == "j") {
+                    std::cout << "  (Workflow abgeschlossen/abgebrochen)\n";
+                    if (readInt("  1.Neuen Workflow starten  0.Zurueck", 0, 1) == 1) {
                         std::string wid = startWfInstanceWizard("dok", doc->documentId);
                         if (!wid.empty()) instanceMenu(wid);
                     }
                 }
             }
 
+        } else if (ch == 4) {
+            // Objekte auflisten
+            hdr("OBJEKTE — Rev " + std::to_string(curRevNum)
+                + " | " + doc->documentId.substr(0, 22));
+            if (curObjs.empty()) {
+                std::cout << "  (keine Objekte in dieser Revision)\n";
+                std::cout << "  Tipp: Option 5 um Dateien zu importieren (nur in in_work).\n";
+            } else {
+                std::cout << "  " << std::left
+                          << std::setw(4) << "Nr."
+                          << std::setw(42) << "Dateiname"
+                          << std::setw(8)  << "Status"
+                          << "Größe\n"
+                          << "  " << std::string(72, '-') << "\n";
+                for (size_t i = 0; i < curObjs.size(); ++i) {
+                    auto& o = curObjs[i];
+                    std::cout << "  " << std::setw(4) << (i+1)
+                              << std::setw(42) << o->displayName().substr(0, 40)
+                              << std::setw(8)  << (o->committed ? "[LMDB]" : "[MFS] ")
+                              << (o->contentSize / 1024) << " KB\n";
+                    if (!o->mfsPath.empty())
+                        std::cout << "       " << o->mfsPath << "\n";
+                }
+            }
+
         } else if (ch == 5) {
-            // Read-only file open
-            if (!doc->filePath.empty() && FileOps::fileExists(doc->filePath))
-                doc->openFile("read");
+            // Objekt hinzufügen — nur in in_work
+            if (!inWork) {
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
+                continue;
+            }
+            std::string srcPath = readLine("Dateipfad: ");
+            if (srcPath.empty() || cliIsInterrupted()) continue;
+            OperationResult res = OperationResult::OPERATION_ACK;
+            auto obj = DocumentObject::importFile(doc->documentId, curRevNum, srcPath, res);
+            if (opOk(res) && obj)
+                std::cout << "  >> Objekt importiert: " << obj->mfsPath << "\n"
+                          << "  >> Name in MFS: " << obj->displayName() << "\n";
             else
-                std::cout << "  >> Keine Datei vorhanden.\n";
+                std::cout << "  >> " << opResultMessage(res) << "\n";
 
         } else if (ch == 6) {
-            // Checkout — only when in_work
-            if (!doc->canCheckout()) {
-                std::cout << "  >> Checkout nur im Zustand in_work ohne offenen Checkout moeglich.\n";
+            // Objekt entfernen — nur in in_work
+            if (!inWork || curObjs.empty()) {
+                auto r = inWork ? OperationResult::INVALID_ARGUMENT
+                                : OperationResult::DOC_REV_NOT_IN_WORK;
+                std::cout << "  >> " << opResultMessage(r) << "\n";
                 continue;
             }
-            std::string dest = readOpt("Zielverzeichnis (leer = Standardpfad): ");
-            std::string path = doc->checkout(dest);
-            if (!path.empty())
-                std::cout << "  >> Ausgecheckt nach: " << path << "\n";
-            else
-                std::cout << "  >> Checkout fehlgeschlagen.\n";
+            for (size_t i = 0; i < curObjs.size(); ++i)
+                std::cout << "  " << (i+1) << ". " << curObjs[i]->displayName() << "\n";
+            int sel = readInt("Objekt entfernen (Nummer)", 1, (int)curObjs.size());
+            if (yesno("Objekt '" + curObjs[sel-1]->displayName() + "' entfernen?")) {
+                if (!curObjs[sel-1]->mfsPath.empty())
+                    FileOps::deleteFile(curObjs[sel-1]->mfsPath);
+                curObjs[sel-1]->remove();
+                std::cout << "  >> Objekt entfernt.\n";
+            }
 
         } else if (ch == 7) {
-            // Checkin — only when in_work with open checkout
-            if (!doc->canCheckin()) {
-                std::cout << "  >> Checkin nur bei offenem Checkout im Zustand in_work moeglich.\n";
+            // Objekt öffnen
+            if (curObjs.empty()) {
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_FILE_NOT_FOUND) << "\n";
                 continue;
             }
-            std::string src = readOpt("Dateipfad (leer = ausgecheckte Datei): ");
-            if (doc->checkin(src))
-                std::cout << "  >> Eingecheckt. Inhalt der Revision aktualisiert.\n";
-            else
-                std::cout << "  >> Checkin fehlgeschlagen.\n";
+            // Select object
+            for (size_t i = 0; i < curObjs.size(); ++i)
+                std::cout << "  " << (i+1) << ". "
+                          << std::left << std::setw(40) << curObjs[i]->displayName()
+                          << "  " << (curObjs[i]->checkedOut ? "[AUSGECHECKT]" : "")
+                          << "\n";
+            int sel = readInt("Objekt oeffnen", 1, (int)curObjs.size());
+            auto& obj = curObjs[sel-1];
+
+            if (!inWork) {
+                // Not in_work: always open from tmp (read-only, changes not tracked)
+                std::cout << "  (Nur Lesen — Revision ist " << cur->revStateStr() << ")\n";
+                bool wco = false;
+                std::string path = obj->openObject(false, wco);
+                if (path.empty())
+                    std::cout << "  >> " << opResultMessage(OperationResult::DOC_FILE_NOT_FOUND) << "\n";
+                else
+                    std::cout << "  >> Geöffnet (tmp, Änderungen werden nicht gespeichert): " << path << "\n";
+            } else {
+                // In_work: offer checkout or tmp view
+                if (obj->checkedOut) {
+                    // Already checked out — open directly
+                    std::cout << "  Objekt ist ausgecheckt unter: " << obj->checkoutPath << "\n";
+                    bool wco = true;
+                    obj->openObject(true, wco);
+                    // After user returns: offer checkin
+                    std::cout << "  Dokument geschlossen?\n";
+                    if (yesno("  Einchecken?")) {
+                        auto ci = obj->checkinObject();
+                        if (opOk(ci))
+                            std::cout << "  >> Eingecheckt.\n";
+                        else
+                            std::cout << "  >> " << opResultMessage(ci) << "\n";
+                    }
+                } else {
+                    std::cout << "  Objekt ist in_work.\n"
+                              << "    1. Auschecken (Änderungen werden gespeichert)\n"
+                              << "    2. Nur lesen   (tmp-Kopie, Änderungen nicht gespeichert)\n";
+                    int mode = readInt("Modus", 1, 2);
+                    if (mode == 1) {
+                        // Checkout
+                        std::string path = obj->checkoutObject();
+                        if (path.empty()) {
+                            std::cout << "  >> " << opResultMessage(OperationResult::IO_ERROR) << "\n";
+                        } else {
+                            std::cout << "  >> Ausgecheckt: " << path << "\n";
+                            bool wco = true;
+                            obj->openObject(true, wco);
+                            // After user returns: detect if document was closed
+                            std::cout << "  Dokument geschlossen? ";
+                            if (yesno("Einchecken?")) {
+                                auto ci = obj->checkinObject();
+                                if (opOk(ci))
+                                    std::cout << "  >> Eingecheckt.\n";
+                                else
+                                    std::cout << "  >> " << opResultMessage(ci) << "\n";
+                            }
+                        }
+                    } else {
+                        // Tmp copy
+                        bool wco = false;
+                        std::string path = obj->openObject(true, wco);
+                        if (!path.empty())
+                            std::cout << "  >> Geöffnet (tmp, Änderungen nicht gespeichert): " << path << "\n";
+                        else
+                            std::cout << "  >> " << opResultMessage(OperationResult::DOC_FILE_NOT_FOUND) << "\n";
+                    }
+                }
+            }
 
         } else if (ch == 8) {
-            // Revert — only when in_work with open checkout
-            if (!doc->canRevert()) {
-                std::cout << "  >> Revert nur bei offenem Checkout mit Vorgaenger-Revision moeglich.\n";
+            // Checkout eines Objekts
+            if (!inWork) {
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
                 continue;
             }
-            if (yesno("Aenderungen verwerfen und auf Vorgaenger-Revision zuruecksetzen?")) {
-                if (doc->revertChanges())
-                    std::cout << "  >> Revert erfolgreich.\n";
-                else
-                    std::cout << "  >> Revert: kein Vorgaenger oder Fehler.\n";
+            if (curObjs.empty()) {
+                std::cout << "  >> Keine Objekte vorhanden. Zuerst Dateien hinzufügen (Option 5).\n";
+                continue;
             }
+            for (size_t i = 0; i < curObjs.size(); ++i)
+                std::cout << "  " << (i+1) << ". "
+                          << curObjs[i]->displayName()
+                          << (curObjs[i]->checkedOut ? "  [AUSGECHECKT]" : "") << "\n";
+            int sel = readInt("Objekt auschecken", 1, (int)curObjs.size());
+            auto& obj = curObjs[sel-1];
+            if (obj->checkedOut) {
+                std::cout << "  >> Bereits ausgecheckt unter: " << obj->checkoutPath << "\n";
+                continue;
+            }
+            std::string dest = readOpt("Zielverzeichnis (leer = MFS-Rev-Ordner): ");
+            std::string path = obj->checkoutObject(dest);
+            if (!path.empty())
+                std::cout << "  >> Ausgecheckt: " << path << "\n";
+            else
+                std::cout << "  >> " << opResultMessage(OperationResult::IO_ERROR) << "\n";
 
         } else if (ch == 9) {
-            // URL re-download
-            if (doc->fileUrl.empty()) { doc->fileUrl = readLine("URL: "); doc->update(); }
-            if (!doc->fileUrl.empty()) {
-                if (doc->refreshFromUrl())
-                    std::cout << "  >> Aktualisiert: " << doc->filePath << "\n";
-                else
-                    std::cout << "  >> Fehler beim Download.\n";
+            // Checkin eines ausgecheckten Objekts
+            if (!inWork) {
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
+                continue;
             }
+            // List checked-out objects
+            std::vector<std::shared_ptr<DocumentObject>> coObjs;
+            for (auto& o : curObjs)
+                if (o->checkedOut) coObjs.push_back(o);
+            if (coObjs.empty()) {
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_NO_CHECKOUT) << "\n";
+                continue;
+            }
+            for (size_t i = 0; i < coObjs.size(); ++i)
+                std::cout << "  " << (i+1) << ". " << coObjs[i]->displayName()
+                          << "  →  " << coObjs[i]->checkoutPath << "\n";
+            int sel = readInt("Objekt einchecken", 1, (int)coObjs.size());
+            std::string src = readOpt("Dateipfad (leer = ausgecheckte Datei): ");
+            auto ci = coObjs[sel-1]->checkinObject(src);
+            if (opOk(ci))
+                std::cout << "  >> Eingecheckt. Revisions-Inhalt aktualisiert.\n";
+            else
+                std::cout << "  >> " << opResultMessage(ci) << "\n";
 
         } else if (ch == 10) {
-            // Version history
+            // Revert eines Objekts auf Vorgänger-Revision
+            if (!inWork) {
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
+                continue;
+            }
+            if (!cur || cur->parentRev == 0) {
+                std::cout << "  >> " << opResultMessage(OperationResult::DOC_NO_PARENT_REV)
+                          << "\n  >> Revert ist erst ab der zweiten Revision möglich.\n";
+                continue;
+            }
+            if (curObjs.empty()) {
+                std::cout << "  >> Keine Objekte in dieser Revision.\n";
+                continue;
+            }
+            std::cout << "  Welches Objekt auf Rev " << cur->parentRev << " zurücksetzen?\n";
+            for (size_t i = 0; i < curObjs.size(); ++i)
+                std::cout << "  " << (i+1) << ". " << curObjs[i]->displayName() << "\n";
+            std::cout << "  " << (curObjs.size()+1) << ". Alle Objekte zurücksetzen\n";
+            int sel = readInt("Auswahl", 1, (int)curObjs.size()+1);
+
+            if (yesno("Objekt(e) auf Zustand von Rev " + std::to_string(cur->parentRev) + " zurücksetzen?")) {
+                int ok_count = 0, fail_count = 0;
+                if (sel <= (int)curObjs.size()) {
+                    auto rv = curObjs[sel-1]->revertObject(cur->parentRev);
+                    if (opOk(rv)) { ok_count++; std::cout << "  >> Zurückgesetzt.\n"; }
+                    else { fail_count++; std::cout << "  >> " << opResultMessage(rv) << "\n"; }
+                } else {
+                    for (auto& o : curObjs) {
+                        auto rv = o->revertObject(cur->parentRev);
+                        if (opOk(rv)) ok_count++;
+                        else { fail_count++;
+                               std::cout << "  >> " << o->displayName() << ": " << opResultMessage(rv) << "\n"; }
+                    }
+                    std::cout << "  >> " << ok_count << " Objekt(e) zurückgesetzt, "
+                              << fail_count << " Fehler.\n";
+                }
+            }
+
+        } else if (ch == 11) {
+            // URL neu herunterladen
+            if (doc->fileUrl.empty()) { doc->fileUrl = readLine("URL: "); { auto r = doc->update(); (void)r; } }
+            if (!doc->fileUrl.empty()) {
+                auto rfRes = doc->refreshFromUrl();
+                if (opOk(rfRes))
+                    std::cout << "  >> Aktualisiert: " << doc->filePath << "\n";
+                else
+                    std::cout << "  >> " << opResultMessage(rfRes) << "\n";
+            }
+
+        } else if (ch == 12) {
+            // Versionsverlauf
             auto vl = doc->loadVersions();
-            hdr("VERSIONSVERLAUF (" + std::to_string(vl.size()) + ")");
+            hdr("REVISIONSVERLAUF (" + std::to_string(vl.size()) + ")");
             for (auto& v : vl)
                 std::cout << "  Rev " << std::setw(3) << v.versionNumber
                           << "  " << v.createdAt.substr(0, 16)
                           << "  " << v.changeNote.substr(0, 40) << "\n";
 
-        } else if (ch == 11) {
+        } else if (ch == 13) {
             MFSWriter::writeDocument(*doc, Config::instance().mfsPath());
             std::cout << "  >> MFS-Datei geschrieben.\n";
 
-        } else if (ch == 12) {
+        } else if (ch == 14) {
             std::cout << "  Dokument " << doc->documentId << " loeschen? (ja): ";
             std::string c; std::getline(std::cin, c);
             if (c == "ja") { doc->remove(); std::cout << "  >> Geloescht.\n"; break; }
@@ -660,22 +851,64 @@ void documentMenu(std::shared_ptr<Document> doc) {
 }
 
 
+// LoadRuleContext: rule + optional date for DATE_RELEASED
+struct LoadRuleCtx {
+    Rosenholz::DocLoadRule rule;
+    std::string targetDate;
+};
+
+static LoadRuleCtx askLoadRule() {
+    std::cout << "\n  Laderegelung:\n"
+              << "    1. Neueste freigegebene Revision  (Standard)\n"
+              << "    2. Neueste Arbeitsrevision         (in_work/pre_released/released/locked)\n"
+              << "    3. Datumsbasiert (freigegebene Revision zum Stichtag)\n";
+    int r = readInt("Laderegelung", 1, 3);
+    if (r == 2) return { Rosenholz::DocLoadRule::LATEST_WORKING, "" };
+    if (r == 3) {
+        std::string date = readLine("Stichtag (JJJJ-MM-TT): ");
+        return { Rosenholz::DocLoadRule::DATE_RELEASED, date };
+    }
+    return { Rosenholz::DocLoadRule::LATEST_RELEASED, "" };
+}
+
+
 void documentBrowserMenu(const std::string& projectId, const std::string& taskId) {
+    auto lrc = askLoadRule();
     while (true) {
         std::vector<std::shared_ptr<Document>> docs;
-        if (!projectId.empty())
-            docs = Document::loadForProject(projectId);
-        else if (!taskId.empty())
+        if (!taskId.empty())
             docs = Document::loadForEntity("f22", taskId);
+        else if (!projectId.empty())
+            docs = Document::loadForProject(projectId, lrc.rule, lrc.targetDate);
         else
-            docs = Document::loadRecent(30);
+            docs = Document::loadRecent(30, lrc.rule, lrc.targetDate);
         
         listDocuments(docs, "DOKUMENTE (" + std::to_string(docs.size()) + ")");
-        std::cout << "  1.Öffnen  0.Zurück\n";
-        int ch = readInt("Wahl",0,1); if (ch==0) break;
+        // Check parent released status
+        bool parentReleased = false;
+        if (!taskId.empty()) {
+            auto t = TaskF22::loadById(taskId);
+            parentReleased = t && t->isReleased();
+        } else if (!projectId.empty()) {
+            auto p = ProjectF16::loadById(projectId);
+            parentReleased = p && p->isReleased();
+        }
+        if (parentReleased)
+            std::cout << "  1.Öffnen  0.Zurück  (Released — kein Neu anlegen)\n";
+        else
+            std::cout << "  1.Öffnen  2.Neu anlegen  0.Zurück\n";
+        int ch = readInt("Wahl",0,2); if (ch==0) break;
         if (ch==1 && !docs.empty()) {
             int pick = readInt("Nummer",1,(int)docs.size());
             documentMenu(docs[pick-1]);
+        } else if (ch==2) {
+            if (parentReleased) { std::cout << "  >> Released — kein Neu anlegen.\n"; continue; }
+            std::string pid = projectId, tid = taskId;
+            if (pid.empty() && !tid.empty()) {
+                auto t = TaskF22::loadById(tid); if (t) pid = t->projectId;
+            }
+            auto d = createDocumentWizard(pid, tid);
+            if (d) documentMenu(d);
         }
     }
 }

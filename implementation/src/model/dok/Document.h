@@ -1,22 +1,17 @@
 // ============================================================
 // Document.h  —  Document entity (DOK)
 //
-// DDR-Aktenzeichen: XV/DOK/{seq}/{year}
-// Documents require a projectId for MFS filing
-// Versioning via document_versions table
-// Physical files live in mfs/DOK/{parent-sane}/
+// DDR-Registriernummer: XV/DOK/{seq}/{year}
+// Mandatory: projectId (MFS filing requires a project).
+// Optional: taskId for task-scoped documents.
+//
+// A Document is a CONTAINER for DocumentObjects (physical files).
+// State is governed by DocumentRevision (5-state machine).
+// All field mutations are guarded by canEdit() / update().
 // ============================================================
 #pragma once
+#include "../../core/OperationResult.h"
 #include "../Utils.h"
-// ============================================================
-// Document.h  —  Document entity with URL download + archiving
-//
-// When a URL link is encountered anywhere in the system,
-// DocumentManager::archiveFromUrl() downloads the file and
-// creates a full Document record with all attributes.
-// Websites are archived as HTML or PDF via system tools.
-// Stored in documents.db.
-// ============================================================
 #include <string>
 #include <vector>
 #include <memory>
@@ -26,10 +21,18 @@
 
 namespace Rosenholz {
 
+// DocLoadRule — how to select the "current" revision when browsing documents.
+// Passed to loadForProject(), loadRecent() to control which revision
+// of a document is considered active for display purposes.
+enum class DocLoadRule {
+    LATEST_RELEASED,  // (1) Neueste released-Revision (Standard)
+    LATEST_WORKING,   // (2) Neueste nicht-closed Revision (any state)
+    DATE_RELEASED,    // (3) Neueste released-Revision zum Stichtag
+};
+
 class Document {
 public:
     std::string documentId;
-    std::string workflowInstanceId, workflowStatus, workflowCurrentState;
     std::string releaseWorkflowId;    ///< Main WFI controlling this doc lifecycle
     std::string projectId;
     std::string taskId;
@@ -42,19 +45,16 @@ public:
     std::string title;
     std::string version         { "1.0" };
     std::string dateCreated, dateModified, dateApproved, dateExpires;
-    std::string status  { "in_work" }; // in_work|pre_released|released|locked|closed
     std::string classification;
     int         volumeNumber    { 1 };
     int         pageCount       { 0 };
     std::string language        { "EN" };
     std::string format;         // pdf|docx|xlsx|html|txt|image|archive
     std::string filePath;       // local path on disk (in MFS)
-    std::string fileStagedPath; // temp path before MFS copy
     int64_t     fileSize    { 0 };  // bytes
     std::string fileHash;       // SHA-256
     std::string fileUrl;        // original source URL
     std::string externalRef;
-    std::string storageSystem;
     std::string tags;           // JSON array
     std::string summary;
     std::string links;
@@ -62,45 +62,57 @@ public:
     std::string createdAt, updatedAt;
 
 
+    // ── Status (computed from active revision) ────────────────
+    // status field is kept for backward compat with SQL queries,
+    // but the authoritative value is the active revision's revState.
+    // Call currentRevisionState() when you need the real state.
+    RevState currentRevisionState() const;
+
     // ── State predicates ──────────────────────────────────────
-    // The CLI and any other UI must call these — never inspect
-    // revState or status directly to make business decisions.
+    // All UI layers call these. Never inspect revState directly.
+    // Returns OPERATION_ACK if the operation is allowed.
+    // Returns a specific error code explaining why it is not.
 
-    /// True if the active revision is in_work (the only mutable state).
-    bool isInWork() const;
+    /// OPERATION_ACK if the active revision is in_work.
+    OperationResult checkInWork()    const;
 
-    /// True if the active revision is in a frozen state
-    /// (pre_released, released, locked, or closed).
-    bool isFrozen() const;
+    /// OPERATION_ACK if a new revision may be created via revise().
+    OperationResult checkCanRevise() const;
 
-    /// True if a new revision may be created via revise().
-    /// Requires: active revision exists and is NOT in_work.
-    bool canRevise() const;
+    /// OPERATION_ACK if checkout() may be called.
+    OperationResult checkCanCheckout() const;
 
-    /// True if checkout() may be called.
-    /// Requires: active revision is in_work and no checkout is already open.
-    bool canCheckout() const;
+    /// OPERATION_ACK if checkin() may be called.
+    OperationResult checkCanCheckin() const;
 
-    /// True if checkin() may be called.
-    /// Requires: active revision is in_work and a checkout is open.
-    bool canCheckin() const;
+    /// OPERATION_ACK if revertChanges() may be called.
+    OperationResult checkCanRevert()  const;
 
-    /// True if revertChanges() may be called.
-    /// Requires: active revision is in_work, a checkout is open,
-    ///           and a parent revision exists.
-    bool canRevert() const;
+    /// OPERATION_ACK if fields may be edited.
+    OperationResult checkCanEdit()    const;
 
-    /// True if the document may be edited (fields, metadata).
-    /// Requires: active revision is in_work.
-    bool canEdit() const;
+    // ── Bool convenience wrappers (for internal/legacy use) ───
+    bool isInWork()     const;
+    bool isFrozen()     const;
+    bool canRevise()    const;
+    bool canCheckout()  const;
+    bool canCheckin()   const;
+    bool canRevert()    const;
+    bool canEdit()      const;
+
+    // ── MFS folder indexing ───────────────────────────────────
+    /// Scan ALL revision folders of this document for files that are
+    /// not yet registered as DocumentObjects.
+    /// Returns: list of (revNumber, fullFilePath) pairs for unregistered files.
+    std::vector<std::pair<uint32_t,std::string>> indexMfsFolders() const;
 
     // ── CRUD ──────────────────────────────────────────────
-    bool save() const;
+    OperationResult save() const;
     void ensureReleaseWorkflow();  ///< Creates Main WFI on first save
 
     bool load(const std::string& id);
-    bool remove();
-    bool update();
+    OperationResult remove();
+    OperationResult update();
 
     // ── Factory ───────────────────────────────────────────
     // ------------------------------
@@ -121,9 +133,15 @@ public:
         const std::string& docType   = "report",
         const std::string& projectId = "");
 
-    static std::vector<std::shared_ptr<Document>> loadRecent(int n = 20);
+    static std::vector<std::shared_ptr<Document>> loadRecent(
+        int n = 20,
+        DocLoadRule rule   = DocLoadRule::LATEST_RELEASED,
+        const std::string& targetDate = "");
     static std::shared_ptr<Document> loadById(const std::string& id);
-    static std::vector<std::shared_ptr<Document>> loadForProject(const std::string& projectId);
+    static std::vector<std::shared_ptr<Document>> loadForProject(
+        const std::string& projectId,
+        DocLoadRule rule   = DocLoadRule::LATEST_RELEASED,
+        const std::string& targetDate = "");
     static std::vector<std::shared_ptr<Document>> loadForEntity(
         const std::string& entityType, const std::string& entityId);
 
@@ -154,13 +172,13 @@ public:
         const std::string& authorId   = "");
 
     // ── Attach to any entity ──────────────────────────────
-    bool attachToEntity(const std::string& entityType, const std::string& entityId,
-                        const std::string& relationship = "attached");
+    OperationResult attachToEntity(const std::string& entityType, const std::string& entityId,
+                                   const std::string& relationship = "attached");
 
     // ── Reassign ─────────────────────────────────────────
-    bool reassignAuthor(const std::string& newAuthorId);
-    bool reassignToProject(const std::string& newProjectId);
-    bool reassignToTask(const std::string& newTaskId);
+    OperationResult reassignAuthor(const std::string& newAuthorId);
+    OperationResult reassignToProject(const std::string& newProjectId);
+    OperationResult reassignToTask(const std::string& newTaskId);
 
     nlohmann::json toJson() const;
 
@@ -246,9 +264,9 @@ public:
     // Creates a new revision from the pre-checkout snapshot so history is
     // preserved.  Discards the current checked-out working copy.
     // Returns false if no checkout was in progress or the snapshot is missing.
-    bool revertChanges();
+    OperationResult revertChanges();
 
-    bool importLocalFile(const std::string& srcPath);
+    OperationResult importLocalFile(const std::string& srcPath);
     /// Re-download fileUrl, snapshot current, update filePath.
     // ------------------------------
     // Re-download the document from fileUrl, replacing the current file.
@@ -264,7 +282,7 @@ public:
     // Returns:
     //   true on successful download + import; false on any failure
     // ------------------------------
-    bool refreshFromUrl();
+    OperationResult refreshFromUrl();
     /// Open file. mode="read" → temp copy; mode="edit" → original in place.
     // ------------------------------
     // Open the document's physical file using the system viewer.
@@ -282,7 +300,8 @@ public:
     // Returns:
     //   true if the open command returned 0; false if file missing or error
     // ------------------------------
-    bool openFile(const std::string& mode = "read") const;
+    bool openFile(const std::string& mode = "read",
+                  const std::string& pathOverride = "") const;
 
 private:
     void fromRow(const Row& r);

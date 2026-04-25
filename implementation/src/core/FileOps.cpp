@@ -454,4 +454,21 @@ bool FileOps::ensureMFSTree(const std::string& mfsRoot) {
     return ok;
 }
 
-} // namespace Rosenholz
+}
+namespace Rosenholz {
+std::vector<std::string> FileOps::listFiles(const std::string& dir, bool /*recursive*/) {
+    std::vector<std::string> result;
+    DIR* dp = ::opendir(dir.c_str());
+    if (!dp) return result;
+    struct dirent* ep;
+    while ((ep = ::readdir(dp)) != nullptr) {
+        if (ep->d_name[0] == '.') continue;
+        std::string full = dir + "/" + ep->d_name;
+        struct stat st{};
+        if (::stat(full.c_str(), &st) == 0 && S_ISREG(st.st_mode))
+            result.push_back(full);
+    }
+    ::closedir(dp);
+    return result;
+}
+} // namespace Rosenholz (listFiles)

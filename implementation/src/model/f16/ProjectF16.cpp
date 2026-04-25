@@ -4,6 +4,7 @@
 
 #include "../../mfs/MFSWriter.h"
 #include "ProjectF16.h"
+#include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "../../core/Database.h"
 #include "../../workflow/F77Workflow.h"
@@ -64,15 +65,15 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
 // Returns:
 //   true on success, false on DB error or rollback
 // ------------------------------
-bool ProjectF16::save() const {
+OperationResult ProjectF16::save() const {
     auto* db = DatabasePool::instance().get("f16");
-    if (!db) { LOG_ERROR("ProjectF16::save — projects DB not available"); return false; }
+    if (!db) { LOG_ERROR("ProjectF16::save — projects DB not available"); return OperationResult::DB_ERROR; }
     // Wrap in transaction for atomicity
     db->beginTransaction();
 
     LOG_DEBUG("Saving ProjectF16: " + projectId);
 
-    bool ok = db->exec(R"(
+    OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO projects (
             project_id, workflow_instance_id, workflow_status, workflow_current_state, release_workflow_id,
             reg_number, reg_dept, reg_sequence, reg_year,
@@ -154,9 +155,9 @@ bool ProjectF16::save() const {
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
-    });
+    }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 
-    if (ok) {
+    if (opOk(ok)) {
         LOG_INFO("ProjectF16 saved: " + projectId);
         db->commitTransaction();
     } else {
@@ -237,22 +238,23 @@ bool ProjectF16::load(const std::string& id) {
     return true;
 }
 
-bool ProjectF16::remove() {
+OperationResult ProjectF16::remove() {
     auto* db = DatabasePool::instance().get("f16");
-    if (!db) return false;
+    if (!db) return OperationResult::DB_ERROR;
     LOG_WARN("Removing ProjectF16: " + projectId);
     // Remove QTCS links
     db->exec("DELETE FROM project_quality WHERE project_id=?;", {BindParam::text(projectId)});
     db->exec("DELETE FROM project_cost    WHERE project_id=?;", {BindParam::text(projectId)});
     db->exec("DELETE FROM project_time    WHERE project_id=?;", {BindParam::text(projectId)});
     db->exec("DELETE FROM project_scope   WHERE project_id=?;", {BindParam::text(projectId)});
-    return db->exec("DELETE FROM projects WHERE project_id=?;", {BindParam::text(projectId)});
+    return db->exec("DELETE FROM projects WHERE project_id=?;", {BindParam::text(projectId)})
+           ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-bool ProjectF16::update() {
+OperationResult ProjectF16::update() {
     if (isReleased()) {
         LOG_WARN("[F16] update() verweigert: Projekt ist released — " + projectId);
-        return false;
+        return OperationResult::ENTITY_RELEASED;
     }
     updatedAt = nowIso();
     return save();
@@ -294,54 +296,6 @@ std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadByStatus(const std::str
 }
 
 // ── QTCS multi-assignment ─────────────────────────────────────
-bool ProjectF16::addQuality(const std::string& id) {
-    qualityIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("INSERT OR IGNORE INTO project_quality VALUES (?,?);",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
-bool ProjectF16::addCost(const std::string& id) {
-    costIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("INSERT OR IGNORE INTO project_cost VALUES (?,?);",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
-bool ProjectF16::addTime(const std::string& id) {
-    timeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("INSERT OR IGNORE INTO project_time VALUES (?,?);",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
-bool ProjectF16::addScope(const std::string& id) {
-    scopeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("INSERT OR IGNORE INTO project_scope VALUES (?,?);",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
-bool ProjectF16::removeQuality(const std::string& id) {
-    qualityIds.erase(std::remove(qualityIds.begin(), qualityIds.end(), id), qualityIds.end());
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("DELETE FROM project_quality WHERE project_id=? AND quality_id=?;",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
-bool ProjectF16::removeCost(const std::string& id) {
-    costIds.erase(std::remove(costIds.begin(), costIds.end(), id), costIds.end());
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("DELETE FROM project_cost WHERE project_id=? AND cost_id=?;",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
-bool ProjectF16::removeTime(const std::string& id) {
-    timeIds.erase(std::remove(timeIds.begin(), timeIds.end(), id), timeIds.end());
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("DELETE FROM project_time WHERE project_id=? AND time_id=?;",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
-bool ProjectF16::removeScope(const std::string& id) {
-    scopeIds.erase(std::remove(scopeIds.begin(), scopeIds.end(), id), scopeIds.end());
-    auto* db = DatabasePool::instance().get("f16");
-    return db ? db->exec("DELETE FROM project_scope WHERE project_id=? AND scope_id=?;",
-                          {BindParam::text(projectId), BindParam::text(id)}) : false;
-}
 
 void ProjectF16::loadQTCSLinks() {
     auto* db = DatabasePool::instance().get("f16");
@@ -377,18 +331,18 @@ void ProjectF16::recalcEarnedValue() {
 }
 
 // ── Reassign connections ─────────────────────────────────────
-bool ProjectF16::reassignLead(const std::string& newLeadId) {
+OperationResult ProjectF16::reassignLead(const std::string& newLeadId) {
     LOG_INFO("Reassigning lead for " + projectId + " -> " + newLeadId);
     leadId = newLeadId; return update();
 }
-bool ProjectF16::reassignTeam(const std::string& newTeamId) {
+OperationResult ProjectF16::reassignTeam(const std::string& newTeamId) {
     LOG_INFO("Reassigning team for " + projectId + " -> " + newTeamId);
     ownerTeamId = newTeamId; return update();
 }
-bool ProjectF16::reassignSponsor(const std::string& newSponsorId) {
+OperationResult ProjectF16::reassignSponsor(const std::string& newSponsorId) {
     sponsorId = newSponsorId; return update();
 }
-bool ProjectF16::reassignWorkflowInstance(const std::string& newInstanceId) {
+OperationResult ProjectF16::reassignWorkflowInstance(const std::string& newInstanceId) {
     workflowInstanceId = newInstanceId; return update();
 }
 
@@ -486,6 +440,12 @@ std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadRecent(int n) {
     return result;
 }
 
+
+bool ProjectF16::isWorkflowComplete() const {
+    if (releaseWorkflowId.empty()) return false;
+    auto wf = Rosenholz::F77_Workflow::loadById(releaseWorkflowId);
+    return wf && wf->status == "completed";
+}
 
 void ProjectF16::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;

@@ -9,6 +9,7 @@
 //   createProjectWizard — step-by-step project creation
 // ============================================================
 #include "cli_common.h"
+#include "../core/OperationResult.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
 #include "../core/Logger.h"
@@ -89,7 +90,7 @@ void cmdF16(const std::vector<std::string>& args) {
     // <id>  —  open project menu
     if (isId(args[0])) {
         auto p = ProjectF16::loadById(args[0]);
-        if (!p) die("F16 nicht gefunden: " + args[0]);
+        if (!p) { printErr("F16 nicht gefunden: " + args[0]); return; }
         projectMenu(p);
         return;
     }
@@ -167,7 +168,7 @@ static void editMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
     std::string links = readOpt("Links (leer = behalten): ");
     if (!links.empty()) p->links = links;
 
-    if (p->update()) std::cout << "  >> Gespeichert.\n";
+    if (opOk(p->update())) std::cout << "  >> Gespeichert.\n";
     else             std::cout << "  >> Fehler beim Speichern.\n";
 }
 
@@ -179,41 +180,50 @@ static void editMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
 static void mainWorkflowMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
     using namespace Rosenholz;
     while (true) {
-        hdr("F77 WORKFLOW — " + p->regNumber.toString());
+        if (auto fresh = ProjectF16::loadById(p->projectId)) *p = *fresh;
+        hdr("WORKFLOW — " + p->projectId);
         std::cout << "  Status       : " << p->status << "\n";
 
         if (p->releaseWorkflowId.empty()) {
-            std::cout << "  (kein F77-Workflow aktiv — Status bleibt in_work)\n";
-            std::cout << "  1. Workflow starten    0. Zurück\n";
+            // No workflow yet — offer to start one (always asks targetState via wizard)
+            std::cout << "  Kein Workflow aktiv.\n";
+            std::cout << "  1. Workflow starten...    0. Zurück\n";
             int ch = readInt("Wahl", 0, 1);
             if (ch == 0) return;
-            auto wf = F77_Engine::startDefault("f16", p->projectId);
-            if (wf) {
-                p->releaseWorkflowId = wf->workflowId;
-                p->update();
-                std::cout << "  >> Workflow gestartet: " << wf->workflowId << "\n";
-                instanceMenu(wf->workflowId);
-            }
+            std::string wid = startWfInstanceWizard("f16", p->projectId);
+            if (!wid.empty()) instanceMenu(wid);
             return;
         }
 
-        int blockers = 0;
-        F77_Engine::canRelease("f16", p->projectId, p->releaseWorkflowId, blockers);
+        // Workflow exists
+        auto wf = F77_Workflow::loadById(p->releaseWorkflowId);
+        std::string wfStatus = wf ? wf->status : "unbekannt";
         std::cout << "  Workflow-ID  : " << p->releaseWorkflowId.substr(0, 36) << "\n";
-        if (blockers > 0)
-            std::cout << "  ! " << blockers << " offene Sub-Workflow(s) blockieren Freigabe\n";
-        else
-            std::cout << "  OK Freigabe möglich\n";
+        std::cout << "  WF-Status    : " << wfStatus << "\n";
 
-        std::cout << "  1. Workflow öffnen    2. Alle sperren    0. Zurück\n";
-        int ch = readInt("Wahl", 0, 2);
-        if (ch == 0) return;
-        if (ch == 1) { instanceMenu(p->releaseWorkflowId); return; }
-        if (ch == 2 && blockers > 0) {
-            if (yesno("Alle " + std::to_string(blockers) + " Workflows sperren?")) {
-                int locked = F77_Engine::lockAll("f16", p->projectId, p->releaseWorkflowId, true);
-                std::cout << "  >> " << locked << " Workflow(s) gesperrt.\n";
+        if (wfStatus == "active") {
+            int blockers = 0;
+            F77_Engine::canRelease("f16", p->projectId, p->releaseWorkflowId, blockers);
+            if (blockers > 0)
+                std::cout << "  ! " << blockers << " Schritte blockieren Freigabe\n";
+            else
+                std::cout << "  ✓ Freigabe moeglich\n";
+            std::cout << "  1. Workflow öffnen    0. Zurück\n";
+            int ch = readInt("Wahl", 0, 1);
+            if (ch == 1) instanceMenu(p->releaseWorkflowId);
+        } else if (wfStatus == "completed" || wfStatus == "cancelled") {
+            // Completed or cancelled: allow starting a new one
+            std::cout << "  (abgeschlossen oder abgebrochen)\n";
+            std::cout << "  1. Neuen Workflow starten...    0. Zurück\n";
+            int ch = readInt("Wahl", 0, 1);
+            if (ch == 1) {
+                std::string wid = startWfInstanceWizard("f16", p->projectId);
+                if (!wid.empty()) instanceMenu(wid);
             }
+        } else {
+            std::cout << "  1. Workflow öffnen    0. Zurück\n";
+            int ch = readInt("Wahl", 0, 1);
+            if (ch == 1) instanceMenu(p->releaseWorkflowId);
         }
         return;
     }
@@ -268,7 +278,7 @@ std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
     p->endDatePlanned  = endPlan;
     p->budgetPlanned   = budget;
 
-    if (p->save()) {
+    if (opOk(p->save())) {
         std::cout << "\n  >> Project created: " << p->regNumber.toString()
                   << " (" << p->projectId << ")\n\n";
         // write MFS file
@@ -318,8 +328,8 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
             << "    8. Communications (Meetings, Calls, ...)\n"
             << "\n  [MEILENSTEINE]\n"
             << "    9. Meilenstein-Notizen bearbeiten\n"
-            << "\n  [MAIN WORKFLOW]\n"
-            << "   10. Main Workflow / Freigabe\n"
+            << "\n  [WORKFLOW]\n"
+            << "   10. Starte Workflow...\n"
             << "\n    0. Zurück\n";
         hr();
 
@@ -333,7 +343,7 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
             listTasks(p->projectId);
 
         } else if (ch==3) {
-            if (!p->canAddChildren()) { std::cout << "  >> Released — keine neuen Aufgaben.\n"; continue; }
+            if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Aufgaben.\n"; continue; }
             auto task = createTaskWizard(p->projectId);
             if (task) {
                 std::cout << "  Aufgabe jetzt öffnen? (j/n): ";
@@ -345,7 +355,7 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
             documentBrowserMenu(p->projectId, "");
 
         } else if (ch==5) {
-            if (!p->canAddChildren()) { std::cout << "  >> Released — keine neuen Dokumente.\n"; continue; }
+            if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; continue; }
             auto doc = createDocumentWizard(p->projectId, "");
             if (doc) documentMenu(doc);
 
@@ -353,7 +363,7 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
             f18BrowserMenu(p->projectId, "");
 
         } else if (ch==7) {
-            if (!p->canAddChildren()) { std::cout << "  >> Released — keine neuen F18-Vorgaenge.\n"; continue; }
+            if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen F18-Vorgaenge.\n"; continue; }
             auto v = createF18Wizard(p->projectId, "");
             if (v) f18Menu(v);
 

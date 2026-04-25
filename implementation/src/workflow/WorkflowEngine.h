@@ -308,7 +308,6 @@ private:
         const std::string& instanceId);
     static bool checkAndCompleteInstance(WorkflowInstance& inst);
     static bool checkSLA(WorkflowAction& action);
-    static std::string nowIso();
 };
 
 // ─────────────────────────────────────────────────────────────

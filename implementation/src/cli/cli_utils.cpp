@@ -43,6 +43,10 @@ void die(const std::string& msg) {
     std::exit(1);
 }
 
+void printErr(const std::string& msg) {
+    std::cout << "  >> Fehler: " << msg << "\n";
+}
+
 bool isId(const std::string& s) {
     // genId/RegNumber strings contain '/' e.g. XV/F16/0001/2026
     return s.find('/') != std::string::npos;
@@ -168,7 +172,7 @@ void printProject(const ProjectF16& p) {
     };
     hdr("F16 — " + p.regNumber.toString() + "  " + p.title.substr(0,30));
     std::cout << "  +" << std::string(52,'-') << "+\n";
-    row("ID",       p.projectId.substr(0,26));
+    row("ID (rh -f16 <id>)", p.projectId);
     row("Status",   p.status + " / " + p.phase);
     row("Lead",     p.leadId.empty() ? "—" : p.leadId.substr(0,26));
     row("Budget",   std::to_string((int)p.budgetPlanned) + " " + p.currency);
@@ -190,7 +194,7 @@ void printTask(const TaskF22& t) {
     };
     hdr("F22 — " + t.regNumber.toString() + "  " + t.title.substr(0,30));
     std::cout << "  +" << std::string(52,'-') << "+\n";
-    row("ID",     t.taskId.substr(0,26));
+    row("ID (rh -f22 <id>)", t.taskId);
     row("Status", t.status + " / " + t.priority);
     row("Projekt",t.projectId.substr(0,26));
     row("Person", t.assigneeId.empty() ? "—" : t.assigneeId.substr(0,26));
@@ -208,10 +212,10 @@ void printDocument(const Document& d) {
     // Show current revision state (the authoritative lifecycle state)
     auto curRev = Rosenholz::DocumentRevision::currentRevision(d.documentId);
     std::string revInfo = curRev
-        ? "Rev " + std::to_string(curRev->rev) + " [" + curRev->revState + "]"
+        ? "Rev " + std::to_string(curRev->rev) + " [" + curRev->revStateStr() + "]"
         : "(keine Revision)";
     std::cout << "  Revision   : " << revInfo << "\n";
-    std::cout << "  Dok-Status : " << d.status << "\n";
+    std::cout << "  Dok-Status : " << revStateToString(d.currentRevisionState()) << "\n";
     std::cout << "  Typ        : " << d.docType << " / " << d.format << "\n";
     std::cout << "  Version    : " << d.version << "\n";
     std::cout << "  Projekt    : " << (d.projectId.empty() ? "—" : d.projectId.substr(0,32)) << "\n";
@@ -223,7 +227,7 @@ void printDocument(const Document& d) {
     auto cur = DocumentRevision::currentRevision(d.documentId);
     if (cur)
         std::cout << "  Revision   : Rev " << cur->rev
-                  << " [" << cur->revState << "]"
+                  << " [" << cur->revStateStr() << "]"
                   << (cur->superseded ? "" : " ← aktiv") << "\n";
     else
         std::cout << "  Revision   : (keine)\n";
@@ -242,9 +246,9 @@ void listDocuments(const std::vector<std::shared_ptr<Document>>& docs,
         auto cur = DocumentRevision::currentRevision(d->documentId);
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << std::left << std::setw(28) << d->title.substr(0,26)
-                  << "  " << std::setw(12) << d->status
+                  << "  " << std::setw(12) << revStateToString(d->currentRevisionState())
                   << "  v" << d->version;
-        if (cur) std::cout << "  [Rev " << cur->rev << " " << cur->revState << "]";
+        if (cur) std::cout << "  [Rev " << cur->rev << " " << cur->revStateStr() << "]";
         std::cout << "\n";
     }
     std::cout << "\n";
@@ -258,13 +262,13 @@ void listProjects() {
     if (all.empty()) { std::cout << "  (keine Projekte)\n"; return; }
 
     std::cout << "  " << std::left
-              << std::setw(24) << "ID / REG-NR"
+              << std::setw(28) << "PROJEKT-ID"
               << std::setw(32) << "TITEL"
               << std::setw(14) << "STATUS"
               << std::setw(12) << "PHASE"
               << std::setw(8)  << "PRIO"
               << "CPI\n"
-              << "  " << std::string(82, '-') << "\n";
+              << "  " << std::string(86, '-') << "\n";
     std::cout << "  (ID für rh -f16 <id> verwenden)\n";
 
     for (auto& p : all) {
@@ -274,7 +278,7 @@ void listProjects() {
         char cpibuf[10];
         snprintf(cpibuf, sizeof(cpibuf), "%.2f", p->cpi);
         std::cout << "  " << std::left
-                  << std::setw(24) << p->regNumber.toString()
+                  << std::setw(28) << p->projectId
                   << std::setw(32) << title
                   << std::setw(14) << p->status
                   << std::setw(12) << phase
@@ -289,20 +293,20 @@ void listTasks(const std::string& projectId) {
     if (tasks.empty()) { std::cout << "  (keine Aufgaben)\n"; return; }
 
     std::cout << "  " << std::left
-              << std::setw(24) << "ID / REG-NR"
+              << std::setw(28) << "AUFGABE-ID"
               << std::setw(30) << "TITEL"
               << std::setw(14) << "STATUS"
               << std::setw(6)  << "%"
               << std::setw(10) << "PRIO"
               << "ASSIGNEE\n"
-              << "  " << std::string(82, '-') << "\n";
+              << "  " << std::string(86, '-') << "\n";
     std::cout << "  (ID für rh -f22 <id> verwenden)\n";
 
     for (auto& t : tasks) {
         std::string title = t->title.size() > 28 ? t->title.substr(0, 27) + "~" : t->title;
         std::string ass   = t->assigneeId.empty() ? "-" : t->assigneeId.substr(0, 14);
         std::cout << "  " << std::left
-                  << std::setw(24) << t->regNumber.toString()
+                  << std::setw(28) << t->taskId
                   << std::setw(30) << title
                   << std::setw(14) << t->status
                   << std::setw(6)  << t->percentComplete

@@ -1,4 +1,5 @@
 #pragma once
+
 // ============================================================
 // F18Operation.h  —  Unified F18 Operation entity
 //
@@ -27,6 +28,7 @@
 // ============================================================
 
 #include "../Utils.h"
+#include "../../core/OperationResult.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -168,13 +170,15 @@ public:
 
     // ── State predicates ──────────────────────────────────────
     bool isReleased() const { return status == "released"; }
-    bool canEdit()    const { return !isReleased(); }
+    bool canEdit()    const { return !isReleased() && !isWorkflowComplete(); }
+    /// True when the controlling F77 workflow has status="completed".
+    bool isWorkflowComplete() const;
 
     // ── CRUD ──────────────────────────────────────────────────
-    bool save()   const;
+    OperationResult save()   const;
     void ensureReleaseWorkflow();  ///< Called after first save to create Main WFI
-    bool update();
-    bool remove() const;
+    OperationResult update();
+    OperationResult remove() const;
     bool load(const std::string& id);
 
     // ── Factory ───────────────────────────────────────────────
@@ -246,7 +250,7 @@ public:
     void recalcRiskScore();   ///< Sets overallRiskScore + riskLevel from impact scores
 
     // ── Note management (stored as JSON in notes field) ───────
-    bool addNote(const std::string& authorId,
+    OperationResult addNote(const std::string& authorId,
                  const std::string& text,
                  const std::string& noteType = "general");
 

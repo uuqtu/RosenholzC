@@ -28,6 +28,9 @@ public:
     // ── Existence checks ───────────────────────────────────
     static bool fileExists(const std::string& path);
     static bool dirExists(const std::string& path);
+    /// List all files in a directory (non-recursive by default).
+    static std::vector<std::string> listFiles(const std::string& dir,
+                                               bool recursive = false);
     static bool pathExists(const std::string& path);
 
     // ── Directory operations ───────────────────────────────

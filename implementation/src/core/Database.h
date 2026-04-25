@@ -51,6 +51,10 @@ struct BindParam {
     static BindParam int64 (int64_t v)             { return {Type::INT64,  "", v,  0.0 }; }
     static BindParam real  (double  v)             { return {Type::DOUBLE, "", 0,  v   }; }
     static BindParam null  ()                      { return {Type::NULL_,  "", 0,  0.0 }; }
+    // Convenience: null if empty, text otherwise
+    static BindParam nullOrText(const std::string& v) {
+        return v.empty() ? null() : text(v);
+    }
 };
 
 // ── Single database connection ────────────────────────────────

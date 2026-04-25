@@ -6,6 +6,7 @@
 //   teamMenu()    — interactive team browser
 // ============================================================
 #include "cli_common.h"
+#include "../core/OperationResult.h"
 #include "../core/Config.h"
 #include "../core/Logger.h"
 #include <algorithm>
@@ -94,7 +95,7 @@ static void teamDetailMenu(std::shared_ptr<Team> t) {
 
         else if (ch == 2) {
             std::string pid = readLine("Neue Lead Person-ID: ");
-            if (t->reassignLead(pid))
+            if (opOk(t->reassignLead(pid)))
                 std::cout << "  >> Lead geändert: " << pid << "\n";
             else
                 std::cout << "  >> Fehler.\n";
@@ -196,7 +197,7 @@ void teamMenu() {
             t->location  = readOpt("Standort (optional): ");
                     std::string lid = readOpt("Lead Person-ID (optional): ");
             if (!lid.empty()) t->leadId = lid;
-            if (t->save()) {
+            if (opOk(t->save())) {
                 std::cout << "  >> Diensteinheit angelegt: " << t->teamId << "\n";
                 teamDetailMenu(t);
             }

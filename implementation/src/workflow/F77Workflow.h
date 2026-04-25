@@ -1,4 +1,5 @@
 #pragma once
+#include "../core/OperationResult.h"
 // ============================================================
 // F77Workflow.h — F77 Freigabe-Workflow Engine
 //
@@ -52,12 +53,13 @@ struct F77_WorkflowTemplateStep {
     bool        autoApprove        { false };
     bool        requiresComment    { false };
     bool        requiresDocument   { false };
+    bool        isSystem           { false }; ///< Auto-added step, cannot be edited/deleted
 
     std::string createdAt;
     std::string updatedAt;
 
-    bool save()   const;
-    bool remove() const;
+    OperationResult save()   const;
+    OperationResult remove() const;
     void fromRow(const Row& r);
 };
 
@@ -76,8 +78,8 @@ struct F77_WorkflowTemplate {
 
     std::vector<F77_WorkflowTemplateStep> steps;
 
-    bool save()   const;
-    bool remove() const;
+    OperationResult save()   const;
+    OperationResult remove() const;
     bool loadSteps();
     void fromRow(const Row& r);
 
@@ -111,7 +113,10 @@ struct F77_WorkflowStep {
     bool        isInitialize    { false };
     bool        isFinal         { false };
     std::string executionMode   { "sequential" };
-    std::string predecessorStepIds; // comma-sep f77_workflow_steps.step_id
+    std::vector<std::string> predecessors; // step IDs that must complete before this
+    // Serialisation helper (SQL storage): comma-joined IDs
+    std::string predecessorsToString() const;
+    static std::vector<std::string> predecessorsFromString(const std::string& csv);
 
     // The F18_Operation that executes this step (NULL for Init/End)
     std::string f18OperationId;
@@ -124,6 +129,7 @@ struct F77_WorkflowStep {
     bool        autoApprove     { false };
     bool        requiresComment { false };
     bool        requiresDocument{ false };
+    bool        isSystem        { false }; ///< System-managed, cannot be skipped/deleted
     std::string completedDate;
     std::string createdAt;
     std::string updatedAt;
@@ -139,8 +145,8 @@ struct F77_WorkflowStep {
     /// Check if all predecessor steps are complete.
     bool canStart(const std::vector<F77_WorkflowStep>& allSteps) const;
 
-    bool save()   const;
-    bool remove() const;
+    OperationResult save()   const;
+    OperationResult remove() const;
     void fromRow(const Row& r);
 
     static std::shared_ptr<F77_WorkflowStep> loadById(const std::string& id);
@@ -168,9 +174,9 @@ struct F77_Workflow {
 
     std::vector<F77_WorkflowStep> steps;
 
-    bool save()   const;
-    bool update() const;
-    bool remove() const;
+    OperationResult save()   const;
+    OperationResult update() const;
+    OperationResult remove() const;
     bool loadSteps();
     void fromRow(const Row& r);
 
@@ -228,6 +234,15 @@ public:
         const std::string& comment = "");
 
     /// Check if all blocking sub-workflows for an entity are done.
+    // ── Workflow attachment (engine-owned, no raw SQL in CLI) ─────
+    /// Persist a workflow ID back to the entity (after startDefault/startFromTemplate).
+    static void attachWorkflow(const std::string& entityType,
+                                const std::string& entityId,
+                                const std::string& workflowId);
+    /// Remove the workflow ID from the entity (after cancel/complete).
+    static void detachWorkflow(const std::string& entityType,
+                                const std::string& entityId);
+
     static bool canRelease(
         const std::string& entityType,
         const std::string& entityId,
@@ -255,7 +270,6 @@ public:
 
 private:
     static Database* db();
-    static std::string nowIso();
     static void spawnWaitConditionF18(
         F77_WorkflowStep& step,
         const std::string& projectId);

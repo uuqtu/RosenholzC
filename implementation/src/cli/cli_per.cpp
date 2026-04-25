@@ -8,6 +8,7 @@
 //   createPersonWizard() — step-by-step person creation
 // ============================================================
 #include "cli_common.h"
+#include "../core/OperationResult.h"
 #include "../core/Config.h"
 #include "../core/Logger.h"
 #include "../mfs/MFSWriter.h"
@@ -28,14 +29,14 @@ void cmdPer(const std::vector<std::string>& args) {
         auto res = Person::search(q);
         if (res.empty()) { std::cout << "  (keine Treffer)\n"; return; }
         for (auto& p : res)
-            std::cout << "  " << std::left << std::setw(28) << p->regNumber.toString()
+            std::cout << "  " << std::left << std::setw(28) << p->personId
                       << "  " << p->fullName() << "\n";
         return;
     }
 
     if (isId(args[0])) {
         auto p = Person::loadById(args[0]);
-        if (!p) die("Person nicht gefunden: " + args[0]);
+        if (!p) { printErr("Person nicht gefunden: " + args[0]); return; }
         CLI::printPerson(*p);
         return;
     }
@@ -113,7 +114,7 @@ std::shared_ptr<Rosenholz::Person> createPersonWizard() {
     p->department = dept;
     p->dayRate    = rate;
 
-    if (p->save()) {
+    if (opOk(p->save())) {
         std::cout << "\n  >> Person created: " << p->regNumber.toString()
                   << " (" << p->personId << ")\n\n";
         return p;

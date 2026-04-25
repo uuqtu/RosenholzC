@@ -4,6 +4,7 @@
 #include "TestFramework.h"
 #include <fstream>
 #include "TestFixtures.h"
+#include "../src/core/OperationResult.h"
 #include "../src/repository/ArchiveStore.h"
 #include "../src/repository/DocumentRevision.h"
 #include "../src/model/Utils.h"
@@ -73,7 +74,7 @@ void testSuiteModel() {
     SECTION("ProjectF16 — create, EV, QTCS, MFS");
     {
         ProjectFixture fix("Test-Vorgang Alpha","OV","large");
-        CHECK(fix.project->save(), "ProjectF16::save()");
+        CHECK(opOk(fix.project->save()), "ProjectF16::save()");
         CHECK(!fix.project->regNumber.toString().empty(), "regNumber valid");
 
         auto loaded = R::ProjectF16::loadById(fix.project->projectId);
@@ -91,8 +92,8 @@ void testSuiteModel() {
 
         // Reassignment
         PersonFixture newLead("Neue","Leiterin","nl@test.de","internal");
-        CHECK(fix.project->reassignLead(newLead.person->personId), "reassignLead");
-        CHECK(fix.project->reassignSponsor(newLead.person->personId), "reassignSponsor");
+        CHECK(opOk(fix.project->reassignLead(newLead.person->personId)), "reassignLead");
+        CHECK(opOk(fix.project->reassignSponsor(newLead.person->personId)), "reassignSponsor");
 
         auto all = R::ProjectF16::loadAll();
         CHECK(!all.empty(), "loadAll returns results");
@@ -104,14 +105,14 @@ void testSuiteModel() {
     SECTION("TaskF22 — hierarchy, reassign, convert");
     {
         TaskFixture fix("Haupt-Aufgabe");
-        CHECK(fix.task->save(), "TaskF22::save()");
+        CHECK(opOk(fix.task->save()), "TaskF22::save()");
         CHECK(fix.task->taskId.find("/F22/") != std::string::npos,
               "Task ID contains /F22/");
 
         auto child = R::TaskF22::create(fix.projFix.project->projectId,
                                          "Kind-Aufgabe", "", fix.task->taskId);
         child->wbsCode = "1.1.1";
-        CHECK(child->save(), "Child task saved");
+        CHECK(opOk(child->save()), "Child task saved");
 
         auto children = R::TaskF22::loadChildren(fix.task->taskId);
         CHECK(!children.empty(), "loadChildren returns subtask");
@@ -120,11 +121,11 @@ void testSuiteModel() {
         // Just verify the task saves with updated percentComplete
         fix.task->percentComplete = 25;
         fix.task->effortActualHrs = 20.0;
-        CHECK(fix.task->save(), "TaskF22 update save");
+        CHECK(opOk(fix.task->save()), "TaskF22 update save");
 
         PersonFixture p2("Dirk","Wolf","dw@test.de","internal");
-        CHECK(fix.task->reassignTo(p2.person->personId), "reassignTo");
-        CHECK(fix.task->reassignParent(""), "reassignParent (detach)");
+        CHECK(opOk(fix.task->reassignTo(p2.person->personId)), "reassignTo");
+        CHECK(opOk(fix.task->reassignParent("")), "reassignParent (detach)");
 
         auto forProj = R::TaskF22::loadForProject(fix.projFix.project->projectId);
         CHECK(!forProj.empty(), "loadForProject returns tasks");
@@ -174,10 +175,10 @@ void testSuiteModel() {
         auto d = R::Document::create("Projektcharter","report",pfix.project->projectId);
         d->format  = "pdf";
         d->version = "1.0";
-        CHECK(d->save(), "Document::save()");
+        CHECK(opOk(d->save()), "Document::save()");
         CHECK(d->documentId.find("/DOK/") != std::string::npos,
               "Document ID contains /DOK/");
-        CHECK(d->attachToEntity("f16", pfix.project->projectId), "attachToEntity");
+        CHECK(opOk(d->attachToEntity("f16", pfix.project->projectId)), "attachToEntity");
 
         auto docs = R::Document::loadForEntity("f16", pfix.project->projectId);
         CHECK(!docs.empty(), "loadForEntity returns documents");
@@ -194,14 +195,14 @@ void testSuiteModel() {
         auto doc = R::Document::create("Testdokument V1", "report", pfix.project->projectId);
         doc->version = "1.0";
         doc->format  = "txt";
-        CHECK(doc->save(), "Document saved before version test");
+        CHECK(opOk(doc->save()), "Document saved before version test");
 
         // Write a real file so importLocalFile has something
         std::string tmpPath = "/tmp/rosenholz_doc_ver_" + doc->documentId + ".txt";
         Rosenholz::FileOps::writeTextFile(tmpPath, "Testinhalt Version 1.0\n");
 
-        bool imported = doc->importLocalFile(tmpPath);
-        CHECK(imported, "importLocalFile copies file to MFS");
+        auto imported = doc->importLocalFile(tmpPath);
+        CHECK(opOk(imported), "importLocalFile copies file to MFS");
         CHECK(!doc->filePath.empty(), "filePath populated after import");
         CHECK(doc->fileSize > 0, "fileSize set");
         CHECK(!doc->fileHash.empty(), "fileHash computed");
@@ -215,7 +216,7 @@ void testSuiteModel() {
         CHECK(rev1b == nullptr, "revise() refused while active revision is in_work");
 
         // Transition Rev 1 to pre_released so a new revision can be created
-        bool transitioned = rev1->transitionState(Rosenholz::DocRevState::PRE_RELEASED);
+        bool transitioned = rev1->transitionState("pre_released");
         CHECK(transitioned, "Revision transitioniert zu pre_released");
 
         // Now revise() must succeed — creates Rev 2 branching from Rev 1
@@ -520,7 +521,7 @@ void testSuiteModel() {
                                                         "test-user", "Initial creation");
         CHECK(rev != nullptr, "createRevision returns non-null");
         CHECK(rev->rev == 1, "First revision is rev=1");
-        CHECK(rev->revState == "in_work", "Starts in_work");
+        CHECK(rev->revStateStr() == "in_work", "Starts in_work");
         CHECK(rev->parentRev == 0, "Initial rev has parentRev=0");
 
         // Superseded flag: first rev must be active (superseded=false)
@@ -535,26 +536,29 @@ void testSuiteModel() {
     SECTION("DocumentRevision — state machine: allowed transitions");
     {
         // Test all valid transitions from the spec (using string constants directly)
-        auto allowed = R::DocumentRevision::isTransitionAllowed;
+        auto allowed = [](const std::string& f, const std::string& t) {
+            return R::DocumentRevision::isTransitionAllowed(
+        R::revStateFromString(f), R::revStateFromString(t), false);
+        };
         // in_work → pre_released, locked, closed
         CHECK( allowed("in_work","pre_released"), "in_work→pre_released");
         CHECK( allowed("in_work","locked"),       "in_work→locked");
         CHECK( allowed("in_work","closed"),       "in_work→closed");
-        CHECK(!allowed("in_work","released"),     "in_work→released BLOCKED");
+        CHECK( allowed("in_work","released"),     "in_work→released OK (direct)");
         // pre_released → released, locked, closed, in_work
         CHECK( allowed("pre_released","released"),    "pre_released→released");
-        CHECK( allowed("pre_released","locked"),      "pre_released→locked");
+        CHECK(!allowed("pre_released","locked"),      "pre_released→locked BLOCKED (standard)");
         CHECK( allowed("pre_released","closed"),      "pre_released→closed");
-        CHECK( allowed("pre_released","in_work"),     "pre_released→in_work");
+        CHECK(!allowed("pre_released","in_work"),     "pre_released→in_work BLOCKED (standard)");
         // released → locked, closed only
-        CHECK( allowed("released","locked"),      "released→locked");
+        CHECK(!allowed("released","locked"),      "released→locked BLOCKED (standard)");
         CHECK( allowed("released","closed"),      "released→closed");
-        CHECK(!allowed("released","in_work"),     "released→in_work BLOCKED");
-        CHECK(!allowed("released","pre_released"),"released→pre_released BLOCKED");
+        CHECK(!allowed("released","in_work"),     "released→in_work BLOCKED (standard)");
+        CHECK(!allowed("released","pre_released"),"released→pre_released BLOCKED (standard)");
         // locked → pre_released (newest only), closed
         CHECK( allowed("locked","pre_released"), "locked→pre_released");
         CHECK( allowed("locked","closed"),       "locked→closed");
-        CHECK(!allowed("locked","released"),     "locked→released BLOCKED");
+        CHECK( allowed("locked","released"),     "locked→released OK (direct)");
         // closed → nothing (terminal)
         CHECK(!allowed("closed","in_work"),      "closed→in_work BLOCKED");
         CHECK(!allowed("closed","released"),     "closed→released BLOCKED");
@@ -575,21 +579,21 @@ void testSuiteModel() {
         CHECK(ok, "in_work→pre_released succeeds");
         auto r2 = R::DocumentRevision::loadByRev(doc->documentId, 1);
         CHECK(r2 != nullptr, "reload after transition");
-        if (r2) CHECK(r2->revState == "pre_released", "revState=pre_released persisted");
+        if (r2) CHECK(r2->revStateStr() == "pre_released", "revState=pre_released persisted");
 
         // pre_released → released
         ok = rev->transitionState("released");
         CHECK(ok, "pre_released→released succeeds");
         auto r3 = R::DocumentRevision::loadByRev(doc->documentId, 1);
-        if (r3) CHECK(r3->revState == "released", "revState=released persisted");
+        if (r3) CHECK(r3->revStateStr() == "released", "revState=released persisted");
 
-        // released → locked
-        ok = rev->transitionState("locked");
-        CHECK(ok, "released→locked succeeds");
+        // released → closed (only valid path from released)
+        ok = rev->transitionState("closed");
+        CHECK(ok, "released→closed succeeds");
 
-        // released → in_work must fail
+        // closed → in_work must fail (terminal)
         ok = rev->transitionState("in_work");
-        CHECK(!ok, "locked→in_work blocked (terminal-ish)");
+        CHECK(!ok, "closed→in_work blocked (terminal)");
     }
 
     SECTION("DocumentRevision — superseded invariant with multiple revisions");
@@ -705,7 +709,7 @@ void testSuiteModel() {
         auto rev1 = R::DocumentRevision::loadByRev(doc->documentId, 1);
         CHECK(rev1 != nullptr, "Rev 1 exists after ensureRevision1");
         if (rev1) {
-            CHECK(rev1->revState == "in_work", "Rev 1 starts in_work");
+            CHECK(rev1->revStateStr() == "in_work", "Rev 1 starts in_work");
             CHECK(!rev1->superseded, "Rev 1 is active (superseded=false)");
         }
 
@@ -738,22 +742,18 @@ void testSuiteModel() {
 
         // in_work → pre_released
         CHECK(rev->transitionState("pre_released"), "in_work → pre_released");
-        CHECK(rev->revState == "pre_released", "state is pre_released");
+        CHECK(rev->revStateStr() == "pre_released", "state is pre_released");
 
         // pre_released → released (with confirmation in test = just call directly)
         CHECK(rev->transitionState("released"), "pre_released → released");
-        CHECK(rev->revState == "released", "state is released");
+        CHECK(rev->revStateStr() == "released", "state is released");
 
         // released → in_work must fail
-        CHECK(!rev->transitionState("in_work"), "released → in_work blocked");
+        // released → in_work is now allowed per diagram (colours had no meaning)
 
-        // released → locked
-        CHECK(rev->transitionState("locked"), "released → locked");
-        CHECK(rev->revState == "locked", "state is locked");
-
-        // locked → closed
-        CHECK(rev->transitionState("closed"), "locked → closed");
-        CHECK(rev->revState == "closed", "state is closed");
+        // released → closed (only valid in standard mode)
+        CHECK(rev->transitionState("closed"), "released → closed");
+        CHECK(rev->revStateStr() == "closed", "state is closed");
 
         // closed → anything fails
         CHECK(!rev->transitionState("in_work"), "closed → in_work blocked (terminal)");

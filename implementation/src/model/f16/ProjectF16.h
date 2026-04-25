@@ -7,7 +7,9 @@
 //   MFS filing, and workflow attachment
 // ============================================================
 #pragma once
+
 #include "../Utils.h"
+#include "../../core/OperationResult.h"
 // ============================================================
 // ProjectF16.h  —  Project entity (F16 Vorgang analogy)
 //
@@ -128,18 +130,20 @@ public:
     bool canEdit()       const { return !isReleased(); }
 
     /// True when new child entities (F22, F18, DOK) may be added.
-    bool canAddChildren() const { return !isReleased(); }
+    bool canAddChildren() const { return !isReleased() && !isWorkflowComplete(); }
+    /// True when the controlling F77 workflow has status="completed".
+    bool isWorkflowComplete() const;
 
     // ── Guarded update ────────────────────────────────────────
     /// update() refuses silently if the project is released.
     /// Returns false and logs a warning if the project is immutable.
-    bool update();
+    OperationResult update();
 
     // ── CRUD ──────────────────────────────────────────────
-    bool save() const;
+    OperationResult save() const;
     void ensureReleaseWorkflow();  ///< Creates Main WFI on first save
     bool load(const std::string& id);
-    bool remove();
+    OperationResult remove();
 
     // ── Factory ───────────────────────────────────────────
     // ------------------------------
@@ -167,14 +171,6 @@ public:
     static std::vector<std::shared_ptr<ProjectF16>> loadByStatus(const std::string& status);
 
     // ── QTCS dimension management (multi-assignable) ───────
-    bool addQuality(const std::string& qualityId);
-    bool addCost   (const std::string& costId);
-    bool addTime   (const std::string& timeId);
-    bool addScope  (const std::string& scopeId);
-    bool removeQuality(const std::string& qualityId);
-    bool removeCost   (const std::string& costId);
-    bool removeTime   (const std::string& timeId);
-    bool removeScope  (const std::string& scopeId);
     void loadQTCSLinks();
 
 
@@ -188,10 +184,10 @@ public:
     std::string convertToTask(const std::string& parentProjectId);
 
     // ── Reassign connections ───────────────────────────────
-    bool reassignLead(const std::string& newLeadId);
-    bool reassignTeam(const std::string& newTeamId);
-    bool reassignSponsor(const std::string& newSponsorId);
-    bool reassignWorkflowInstance(const std::string& newInstanceId);
+    OperationResult reassignLead(const std::string& newLeadId);
+    OperationResult reassignTeam(const std::string& newTeamId);
+    OperationResult reassignSponsor(const std::string& newSponsorId);
+    OperationResult reassignWorkflowInstance(const std::string& newInstanceId);
 
     // ── Serialisation ─────────────────────────────────────
     nlohmann::json toJson() const;

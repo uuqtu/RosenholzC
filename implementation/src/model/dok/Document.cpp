@@ -1,5 +1,6 @@
 // Document.cpp
 #include "Document.h"
+#include "DocumentObject.h"
 #include "../../repository/ArchiveStore.h"
 #include "../../repository/DocumentRevision.h"
 #include "../../workflow/F77Workflow.h"
@@ -15,6 +16,7 @@
 #include <chrono>
 #include <ctime>
 #include <sstream>
+#include <set>
 #include <iomanip>
 #include <algorithm>
 
@@ -45,53 +47,64 @@ std::shared_ptr<Document> Document::create(
     auto d = std::make_shared<Document>();
     d->documentId  = genId("DOK"); d->title = title_;
     d->docType     = type_; d->projectId = pid;
-    d->status      = "draft"; d->dateCreated = nowIso();
+    d->dateCreated = nowIso();
     d->createdAt   = d->dateCreated; d->updatedAt = d->createdAt;
     d->notes       = "{}";
     LOG_INFO("Document created: " + d->documentId + " \"" + title_ + "\"");
     return d;
 }
 
-bool Document::save() const {
+
+// ── MFS folder indexing ────────────────────────────────────────
+std::vector<std::pair<uint32_t,std::string>> Document::indexMfsFolders() const {
+    std::vector<std::pair<uint32_t,std::string>> result;
+    // Load all revisions and scan each folder
+    auto revs = Rosenholz::DocumentRevision::loadAllRevisions(documentId);
+    for (auto& rev : revs) {
+        auto unregistered = Rosenholz::DocumentObject::scanForUnregisteredFiles(
+            documentId, rev->rev);
+        for (auto& path : unregistered)
+            result.emplace_back(rev->rev, path);
+    }
+    return result;
+}
+
+
+OperationResult Document::save() const {
     auto* db = DatabasePool::instance().get("dok");
-    if (!db) { LOG_ERROR("Document::save — documents DB unavailable"); return false; }
-    bool ok = db->exec(R"(
+    if (!db) { LOG_ERROR("Document::save — documents DB unavailable"); return OperationResult::IO_ERROR; }
+    OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO documents
-        (document_id,workflow_instance_id,workflow_status,workflow_current_state,release_workflow_id,
-         project_id,task_id,f18_operation_id,f18_step_id,author_id,approved_by,doc_type,doc_category,title,version,
-         date_created,date_modified,date_approved,date_expires,status,classification,
+        (document_id,release_workflow_id,
+         project_id,task_id,author_id,approved_by,doc_type,doc_category,title,version,
+         date_created,date_modified,date_approved,date_expires,classification,
          volume_number,page_count,language,format,file_path,file_size,file_hash,file_url,
-         external_ref,storage_system,tags,summary,links,notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         external_ref,tags,summary,links,notes,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
-        BindParam::text(documentId), textOrNull(workflowInstanceId),
-        textOrNull(workflowStatus), textOrNull(workflowCurrentState),
-        textOrNull(releaseWorkflowId),
-        textOrNull(projectId), textOrNull(taskId),
-        textOrNull(f18OperationId), textOrNull(f18StepId),
-        textOrNull(authorId), textOrNull(approvedBy),
-        BindParam::text(docType), textOrNull(docCategory),
-        BindParam::text(title), textOrNull(version),
-        BindParam::text(dateCreated), textOrNull(dateModified),
-        textOrNull(dateApproved), textOrNull(dateExpires),
-        BindParam::text(status), textOrNull(classification),
+        BindParam::text(documentId),
+        BindParam::nullOrText(releaseWorkflowId),
+        BindParam::nullOrText(projectId), BindParam::nullOrText(taskId),
+        BindParam::nullOrText(authorId), BindParam::nullOrText(approvedBy),
+        BindParam::text(docType), BindParam::nullOrText(docCategory),
+        BindParam::text(title), BindParam::nullOrText(version),
+        BindParam::text(dateCreated), BindParam::nullOrText(dateModified),
+        BindParam::nullOrText(dateApproved), BindParam::nullOrText(dateExpires),
+        BindParam::nullOrText(classification),
         BindParam::int64(volumeNumber), BindParam::int64(pageCount),
-        BindParam::text(language), textOrNull(format),
-        textOrNull(filePath), BindParam::int64(fileSize), textOrNull(fileHash), textOrNull(fileUrl),
-        textOrNull(externalRef), textOrNull(storageSystem),
-        textOrNull(tags), textOrNull(summary),
-        textOrNull(links), BindParam::text(notes),
+        BindParam::text(language), BindParam::nullOrText(format),
+        BindParam::nullOrText(filePath), BindParam::int64(fileSize), BindParam::nullOrText(fileHash), BindParam::nullOrText(fileUrl),
+        BindParam::nullOrText(externalRef),
+        BindParam::nullOrText(tags), BindParam::nullOrText(summary),
+        BindParam::nullOrText(links), BindParam::text(notes),
         BindParam::text(createdAt), BindParam::text(nowIso())
-    });
-    if (ok) LOG_INFO("Document saved: " + documentId);
-    else    LOG_ERROR("Document save failed: " + documentId);
+    }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
     return ok;
 }
 
 void Document::fromRow(const Row& r) {
     auto g=[&](const std::string& k){ auto it=r.find(k); return it!=r.end()?it->second:""; };
-    documentId=g("document_id"); workflowInstanceId=g("workflow_instance_id");
-    workflowStatus=g("workflow_status"); workflowCurrentState=g("workflow_current_state");
+    documentId=g("document_id");
     releaseWorkflowId=g("release_workflow_id");
     projectId=g("project_id"); taskId=g("task_id");
     f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
@@ -100,13 +113,13 @@ void Document::fromRow(const Row& r) {
     title=g("title"); version=g("version");
     dateCreated=g("date_created"); dateModified=g("date_modified");
     dateApproved=g("date_approved"); dateExpires=g("date_expires");
-    status=g("status"); classification=g("classification");
+    classification=g("classification");
     auto gi=[&](const std::string& k){ auto v=g(k); return v.empty()?0:std::stoi(v); };
     volumeNumber=gi("volume_number"); pageCount=gi("page_count");
     language=g("language"); format=g("format");
     filePath=g("file_path"); fileUrl=g("file_url");
     { auto sv=g("file_size"); fileSize=sv.empty()?0:std::stoll(sv); } fileHash=g("file_hash");
-    externalRef=g("external_ref"); storageSystem=g("storage_system");
+    externalRef=g("external_ref");
     tags=g("tags"); summary=g("summary"); links=g("links"); notes=g("notes");
     createdAt=g("created_at"); updatedAt=g("updated_at");
 }
@@ -117,22 +130,24 @@ bool Document::load(const std::string& id) {
     if (rows.empty()) { LOG_WARN("Document not found: "+id); return false; }
     fromRow(rows[0]); return true;
 }
-bool Document::remove() {
+OperationResult Document::remove() {
     auto* db=DatabasePool::instance().get("dok");
-    if (!db) return false;
+    if (!db) return OperationResult::IO_ERROR;
     db->exec("DELETE FROM entity_documents WHERE document_id=?;",{BindParam::text(documentId)});
-    return db->exec("DELETE FROM documents WHERE document_id=?;",{BindParam::text(documentId)});
+    return db->exec("DELETE FROM documents WHERE document_id=?;",{BindParam::text(documentId)})
+           ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
-bool Document::update() {
+OperationResult Document::update() {
     if (isFrozen()) {
         LOG_WARN("[DOK] update() verweigert: Revision ist eingefroren — " + documentId);
-        return false;
+        return OperationResult::DOC_REV_NOT_IN_WORK;
     } updatedAt=nowIso(); dateModified=updatedAt; return save(); }
 
 std::shared_ptr<Document> Document::loadById(const std::string& id) {
     auto d=std::make_shared<Document>(); if(!d->load(id)) return nullptr; return d;
 }
-std::vector<std::shared_ptr<Document>> Document::loadForProject(const std::string& pid) {
+std::vector<std::shared_ptr<Document>> Document::loadForProject(
+    const std::string& pid, DocLoadRule rule, const std::string& targetDate) {
     auto* db=DatabasePool::instance().get("dok");
     std::vector<std::shared_ptr<Document>> result;
     if (!db) return result;
@@ -147,13 +162,37 @@ std::vector<std::shared_ptr<Document>> Document::loadForEntity(
     auto* db=DatabasePool::instance().get("dok");
     std::vector<std::shared_ptr<Document>> result;
     if (!db) return result;
-    // Join entity_documents -> documents
-    auto rows=db->query(R"(
+
+    // Primary: documents with task_id / project_id set directly
+    if (et == "f22") {
+        auto rows = db->query(
+            "SELECT * FROM documents WHERE task_id=? ORDER BY date_created DESC;",
+            {BindParam::text(eid)});
+        for (auto& r : rows) {
+            auto d = std::make_shared<Document>(); d->fromRow(r); result.push_back(d);
+        }
+    } else if (et == "f16") {
+        auto rows = db->query(
+            "SELECT * FROM documents WHERE project_id=? ORDER BY date_created DESC;",
+            {BindParam::text(eid)});
+        for (auto& r : rows) {
+            auto d = std::make_shared<Document>(); d->fromRow(r); result.push_back(d);
+        }
+    }
+
+    // Also pick up polymorphically-attached documents via entity_documents
+    std::set<std::string> seen;
+    for (auto& d : result) seen.insert(d->documentId);
+
+    auto rows2 = db->query(R"(
         SELECT d.* FROM documents d
         JOIN entity_documents e ON d.document_id=e.document_id
         WHERE e.entity_type=? AND e.entity_id=? ORDER BY d.date_created DESC;
     )", {BindParam::text(et), BindParam::text(eid)});
-    for (auto& r:rows) { auto d=std::make_shared<Document>(); d->fromRow(r); result.push_back(d); }
+    for (auto& r : rows2) {
+        auto d = std::make_shared<Document>(); d->fromRow(r);
+        if (!seen.count(d->documentId)) { result.push_back(d); seen.insert(d->documentId); }
+    }
     return result;
 }
 
@@ -193,8 +232,6 @@ std::shared_ptr<Document> Document::archiveFromUrl(
     d->authorId     = aid;
     d->dateCreated  = nowIso();
     d->format       = FileOps::extension(localPath);
-    d->storageSystem= "local";
-    d->status       = "approved";
 
     int64_t sz = FileOps::fileSize(localPath);
     d->summary = "Archived from " + url + " (" + std::to_string(sz) + " bytes)";
@@ -243,19 +280,20 @@ std::string Document::archiveWebsite(const std::string& url, const std::string& 
 // Returns:
 //   true on success
 // ------------------------------
-bool Document::attachToEntity(const std::string& et, const std::string& eid, const std::string& rel) {
+OperationResult Document::attachToEntity(const std::string& et, const std::string& eid, const std::string& rel) {
     auto* db = DatabasePool::instance().get("dok");
-    if (!db) return false;
+    if (!db) return OperationResult::DB_ERROR;
     return db->exec(
         "INSERT OR IGNORE INTO entity_documents(entity_type,entity_id,document_id,relationship) VALUES(?,?,?,?);",
-        {BindParam::text(et), BindParam::text(eid), BindParam::text(documentId), BindParam::text(rel)});
+        {BindParam::text(et), BindParam::text(eid), BindParam::text(documentId), BindParam::text(rel)})
+        ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
-bool Document::reassignAuthor(const std::string& id) { authorId=id; return update(); }
-bool Document::reassignToProject(const std::string& id) { projectId=id; return update(); }
-bool Document::reassignToTask(const std::string& id) { taskId=id; return update(); }
+OperationResult Document::reassignAuthor(const std::string& id) { authorId=id; return update(); }
+OperationResult Document::reassignToProject(const std::string& id) { projectId=id; return update(); }
+OperationResult Document::reassignToTask(const std::string& id) { taskId=id; return update(); }
 nlohmann::json Document::toJson() const {
     return {{"documentId",documentId},{"title",title},{"docType",docType},
-            {"format",format},{"status",status},{"fileUrl",fileUrl}};
+            {"format",format},{"status",currentRevisionState()},{"fileUrl",fileUrl}};
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -288,26 +326,30 @@ static std::string docMFSDir(const Document& d) {
 }
 
 // ── MFS canonical filename for a document version ────────────
-static std::string mfsDocFilename(const Document& d, const std::string& versionSuffix = "") {
-    std::string docSane  = sanitiseRegNr(d.documentId);
+static std::string mfsDocFilename(const Document& d, int revNumber = 0) {
+    std::string docSane   = sanitiseRegNr(d.documentId);
     std::string titleSafe = FileOps::sanitizeFilename(d.title);
     if (titleSafe.size() > 40) titleSafe = titleSafe.substr(0, 40);
     std::string ext = d.format.empty() ? "bin" : d.format;
-    // Format: {DOK-ID}_{Titel}_v{Version}.{ext}
-    std::string ver = versionSuffix.empty() ? d.version : versionSuffix;
-    return docSane + "_" + titleSafe + "_v" + ver + "." + ext;
+    // Format: {DOK-ID}_{Titel}_r{NNN}.{ext}  (revision-based, no version field)
+    int rev = (revNumber > 0) ? revNumber
+                               : (int)DocumentRevision::latestRevNumber(d.documentId);
+    if (rev <= 0) rev = 1;
+    char revbuf[8];
+    std::snprintf(revbuf, sizeof(revbuf), "r%03d", rev);
+    return docSane + "_" + titleSafe + "_" + revbuf + "." + ext;
 }
 
-bool Document::importLocalFile(const std::string& srcPath) {
+OperationResult Document::importLocalFile(const std::string& srcPath) {
     if (!FileOps::fileExists(srcPath)) {
         LOG_ERROR("importLocalFile: not found: " + srcPath);
-        return false;
+        return OperationResult::IO_ERROR;
     }
 
     std::string dir = docMFSDir(*this);
     if (dir.empty()) {
         LOG_ERROR("importLocalFile: document has no project/task reference");
-        return false;
+        return OperationResult::DB_ERROR;
     }
     FileOps::makeDirs(dir);
 
@@ -322,7 +364,7 @@ bool Document::importLocalFile(const std::string& srcPath) {
 
     if (!FileOps::copyFile(srcPath, destPath, true)) {
         LOG_ERROR("importLocalFile: copy failed " + srcPath + " → " + destPath);
-        return false;
+        return OperationResult::DB_ERROR;
     }
 
     filePath = destPath;
@@ -332,10 +374,10 @@ bool Document::importLocalFile(const std::string& srcPath) {
     return update();
 }
 
-bool Document::refreshFromUrl() {
+OperationResult Document::refreshFromUrl() {
     if (fileUrl.empty()) {
         LOG_WARN("refreshFromUrl: no URL set");
-        return false;
+        return OperationResult::IO_ERROR;
     }
 
     // No snapshot before URL refresh — revise() is the sole entry point for revisions
@@ -348,7 +390,7 @@ bool Document::refreshFromUrl() {
     std::string downloaded = FileOps::downloadUrl(fileUrl, tmpDir);
     if (downloaded.empty()) {
         LOG_ERROR("refreshFromUrl: download failed: " + fileUrl);
-        return false;
+        return OperationResult::DB_ERROR;
     }
 
     // Bump version
@@ -362,16 +404,16 @@ bool Document::refreshFromUrl() {
     } catch(...) { version += ".r"; }
 
     // Import into MFS
-    bool ok = importLocalFile(downloaded);
+    auto ok = importLocalFile(downloaded);
     FileOps::deleteFile(downloaded);
-    if (ok) dateModified = nowIso();
+    if (opOk(ok)) dateModified = nowIso();
     return ok;
 }
 
 
 
 // ── revertChanges ─────────────────────────────────────────────
-bool Document::revertChanges() {
+OperationResult Document::revertChanges() {
     // Restore the document to the state of the PREVIOUS revision.
     //
     // Rules:
@@ -385,17 +427,17 @@ bool Document::revertChanges() {
     // Must have a checkout in progress
     if (preCheckoutRevId == 0 && checkedOutPath.empty()) {
         LOG_WARN("[Document] revertChanges: kein aktiver Checkout fuer " + documentId);
-        return false;
+        return OperationResult::IO_ERROR;
     }
 
     auto curRev = Rosenholz::DocumentRevision::currentRevision(documentId);
     if (!curRev) {
         LOG_ERROR("[Document] revertChanges: keine aktive Revision fuer " + documentId);
-        return false;
+        return OperationResult::DB_ERROR;
     }
-    if (curRev->revState != DocRevState::IN_WORK) {
+    if (curRev->revState != RevState::IN_WORK) {
         LOG_ERROR("[Document] revertChanges: aktive Revision ist nicht in_work");
-        return false;
+        return OperationResult::DB_ERROR;
     }
 
     // Find the previous revision via parentRev
@@ -409,14 +451,14 @@ bool Document::revertChanges() {
         preCheckoutRevId = 0;
         LOG_INFO("[Document] revertChanges: erste Revision — kein Vorzustand vorhanden, "
                  "ausgecheckte Datei verworfen");
-        return false; // nothing to restore
+        return OperationResult::DB_ERROR; // nothing to restore
     }
 
     auto prevRev = Rosenholz::DocumentRevision::loadByRev(documentId, curRev->parentRev);
     if (!prevRev) {
         LOG_ERROR("[Document] revertChanges: Vorgaenger-Revision " +
                   std::to_string(curRev->parentRev) + " nicht gefunden");
-        return false;
+        return OperationResult::DB_ERROR;
     }
 
     auto& store = Rosenholz::Archive::ArchiveStore::instance();
@@ -448,7 +490,7 @@ bool Document::revertChanges() {
                     preCheckoutRevId = 0;
                     LOG_INFO("[Document] revertChanges: Inhalt auf Rev " +
                              std::to_string(prevRev->rev) + " zurueckgesetzt fuer " + documentId);
-                    return true;
+                    return OperationResult::OPERATION_ACK;
                 }
             }
         }
@@ -462,7 +504,7 @@ bool Document::revertChanges() {
     preCheckoutRevId = 0;
     LOG_WARN("[Document] revertChanges: Vorgaenger-Revision hat keinen LMDB-Inhalt — "
              "Arbeitskopie verworfen, Revision-Inhalt unveraendert");
-    return false;
+    return OperationResult::DB_ERROR;
 }
 
 std::vector<Document::VersionRecord> Document::loadVersions() const {
@@ -484,7 +526,7 @@ std::vector<Document::VersionRecord> Document::loadVersions() const {
     return result;
 }
 
-bool Document::openFile(const std::string& mode) const {
+bool Document::openFile(const std::string& mode, const std::string& pathOverride) const {
     if (filePath.empty() || !FileOps::fileExists(filePath)) {
         LOG_WARN("openFile: no file at " + filePath);
         return false;
@@ -522,7 +564,8 @@ bool Document::openFile(const std::string& mode) const {
 // Parameters:
 //   n : maximum number of results (default 20)
 // ------------------------------
-std::vector<std::shared_ptr<Document>> Document::loadRecent(int n) {
+std::vector<std::shared_ptr<Document>> Document::loadRecent(int n,
+    DocLoadRule /*rule*/, const std::string& /*targetDate*/) {
     std::vector<std::shared_ptr<Document>> result;
     auto* db = DatabasePool::instance().get("dok");
     if (!db) return result;
@@ -536,44 +579,43 @@ std::vector<std::shared_ptr<Document>> Document::loadRecent(int n) {
 }
 
 // ── State predicates ──────────────────────────────────────────
+// OperationResult versions — authoritative
+
+
+
+
+
+
+// ── State predicates (direct implementation) ──────────────────
+
+RevState Document::currentRevisionState() const {
+    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
+    return cur ? cur->revState : RevState::IN_WORK;
+}
+
 bool Document::isInWork() const {
-    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
-    return cur && cur->revState == DocRevState::IN_WORK;
+    return currentRevisionState() == RevState::IN_WORK;
 }
-
 bool Document::isFrozen() const {
-    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
-    return cur && cur->revState != DocRevState::IN_WORK;
+    return currentRevisionState() != RevState::IN_WORK;
 }
-
 bool Document::canRevise() const {
+    // No revision yet: can create first. Otherwise: state must not be in_work.
     auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
-    // No revisions yet: can create first revision
-    if (!cur) return true;
-    // Active revision must be frozen (not in_work) to branch a new one
-    return cur->revState != DocRevState::IN_WORK;
+    return !cur || currentRevisionState() != RevState::IN_WORK;
 }
-
 bool Document::canCheckout() const {
-    // Must be in_work and no checkout already open
     return isInWork() && checkedOutPath.empty();
 }
-
 bool Document::canCheckin() const {
-    // Must be in_work and a checkout must be open
     return isInWork() && !checkedOutPath.empty();
 }
-
 bool Document::canRevert() const {
     if (!isInWork() || checkedOutPath.empty()) return false;
-    // Must have a parent revision to restore from
     auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
     return cur && cur->parentRev > 0;
 }
-
-bool Document::canEdit() const {
-    return isInWork();
-}
+bool Document::canEdit() const { return isInWork(); }
 
 
 // ── Lifecycle: ensure Main WFI for this document ─────────────
@@ -582,10 +624,9 @@ void Document::ensureReleaseWorkflow() {
     auto wf = Rosenholz::F77_Engine::startDefault("dok", documentId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
-    status         = "in_work";
     auto* db = DatabasePool::instance().get("dok");
     if (db) db->exec(
-        "UPDATE documents SET release_workflow_id=?, status='in_work', updated_at=? "
+        "UPDATE documents SET release_workflow_id=?, updated_at=? "
             "WHERE document_id=?;",
             {BindParam::text(releaseWorkflowId),
              BindParam::text(nowIso()),
@@ -615,10 +656,9 @@ std::shared_ptr<DocumentRevision> Document::revise(
             // Sync document status
             auto* db = DatabasePool::instance().get("dok");
             if (db) db->exec(
-                "UPDATE documents SET status='in_work', updated_at=? WHERE document_id=?;",
+                "UPDATE documents SET updated_at=? WHERE document_id=?;",
                 {BindParam::text(nowIso()), BindParam::text(documentId)});
-            status = "in_work";
-            LOG_INFO("[Document] Revision 1 angelegt: " + documentId);
+                LOG_INFO("[Document] Revision 1 angelegt: " + documentId);
         }
         return rev;
     }
@@ -632,7 +672,7 @@ std::shared_ptr<DocumentRevision> Document::revise(
 
     // Refuse if active revision is still in_work:
     // only one in_work revision is allowed at a time.
-    if (cur->revState == DocRevState::IN_WORK) {
+    if (cur->revState == RevState::IN_WORK) {
         LOG_WARN("[Document] revise: aktive Revision ist noch in_work — "
                  "erst Workflow starten und Revision freigeben, bevor neue angelegt werden kann.");
         return nullptr;
@@ -647,9 +687,8 @@ std::shared_ptr<DocumentRevision> Document::revise(
     if (newRev) {
         auto* db = DatabasePool::instance().get("dok");
         if (db) db->exec(
-            "UPDATE documents SET status='in_work', updated_at=? WHERE document_id=?;",
+            "UPDATE documents SET updated_at=? WHERE document_id=?;",
             {BindParam::text(nowIso()), BindParam::text(documentId)});
-        status = "in_work";
         LOG_INFO("[Document] Revision " + std::to_string(newRev->rev) +
                  " angelegt: " + documentId);
     }
@@ -738,9 +777,9 @@ bool Document::checkin(const std::string& srcPath) {
         std::remove(tmpPath.c_str());
         return false;
     }
-    if (curRev->revState != DocRevState::IN_WORK) {
+    if (curRev->revState != RevState::IN_WORK) {
         LOG_ERROR("[Document] checkin: aktive Revision ist nicht in_work (ist: "
-                  + curRev->revState + ") — nur in_work-Revisionen koennen eingecheckt werden");
+                  + curRev->revStateStr() + ") — nur in_work-Revisionen koennen eingecheckt werden");
         std::remove(tmpPath.c_str());
         return false;
     }

@@ -7,7 +7,9 @@
 //   cost tracking, and workflow attachment
 // ============================================================
 #pragma once
+
 #include "../Utils.h"
+#include "../../core/OperationResult.h"
 // ============================================================
 // TaskF22.h  —  Task entity (F22 Vorgangskartei analogy)
 //
@@ -97,15 +99,18 @@ public:
 
     // ── State predicates ──────────────────────────────────────
     bool isReleased()     const { return status == "released"; }
-    bool canEdit()        const { return !isReleased(); }
-    bool canAddChildren() const { return !isReleased(); }
+    bool canEdit()        const { return !isReleased() && !isWorkflowComplete(); }
+    bool canAddChildren() const { return !isReleased() && !isWorkflowComplete(); }
+    /// True when the controlling F77 workflow has status="completed".
+    /// A completed workflow means the entity is permanently locked.
+    bool isWorkflowComplete() const;
 
     // ── CRUD ──────────────────────────────────────────────
-    bool save() const;
+    OperationResult save() const;
     void ensureReleaseWorkflow();  ///< Creates Main WFI on first save
     bool load(const std::string& id);
-    bool remove();
-    bool update();
+    OperationResult remove();
+    OperationResult update();
 
     // ── Factory ───────────────────────────────────────────
     static std::shared_ptr<TaskF22> create(
@@ -120,16 +125,12 @@ public:
     static std::vector<std::shared_ptr<TaskF22>> loadChildren(const std::string& parentTaskId);
 
     // ── QTCS assignment ───────────────────────────────────
-    bool addQuality(const std::string& id);
-    bool addCost   (const std::string& id);
-    bool addTime   (const std::string& id);
-    bool addScope  (const std::string& id);
     void loadQTCSLinks();
 
     // ── Reassign ─────────────────────────────────────────
-    bool reassignTo(const std::string& newAssigneeId);
-    bool reassignToProject(const std::string& newProjectId);
-    bool reassignParent(const std::string& newParentTaskId);
+    OperationResult reassignTo(const std::string& newAssigneeId);
+    OperationResult reassignToProject(const std::string& newProjectId);
+    OperationResult reassignParent(const std::string& newParentTaskId);
 
     // ── Conversion ────────────────────────────────────────
     /// Promote this task to a full Project (F16).

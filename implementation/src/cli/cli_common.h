@@ -50,6 +50,7 @@ void printOk(const std::string& msg);
 
 // Print error to stderr and exit(1).
 void die(const std::string& msg);
+void printErr(const std::string& msg);  ///< Non-fatal error — print and return.
 
 // ── F16 project commands (cli_f16.cpp) ────────────────────────
 void cmdF16(const std::vector<std::string>& args);

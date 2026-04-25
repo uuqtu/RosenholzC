@@ -26,6 +26,7 @@
 // ============================================================
 
 #include "MFSWriter.h"
+#include "../repository/DocumentRevision.h"
 #include "../core/FileOps.h"
 #include "../core/Logger.h"
 #include "../core/Config.h"
@@ -278,7 +279,7 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
             << "TYP              : " << d.docType             << "\n"
             << "FORMAT           : " << d.format              << "\n"
             << "VERSION          : " << d.version             << "\n"
-            << "STATUS           : " << d.status              << "\n"
+            << "STATUS           : " << revStateToString(d.currentRevisionState()) << "\n"
             << "ERSTELLT         : " << d.dateCreated         << "\n"
             << "GENEHMIGT        : " << d.dateApproved        << "\n"
             << "=======================================================\n\n"

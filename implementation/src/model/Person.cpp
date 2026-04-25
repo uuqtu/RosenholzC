@@ -34,10 +34,10 @@ std::shared_ptr<Person> Person::create(
 
 // Helper: return null param when string is empty (avoids FK failures)
 
-bool Person::save() const {
+OperationResult Person::save() const {
     auto* db = DatabasePool::instance().get("core");
-    if (!db) { LOG_ERROR("Person::save — core DB unavailable"); return false; }
-    bool ok = db->exec(R"(
+    if (!db) { LOG_ERROR("Person::save — core DB unavailable"); return OperationResult::DB_ERROR; }
+    OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO persons
         (person_id,reg_number,last_name,first_name,preferred_name,email,phone,
          org_unit,department,location,country,role_title,person_type,employment_type,
@@ -80,9 +80,7 @@ bool Person::save() const {
         BindParam::text(notes.empty() ? "{}" : notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
-    });
-    if (ok) LOG_INFO("Person saved: " + personId + " " + fullName());
-    else    LOG_ERROR("Person save failed: " + personId + " err=" + db->lastError());
+    }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
     return ok;
 }
 
@@ -127,15 +125,16 @@ bool Person::load(const std::string& id) {
     return true;
 }
 
-bool Person::remove() {
+OperationResult Person::remove() {
     auto* db = DatabasePool::instance().get("core");
-    if (!db) return false;
+    if (!db) return OperationResult::DB_ERROR;
     LOG_WARN("Removing Person: " + personId + " " + fullName());
     return db->exec("DELETE FROM persons WHERE person_id=?;",
-                    {BindParam::text(personId)});
+                    {BindParam::text(personId)})
+           ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-bool Person::update() {
+OperationResult Person::update() {
     updatedAt = nowIso();
     return save();
 }
@@ -189,12 +188,12 @@ std::vector<std::shared_ptr<Person>> Person::search(const std::string& frag) {
     return result;
 }
 
-bool Person::reassignManager(const std::string& id) {
+OperationResult Person::reassignManager(const std::string& id) {
     managerId = id;
     return update();
 }
 
-bool Person::setStatus(const std::string& s) {
+OperationResult Person::setStatus(const std::string& s) {
     LOG_INFO("Person " + personId + " status -> " + s);
     status = s;
     return update();

@@ -489,7 +489,6 @@ std::vector<std::shared_ptr<WorkflowInstance>> WorkflowInstance::loadBreached() 
 // ═════════════════════════════════════════════════════════════
 // WorkflowEngine
 // ═════════════════════════════════════════════════════════════
-std::string WorkflowEngine::nowIso() { return Rosenholz::nowIso(); }
 
 std::shared_ptr<WorkflowAction> WorkflowEngine::createInitializeAction(
     const std::string& instanceId)

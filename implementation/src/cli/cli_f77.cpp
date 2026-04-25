@@ -55,7 +55,7 @@ void cmdF77(const std::vector<std::string>& args) {
 
     if (isId(args[0])) { CLI::instanceMenu(args[0]); return; }
 
-    die("Ungültiges Argument: " + args[0]);
+    printErr("Ungültiges Argument: " + args[0]); return;
 }
 
 
@@ -246,24 +246,7 @@ void instanceMenu(const std::string& workflowId) {
             if (confirm == "ja") {
                 wf->status = "cancelled";
                 wf->update();
-                // Clear releaseWorkflowId on the entity so a new workflow can be started
-                auto* f16db = DatabasePool::instance().get("f16");
-                auto* f22db = DatabasePool::instance().get("f22");
-                auto* f18db = DatabasePool::instance().get("f18");
-                auto* dokdb = DatabasePool::instance().get("dok");
-                std::string now = nowIso();
-                if (wf->entityType == "f16" && f16db)
-                    f16db->exec("UPDATE projects SET release_workflow_id=NULL, updated_at=? WHERE project_id=?;",
-                        {BindParam::text(now), BindParam::text(wf->entityId)});
-                else if (wf->entityType == "f22" && f22db)
-                    f22db->exec("UPDATE tasks SET release_workflow_id=NULL, updated_at=? WHERE task_id=?;",
-                        {BindParam::text(now), BindParam::text(wf->entityId)});
-                else if (wf->entityType == "f18" && f18db)
-                    f18db->exec("UPDATE f18_operations SET release_workflow_id=NULL, updated_at=? WHERE vorgang_id=?;",
-                        {BindParam::text(now), BindParam::text(wf->entityId)});
-                else if (wf->entityType == "dok" && dokdb)
-                    dokdb->exec("UPDATE documents SET release_workflow_id=NULL, updated_at=? WHERE document_id=?;",
-                        {BindParam::text(now), BindParam::text(wf->entityId)});
+                F77_Engine::detachWorkflow(wf->entityType, wf->entityId);
                 std::cout << "  >> Workflow abgebrochen. Entitaet kann neuen Workflow starten.\n";
                 break;
             }
@@ -317,24 +300,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
 
     if (!wf) { std::cout << "  >> FEHLER beim Starten.\n"; return ""; }
 
-    // Store workflow ID back into the entity record
-    std::string now = nowIso();
-    auto* f16db = DatabasePool::instance().get("f16");
-    auto* f22db = DatabasePool::instance().get("f22");
-    auto* f18db = DatabasePool::instance().get("f18");
-    auto* dokdb = DatabasePool::instance().get("dok");
-    if      (effType == "f16" && f16db)
-        f16db->exec("UPDATE projects SET release_workflow_id=?, updated_at=? WHERE project_id=?;",
-            {BindParam::text(wf->workflowId), BindParam::text(now), BindParam::text(effId)});
-    else if (effType == "f22" && f22db)
-        f22db->exec("UPDATE tasks SET release_workflow_id=?, updated_at=? WHERE task_id=?;",
-            {BindParam::text(wf->workflowId), BindParam::text(now), BindParam::text(effId)});
-    else if (effType == "f18" && f18db)
-        f18db->exec("UPDATE f18_operations SET release_workflow_id=?, updated_at=? WHERE vorgang_id=?;",
-            {BindParam::text(wf->workflowId), BindParam::text(now), BindParam::text(effId)});
-    else if (effType == "dok" && dokdb)
-        dokdb->exec("UPDATE documents SET release_workflow_id=?, updated_at=? WHERE document_id=?;",
-            {BindParam::text(wf->workflowId), BindParam::text(now), BindParam::text(effId)});
+    F77_Engine::attachWorkflow(effType, effId, wf->workflowId);
 
     std::cout << "  >> F77-Workflow gestartet: " << wf->workflowId << "\n";
     return wf->workflowId;

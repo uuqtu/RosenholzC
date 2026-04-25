@@ -6,6 +6,7 @@
 // dayRate supports EV cost calculations
 // ============================================================
 #pragma once
+#include "../core/OperationResult.h"
 #include "Utils.h"
 // ============================================================
 // Person.h  —  Person entity (Personenkartei)
@@ -76,10 +77,10 @@ public:
     }
 
     // ── CRUD ──────────────────────────────────────────────
-    bool save() const;
+    OperationResult save() const;
     bool load(const std::string& id);
-    bool remove();
-    bool update();
+    OperationResult remove();
+    OperationResult update();
 
     // ── Factory ───────────────────────────────────────────
     static std::shared_ptr<Person> create(
@@ -94,8 +95,8 @@ public:
     static std::vector<std::shared_ptr<Person>> search(const std::string& nameFragment);
 
     // ── Reassign ─────────────────────────────────────────
-    bool reassignManager(const std::string& newManagerId);
-    bool setStatus(const std::string& newStatus);
+    OperationResult reassignManager(const std::string& newManagerId);
+    OperationResult setStatus(const std::string& newStatus);
 
     // ── Serialisation ─────────────────────────────────────
     nlohmann::json toJson() const;

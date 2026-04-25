@@ -2,6 +2,7 @@
 // Team.cpp  —  Team and TeamMember implementation
 // ============================================================
 #include "Team.h"
+#include "../core/OperationResult.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "Utils.h"
@@ -36,10 +37,10 @@ std::shared_ptr<TeamMember> TeamMember::create(
     return m;
 }
 
-bool TeamMember::save() const {
+OperationResult TeamMember::save() const {
     auto* db = DatabasePool::instance().get("core");
-    if (!db) { LOG_ERROR("TeamMember::save — core DB unavailable"); return false; }
-    bool ok = db->exec(R"(
+    if (!db) { LOG_ERROR("TeamMember::save — core DB unavailable"); return OperationResult::DB_ERROR; }
+    OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO team_members
         (membership_id,team_id,person_id,
          role,role_category,seniority_in_team,member_type,
@@ -71,8 +72,8 @@ bool TeamMember::save() const {
         BindParam::text(status.empty() ? "active" : status),
         textOrNull(onboardedDate), textOrNull(offboardedDate), textOrNull(offboardingReason),
         BindParam::text(notes.empty() ? "{}" : notes)
-    });
-    if (!ok) LOG_ERROR("TeamMember save failed: " + membershipId);
+    }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
+    if (!opOk(ok)) LOG_ERROR("TeamMember save failed: " + membershipId);
     return ok;
 }
 
@@ -125,10 +126,11 @@ bool TeamMember::load(const std::string& id) {
     return true;
 }
 
-bool TeamMember::remove() {
+OperationResult TeamMember::remove() {
     auto* db = DatabasePool::instance().get("core");
-    return db && db->exec("DELETE FROM team_members WHERE membership_id=?;",
-                          {BindParam::text(membershipId)});
+    return (db && db->exec("DELETE FROM team_members WHERE membership_id=?;",
+                           {BindParam::text(membershipId)}))
+           ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
 std::vector<std::shared_ptr<TeamMember>> TeamMember::loadForTeam(const std::string& tid) {
@@ -160,14 +162,14 @@ std::vector<std::shared_ptr<TeamMember>> TeamMember::loadForPerson(const std::st
     return result;
 }
 
-bool TeamMember::reassignRole(const std::string& r, const std::string& cat) {
+OperationResult TeamMember::reassignRole(const std::string& r, const std::string& cat) {
     role = r;
     if (!cat.empty()) roleCategory = cat;
     LOG_INFO("TeamMember " + membershipId + " role -> " + r);
     return save();
 }
 
-bool TeamMember::moveToTeam(const std::string& newTeamId) {
+OperationResult TeamMember::moveToTeam(const std::string& newTeamId) {
     LOG_INFO("TeamMember " + personId + " -> team " + newTeamId);
     teamId = newTeamId;
     return save();
@@ -203,10 +205,10 @@ std::shared_ptr<Team> Team::create(
     return t;
 }
 
-bool Team::save() const {
+OperationResult Team::save() const {
     auto* db = DatabasePool::instance().get("core");
-    if (!db) { LOG_ERROR("Team::save — core DB unavailable"); return false; }
-    bool ok = db->exec(R"(
+    if (!db) { LOG_ERROR("Team::save — core DB unavailable"); return OperationResult::DB_ERROR; }
+    OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO teams
         (team_id,name,abbreviation,rosenholz_equiv,parent_team_id,lead_id,
          location,type,headcount_planned,headcount_actual,
@@ -232,9 +234,7 @@ bool Team::save() const {
         textOrNull(externalRef),
         textOrNull(links),
         BindParam::text(notes.empty() ? "{}" : notes)
-    });
-    if (ok) LOG_INFO("Team saved: " + teamId + " " + name);
-    else    LOG_ERROR("Team save failed: " + teamId + " err=" + db->lastError());
+    }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
     return ok;
 }
 
@@ -280,15 +280,16 @@ bool Team::load(const std::string& id) {
     return true;
 }
 
-bool Team::remove() {
+OperationResult Team::remove() {
     auto* db = DatabasePool::instance().get("core");
-    if (!db) return false;
+    if (!db) return OperationResult::DB_ERROR;
     LOG_WARN("Removing Team: " + teamId + " " + name);
     db->exec("DELETE FROM team_members WHERE team_id=?;", {BindParam::text(teamId)});
-    return db->exec("DELETE FROM teams WHERE team_id=?;", {BindParam::text(teamId)});
+    return db->exec("DELETE FROM teams WHERE team_id=?;", {BindParam::text(teamId)})
+           ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-bool Team::update() { updatedAt = nowIso(); return save(); }
+OperationResult Team::update() { updatedAt = nowIso(); return save(); }
 
 std::shared_ptr<Team> Team::loadById(const std::string& id) {
     auto t = std::make_shared<Team>();
@@ -347,13 +348,13 @@ void Team::loadMembers() {
     members = TeamMember::loadForTeam(teamId);
 }
 
-bool Team::reassignLead(const std::string& id) {
+OperationResult Team::reassignLead(const std::string& id) {
     LOG_INFO("Team " + teamId + " lead -> " + id);
     leadId = id;
     return update();
 }
 
-bool Team::reassignParent(const std::string& id) {
+OperationResult Team::reassignParent(const std::string& id) {
     parentTeamId = id;
     return update();
 }

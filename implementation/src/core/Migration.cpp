@@ -2,6 +2,7 @@
 // Migration.cpp  —  Schema migration engine implementation
 // ============================================================
 #include "Migration.h"
+#include "../model/Utils.h"
 #include "Logger.h"
 #include <sstream>
 #include <chrono>
@@ -10,21 +11,6 @@
 
 namespace Rosenholz {
 
-namespace {
-std::string nowIsoMig() {
-    auto now = std::chrono::system_clock::now();
-    std::time_t t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm{};
-#ifdef _WIN32
-    localtime_s(&tm, &t);
-#else
-    localtime_r(&t, &tm);
-#endif
-    std::ostringstream o;
-    o << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");
-    return o.str();
-}
-} // anonymous
 
 // ------------------------------
 // targetVersionMap
@@ -114,7 +100,7 @@ bool MigrationEngine::ensureSchemaVersionTable(Database* db, const std::string& 
             "VALUES(?, ?, ?, 'v2 baseline — initial install');",
             {BindParam::text(dbName),
              BindParam::int64(tv),
-             BindParam::text(nowIsoMig())});
+             BindParam::text(Rosenholz::nowIso())});
     }
     return true;
 }
@@ -153,7 +139,7 @@ bool MigrationEngine::applyMigration(Database* db, const Migration& m) {
         "VALUES(?, ?, ?, ?);",
         {BindParam::text(m.dbName),
          BindParam::int64(m.targetVersion),
-         BindParam::text(nowIsoMig()),
+         BindParam::text(Rosenholz::nowIso()),
          BindParam::text(m.description)});
 
     ok &= db->exec("COMMIT;") ? ok : false;

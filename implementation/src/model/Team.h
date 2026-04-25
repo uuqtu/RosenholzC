@@ -6,6 +6,7 @@
 // TeamMember tracks allocation % per person
 // ============================================================
 #pragma once
+#include "../core/OperationResult.h"
 #include "Utils.h"
 // ============================================================
 // Team.h  —  Team (Diensteinheit) and TeamMember
@@ -67,9 +68,9 @@ struct TeamMember {
     std::string offboardingReason;
     std::string notes;              // JSON
 
-    bool save() const;
+    OperationResult save() const;
     bool load(const std::string& id);
-    bool remove();
+    OperationResult remove();
 
     static std::shared_ptr<TeamMember> create(
         const std::string& teamId,
@@ -81,9 +82,9 @@ struct TeamMember {
     static std::vector<std::shared_ptr<TeamMember>> loadForPerson(const std::string& personId);
 
     /// Reassign role within the same team
-    bool reassignRole(const std::string& newRole, const std::string& newCategory = "");
+    OperationResult reassignRole(const std::string& newRole, const std::string& newCategory = "");
     /// Move member to a different team
-    bool moveToTeam(const std::string& newTeamId);
+    OperationResult moveToTeam(const std::string& newTeamId);
 
     nlohmann::json toJson() const;
 
@@ -119,10 +120,10 @@ public:
     std::vector<std::shared_ptr<TeamMember>> members;  // lazy loaded
 
     // ── CRUD ────────────────────────────────────────────
-    bool save() const;
+    OperationResult save() const;
     bool load(const std::string& id);
-    bool remove();
-    bool update();
+    OperationResult remove();
+    OperationResult update();
 
     // ── Factory ─────────────────────────────────────────
     static std::shared_ptr<Team> create(
@@ -143,8 +144,8 @@ public:
     void loadMembers();
 
     // ── Reassign ────────────────────────────────────────
-    bool reassignLead(const std::string& newLeadId);
-    bool reassignParent(const std::string& newParentId);
+    OperationResult reassignLead(const std::string& newLeadId);
+    OperationResult reassignParent(const std::string& newParentId);
 
     nlohmann::json toJson() const;
 

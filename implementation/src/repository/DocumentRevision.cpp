@@ -21,7 +21,8 @@ void DocumentRevision::fromRow(const Row& r) {
     documentId  = g("document_id");
     rev         = (uint32_t)gi("rev");
     parentRev   = (uint32_t)gi("parent_rev");
-    revState    = rowGetOr(r,"rev_state", DocRevState::IN_WORK);
+    { auto s = r.count("rev_state") ? r.at("rev_state") : "in_work";
+      revState = revStateFromString(s); }
     superseded  = gb("superseded");
     contentHash = g("content_hash");
     contentSize = (int64_t)gi("content_size");
@@ -34,9 +35,7 @@ void DocumentRevision::fromRow(const Row& r) {
 // ── save ─────────────────────────────────────────────────────
 bool DocumentRevision::save() const {
     auto* d = db(); if (!d) return false;
-    auto t = [](const std::string& s) { return BindParam::text(s); };
     auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
-    auto i = [](int64_t v) { return BindParam::int64(v); };
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO document_revisions
@@ -44,11 +43,11 @@ bool DocumentRevision::save() const {
          content_hash, content_size, created_by, change_note, created_at, updated_at)
         VALUES(?,?,?,?,?, ?,?,?,?,?,?)
     )SQL", {
-        t(documentId), i(rev), i(parentRev),
-        t(revState), i(superseded ? 1 : 0),
-        n(contentHash), i(contentSize),
-        n(createdBy), n(changeNote),
-        t(createdAt), t(updatedAt)
+        BindParam::text(documentId), BindParam::int64(rev), BindParam::int64(parentRev),
+        BindParam::text(revStateToString(revState)), BindParam::int64(superseded ? 1 : 0),
+        BindParam::nullOrText(contentHash), BindParam::int64(contentSize),
+        BindParam::nullOrText(createdBy), BindParam::nullOrText(changeNote),
+        BindParam::text(createdAt), BindParam::text(updatedAt)
     });
 }
 
@@ -78,7 +77,7 @@ std::shared_ptr<DocumentRevision> DocumentRevision::createRevision(
     r->documentId  = documentId;
     r->rev         = nextRev;
     r->parentRev   = baseRev;
-    r->revState    = DocRevState::IN_WORK;
+    r->revState    = RevState::IN_WORK;
     r->superseded  = true;   // will be corrected by recomputeSuperseded
     r->createdBy   = createdBy;
     r->changeNote  = note;
@@ -155,46 +154,64 @@ uint32_t DocumentRevision::latestRevNumber(const std::string& documentId) {
 }
 
 // ── State machine ─────────────────────────────────────────────
-bool DocumentRevision::isTransitionAllowed(const std::string& from,
-                                            const std::string& to) {
-    // closed is terminal — no transitions out
-    if (from == DocRevState::CLOSED) return false;
+bool DocumentRevision::isTransitionAllowed(RevState from,
+                                            RevState to,
+                                            bool adminMode) {
+    if (from == to) return false;
+    if (from == RevState::CLOSED) return false;      // terminal
 
-    // released is immutable — only freeze or terminate
-    if (from == DocRevState::RELEASED)
-        return to == DocRevState::LOCKED || to == DocRevState::CLOSED;
+    // Admin mode: any transition allowed
+    if (adminMode) return true;
 
-    // in_work can go to pre_released, locked, closed
-    if (from == DocRevState::IN_WORK)
-        return to == DocRevState::PRE_RELEASED ||
-               to == DocRevState::LOCKED       ||
-               to == DocRevState::CLOSED;
+    // ── Standard transition matrix ───────────────────────────
+    // Exact rules per specification:
+    //   in_work      → locked | pre_released | released | closed
+    //   locked       → released | pre_released | in_work | closed
+    //   pre_released → released | closed
+    //   released     → closed  (only)
+    //   closed       → (terminal — blocked above)
+    //
+    // NOT allowed in standard mode:
+    //   pre_released → in_work      (must go through released or close)
+    //   pre_released → locked       (must go to released or close)
+    //   released     → locked       (must close)
+    //   released     → in_work      (must close, then revise)
+    //   released     → pre_released (must close)
 
-    // pre_released: full flexibility except back to draft directly
-    if (from == DocRevState::PRE_RELEASED)
-        return to == DocRevState::RELEASED   ||
-               to == DocRevState::LOCKED     ||
-               to == DocRevState::CLOSED     ||
-               to == DocRevState::IN_WORK;
+    if (from == RevState::IN_WORK)
+        return to == RevState::LOCKED       ||
+               to == RevState::PRE_RELEASED ||
+               to == RevState::RELEASED     ||   // direct release allowed
+               to == RevState::CLOSED;
 
-    // locked can unlock to pre_released or close
-    if (from == DocRevState::LOCKED)
-        return to == DocRevState::PRE_RELEASED || to == DocRevState::CLOSED;
+    if (from == RevState::LOCKED)
+        return to == RevState::RELEASED     ||   // direct release from lock
+               to == RevState::PRE_RELEASED ||
+               to == RevState::IN_WORK      ||   // unlock
+               to == RevState::CLOSED;
+
+    if (from == RevState::PRE_RELEASED)
+        return to == RevState::RELEASED     ||
+               to == RevState::CLOSED;           // no back-paths in standard
+
+    if (from == RevState::RELEASED)
+        return to == RevState::CLOSED;           // only close from released
 
     return false;
 }
 
 bool DocumentRevision::transitionState(const std::string& targetState) {
-    if (!isTransitionAllowed(revState, targetState)) {
-        LOG_WARN("[DocRevision] Transition not allowed: " + revState +
-                 " → " + targetState + " for " + documentId + " rev=" +
-                 std::to_string(rev));
+    if (!isTransitionAllowed(revState, revStateFromString(targetState), false)) {
+        LOG_WARN("[DocRevision] Transition not allowed: " +
+                 std::string(revStateToString(revState)) + " → " +
+                 targetState + " for " + documentId +
+                 " rev=" + std::to_string(rev));
         return false;
     }
 
     // Additional locked→pre_released rule:
     // locked may only unlock if it is the NEWEST revision
-    if (revState == DocRevState::LOCKED && targetState == DocRevState::PRE_RELEASED) {
+    if (revState == RevState::LOCKED && targetState == "pre_released") {
         uint32_t latest = latestRevNumber(documentId);
         if (rev != latest) {
             LOG_WARN("[DocRevision] locked→pre_released only allowed for newest rev. "
@@ -204,7 +221,7 @@ bool DocumentRevision::transitionState(const std::string& targetState) {
         }
     }
 
-    revState  = targetState;
+    revState  = revStateFromString(targetState);
     updatedAt = nowIso();
 
     if (!save()) {
@@ -238,33 +255,42 @@ bool DocumentRevision::recomputeSuperseded() {
     // Determine which revision should be current (superseded=false)
     DocumentRevision* chosen = nullptr;
 
-    // Priority 1: latest released
+    // Priority 1: latest released revision (most common active state)
     for (auto it = all.rbegin(); it != all.rend(); ++it) {
-        if ((*it)->revState == DocRevState::RELEASED) {
+        if ((*it)->revState == RevState::RELEASED) {
             chosen = it->get(); break;
         }
     }
 
-    // Priority 2: latest non-locked / non-closed
+    // Priority 2: latest locked (locked can be current if no released exists)
     if (!chosen) {
         for (auto it = all.rbegin(); it != all.rend(); ++it) {
-            const auto& s = (*it)->revState;
-            if (s != DocRevState::LOCKED && s != DocRevState::CLOSED) {
+            if ((*it)->revState == RevState::LOCKED) {
                 chosen = it->get(); break;
             }
         }
     }
 
-    // Priority 3: latest in_work (fallback)
+    // Priority 3: latest pre_released
     if (!chosen) {
         for (auto it = all.rbegin(); it != all.rend(); ++it) {
-            if ((*it)->revState == DocRevState::IN_WORK) {
+            if ((*it)->revState == RevState::PRE_RELEASED) {
                 chosen = it->get(); break;
             }
         }
     }
 
-    // If still none (all locked/closed), choose the latest
+    // Priority 4: latest in_work
+    if (!chosen) {
+        for (auto it = all.rbegin(); it != all.rend(); ++it) {
+            if ((*it)->revState == RevState::IN_WORK) {
+                chosen = it->get(); break;
+            }
+        }
+    }
+
+    // Fallback: all revisions are closed — the latest one is still "current"
+    // (closed = invalid, but we need exactly one superseded=false)
     if (!chosen) chosen = all.back().get();
 
     // Atomically update all superseded flags

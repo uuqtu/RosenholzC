@@ -4,6 +4,7 @@
 
 #include "../../mfs/MFSWriter.h"
 #include "TaskF22.h"
+#include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "../../core/Database.h"
 #include "../../workflow/F77Workflow.h"
@@ -55,11 +56,11 @@ std::shared_ptr<TaskF22> TaskF22::create(
 // Returns:
 //   true on success
 // ------------------------------
-bool TaskF22::save() const {
+OperationResult TaskF22::save() const {
     auto* db = DatabasePool::instance().get("f22");
-    if (!db) { LOG_ERROR("TaskF22::save — projects DB not available"); return false; }
+    if (!db) { LOG_ERROR("TaskF22::save — projects DB not available"); return OperationResult::DB_ERROR; }
 
-    bool ok = db->exec(R"(
+    OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO tasks (
             task_id, workflow_instance_id, workflow_status, workflow_current_state, release_workflow_id,
             reg_number, project_id, parent_task_id, assignee_id, assigned_by,
@@ -108,10 +109,8 @@ bool TaskF22::save() const {
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
-    });
+    }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 
-    if (ok) LOG_INFO("TaskF22 saved: " + taskId);
-    else    LOG_ERROR("TaskF22 save failed: " + taskId);
     return ok;
 }
 
@@ -164,22 +163,23 @@ bool TaskF22::load(const std::string& id) {
     return true;
 }
 
-bool TaskF22::remove() {
+OperationResult TaskF22::remove() {
     auto* db = DatabasePool::instance().get("f22");
-    if (!db) return false;
+    if (!db) return OperationResult::DB_ERROR;
     LOG_WARN("Removing TaskF22: " + taskId);
     db->exec("DELETE FROM task_quality WHERE task_id=?;", {BindParam::text(taskId)});
     db->exec("DELETE FROM task_cost    WHERE task_id=?;", {BindParam::text(taskId)});
     db->exec("DELETE FROM task_time    WHERE task_id=?;", {BindParam::text(taskId)});
     db->exec("DELETE FROM task_scope   WHERE task_id=?;", {BindParam::text(taskId)});
     db->exec("DELETE FROM meetings     WHERE task_id=?;", {BindParam::text(taskId)});
-    return db->exec("DELETE FROM tasks WHERE task_id=?;", {BindParam::text(taskId)});
+    return db->exec("DELETE FROM tasks WHERE task_id=?;", {BindParam::text(taskId)})
+           ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-bool TaskF22::update() {
+OperationResult TaskF22::update() {
     if (isReleased()) {
         LOG_WARN("[F22] update() verweigert: Aufgabe ist released — " + taskId);
-        return false;
+        return OperationResult::ENTITY_RELEASED;
     } updatedAt = nowIso(); return save(); }
 
 std::shared_ptr<TaskF22> TaskF22::loadById(const std::string& id) {
@@ -220,30 +220,6 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadChildren(const std::string& p
 }
 
 // ── QTCS ─────────────────────────────────────────────────────
-bool TaskF22::addQuality(const std::string& id) {
-    qualityIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f22");
-    return db ? db->exec("INSERT OR IGNORE INTO task_quality VALUES (?,?);",
-        {BindParam::text(taskId), BindParam::text(id)}) : false;
-}
-bool TaskF22::addCost(const std::string& id) {
-    costIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f22");
-    return db ? db->exec("INSERT OR IGNORE INTO task_cost VALUES (?,?);",
-        {BindParam::text(taskId), BindParam::text(id)}) : false;
-}
-bool TaskF22::addTime(const std::string& id) {
-    timeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f22");
-    return db ? db->exec("INSERT OR IGNORE INTO task_time VALUES (?,?);",
-        {BindParam::text(taskId), BindParam::text(id)}) : false;
-}
-bool TaskF22::addScope(const std::string& id) {
-    scopeIds.push_back(id);
-    auto* db = DatabasePool::instance().get("f22");
-    return db ? db->exec("INSERT OR IGNORE INTO task_scope VALUES (?,?);",
-        {BindParam::text(taskId), BindParam::text(id)}) : false;
-}
 
 void TaskF22::loadQTCSLinks() {
     auto* db = DatabasePool::instance().get("f22");
@@ -263,15 +239,15 @@ void TaskF22::loadQTCSLinks() {
 
 
 // ── Reassign ─────────────────────────────────────────────────
-bool TaskF22::reassignTo(const std::string& newAssigneeId) {
+OperationResult TaskF22::reassignTo(const std::string& newAssigneeId) {
     LOG_INFO("Reassigning task " + taskId + " to " + newAssigneeId);
     assigneeId = newAssigneeId; return update();
 }
-bool TaskF22::reassignToProject(const std::string& newProjectId) {
+OperationResult TaskF22::reassignToProject(const std::string& newProjectId) {
     LOG_INFO("Moving task " + taskId + " to project " + newProjectId);
     projectId = newProjectId; parentTaskId = ""; return update();
 }
-bool TaskF22::reassignParent(const std::string& newParentTaskId) {
+OperationResult TaskF22::reassignParent(const std::string& newParentTaskId) {
     parentTaskId = newParentTaskId; return update();
 }
 
@@ -373,6 +349,12 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
     return result;
 }
 
+
+bool TaskF22::isWorkflowComplete() const {
+    if (releaseWorkflowId.empty()) return false;
+    auto wf = Rosenholz::F77_Workflow::loadById(releaseWorkflowId);
+    return wf && wf->status == "completed";
+}
 
 void TaskF22::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;

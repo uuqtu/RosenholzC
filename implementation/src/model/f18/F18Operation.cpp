@@ -2,6 +2,7 @@
 // F18Operation.cpp  —  Implementation of the unified F18Operation entity
 // ============================================================
 #include "F18Operation.h"
+#include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "F18OperationStep.h"
 #include "../../core/Database.h"
@@ -130,8 +131,8 @@ void F18Operation::fromRow(const Row& r) {
 }
 
 // ── save ─────────────────────────────────────────────────────
-bool F18Operation::save() const {
-    auto* d = db(); if (!d) return false;
+OperationResult F18Operation::save() const {
+    auto* d = db(); if (!d) return OperationResult::DB_ERROR;
     auto t = [](const std::string& s) { return BindParam::text(s); };
     auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
     auto i = [](int v)     { return BindParam::int64(v); };
@@ -203,25 +204,26 @@ bool F18Operation::save() const {
         n(executedBy), n(executionDate),
         // tail
         t(notes.empty()?"{}":notes), n(links), t(createdAt), t(updatedAt)
-    });
+    }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-bool F18Operation::update() {
+OperationResult F18Operation::update() {
     if (isReleased()) {
         LOG_WARN("[F18] update() verweigert: Vorgang ist released — " + vorgangId);
-        return false;
+        return OperationResult::ENTITY_RELEASED;
     }
     updatedAt = nowIso();
     return save();
 }
 
-bool F18Operation::remove() const {
-    auto* d = db(); if (!d) return false;
+OperationResult F18Operation::remove() const {
+    auto* d = db(); if (!d) return OperationResult::DB_ERROR;
     // Steps are cascade-deleted via FK or explicit delete
     d->exec("DELETE FROM f18_operation_steps WHERE vorgang_id=?;",
             {BindParam::text(vorgangId)});
     return d->exec("DELETE FROM f18_operations WHERE vorgang_id=?;",
-                   {BindParam::text(vorgangId)});
+                   {BindParam::text(vorgangId)})
+           ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
 bool F18Operation::load(const std::string& id) {
@@ -246,7 +248,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     v->projectId   = projectId;
     v->taskId      = taskId;
     v->title       = title;
-    v->status      = "draft";
+    v->status      = "in_work";
     v->priority    = "medium";
     v->createdAt   = nowIso();
     v->updatedAt   = nowIso();
@@ -256,7 +258,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     if (type == F18OperationType::RISK)
         v->riskLevel = "medium";
 
-    if (!v->save()) {
+    if (!opOk(v->save())) {
         LOG_ERROR("[F18Operation] Failed to save new vorgang: " + title);
         return nullptr;
     }
@@ -492,7 +494,7 @@ void F18Operation::recalcRiskScore() {
 }
 
 // ── Note management ───────────────────────────────────────────
-bool F18Operation::addNote(const std::string& authorId,
+OperationResult F18Operation::addNote(const std::string& authorId,
                            const std::string& text,
                            const std::string& noteType) {
     std::string noteId = genId("NOTE");
@@ -510,6 +512,12 @@ bool F18Operation::addNote(const std::string& authorId,
     return update();
 }
 
+
+bool F18Operation::isWorkflowComplete() const {
+    if (releaseWorkflowId.empty()) return false;
+    auto wf = Rosenholz::F77_Workflow::loadById(releaseWorkflowId);
+    return wf && wf->status == "completed";
+}
 
 void F18Operation::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;

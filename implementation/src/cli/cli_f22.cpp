@@ -10,6 +10,7 @@
 //   createTaskWizardGuided() — guided: pick F16 first, then create
 // ============================================================
 #include "cli_common.h"
+#include "../core/OperationResult.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
 #include "../core/Logger.h"
@@ -60,7 +61,7 @@ static void editMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
     std::string wbs = readOpt("WBS-Code (leer = behalten): ");
     if (!wbs.empty()) t->wbsCode = wbs;
 
-    if (t->update()) std::cout << "  >> Gespeichert.\n";
+    if (opOk(t->update())) std::cout << "  >> Gespeichert.\n";
     else             std::cout << "  >> Fehler beim Speichern.\n";
 }
 
@@ -72,34 +73,37 @@ static void editMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
 static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
     using namespace Rosenholz;
     while (true) {
-        hdr("F77 WORKFLOW — " + t->regNumber.toString());
-        std::cout << "  Status : " << t->status << "\n";
+        if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
+        hdr("WORKFLOW — " + t->taskId);
+        std::cout << "  Status       : " << t->status << "\n";
 
         if (t->releaseWorkflowId.empty()) {
-            std::cout << "  (kein F77-Workflow aktiv)\n";
-            std::cout << "  1. Workflow starten    0. Zurück\n";
+            std::cout << "  Kein Workflow aktiv.\n";
+            std::cout << "  1. Workflow starten...    0. Zurück\n";
             int ch = readInt("Wahl", 0, 1);
             if (ch == 0) return;
-            auto* t22db = DatabasePool::instance().get("f22");
-            auto wf = F77_Engine::startDefault("f22", t->taskId);
-            if (wf) {
-                t->releaseWorkflowId = wf->workflowId;
-                if (t22db) t22db->exec(
-                    "UPDATE tasks SET release_workflow_id=?, updated_at=? WHERE task_id=?;",
-                    {BindParam::text(wf->workflowId),
-                     BindParam::text(nowIso()),
-                     BindParam::text(t->taskId)});
-                std::cout << "  >> Workflow gestartet: " << wf->workflowId << "\n";
-                instanceMenu(wf->workflowId);
-            }
+            std::string wid = startWfInstanceWizard("f22", t->taskId);
+            if (!wid.empty()) instanceMenu(wid);
             return;
         }
 
-        std::cout << "  Workflow-ID: " << t->releaseWorkflowId.substr(0, 36) << "\n";
+        auto wf = F77_Workflow::loadById(t->releaseWorkflowId);
+        std::string wfStatus = wf ? wf->status : "unbekannt";
+        std::cout << "  Workflow-ID  : " << t->releaseWorkflowId.substr(0, 36) << "\n";
+        std::cout << "  WF-Status    : " << wfStatus << "\n";
+
+        if (wfStatus == "active") {
+            int blockers = 0;
+            F77_Engine::canRelease("f22", t->taskId, t->releaseWorkflowId, blockers);
+            std::cout << (blockers > 0
+                ? "  ! " + std::to_string(blockers) + " Schritte blockieren Freigabe\n"
+                : "  ✓ Freigabe moeglich\n");
+        }
         std::cout << "  1. Workflow öffnen    0. Zurück\n";
         int ch = readInt("Wahl", 0, 1);
         if (ch == 0) return;
-        if (ch == 1) { instanceMenu(t->releaseWorkflowId); return; }
+        if (ch == 1) instanceMenu(t->releaseWorkflowId);
+        return;
     }
 }
 
@@ -133,7 +137,7 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
     t->dueDatePlanned    = due;
     t->effortPlannedHrs  = effort;
 
-    if (t->save()) {
+    if (opOk(t->save())) {
         std::cout << "\n  >> Aufgabe angelegt: " << t->regNumber.toString()
                   << " (" << t->taskId << ")\n\n";
         auto& cfg = Rosenholz::Config::instance();
@@ -196,7 +200,7 @@ void cmdF22(const std::vector<std::string>& args) {
                   << "STATUS\n"
                   << "  " << std::string(64, '-') << "\n";
         for (auto& t : all)
-            std::cout << "  " << std::setw(24) << t->regNumber.toString()
+            std::cout << "  " << std::setw(28) << t->taskId
                       << std::setw(32) << t->title.substr(0, 30)
                       << t->status << "\n";
         std::cout << "  " << all.size() << " Aufgabe(n)\n";
@@ -224,7 +228,7 @@ void cmdF22(const std::vector<std::string>& args) {
 
     // Try as project ID
     auto project = ProjectF16::loadById(args[0]);
-    if (!project) die("ID nicht gefunden (weder F22 noch F16): " + args[0]);
+    if (!project) { printErr("ID nicht gefunden (weder F22 noch F16): " + args[0]); return; }
 
     if (args.size() > 1) {
         // Any additional argument signals creation
@@ -258,8 +262,8 @@ void taskMenu(std::shared_ptr<TaskF22> t) {
             << "    6. Neuen F18 Vorgang anlegen\n"
             << "\n  [KOMMUNIKATION]\n"
             << "    7. Communications (Meetings, Calls, ...)\n"
-            << "\n  [MAIN WORKFLOW]\n"
-            << "    8. Main Workflow / Freigabe\n"
+            << "\n  [WORKFLOW]\n"
+            << "    8. Starte Workflow...\n"
             << "\n    0. Zurück\n";
         hr();
 
@@ -270,7 +274,7 @@ void taskMenu(std::shared_ptr<TaskF22> t) {
             else std::cout << "  >> Released — kein Bearbeiten.\n";
 
         } else if (ch==2) {
-            if (!t->canAddChildren()) { std::cout << "  >> Released — keine neuen Teilaufgaben.\n"; continue; }
+            if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Teilaufgaben.\n"; continue; }
             auto child = createTaskWizard(t->projectId);
             if (child) {
                 child->parentTaskId = t->taskId;
@@ -284,7 +288,7 @@ void taskMenu(std::shared_ptr<TaskF22> t) {
             documentBrowserMenu("", t->taskId);
 
         } else if (ch==4) {
-            if (!t->canAddChildren()) { std::cout << "  >> Released — keine neuen Dokumente.\n"; continue; }
+            if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; continue; }
             auto doc = createDocumentWizard(t->projectId, t->taskId);
             if (doc) documentMenu(doc);
 
@@ -292,7 +296,7 @@ void taskMenu(std::shared_ptr<TaskF22> t) {
             f18BrowserMenu("", t->taskId);
 
         } else if (ch==6) {
-            if (!t->canAddChildren()) { std::cout << "  >> Released — keine neuen F18-Vorgaenge.\n"; continue; }
+            if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen F18-Vorgaenge.\n"; continue; }
             auto v = createF18Wizard(t->projectId, t->taskId);
             if (v) f18Menu(v);
 

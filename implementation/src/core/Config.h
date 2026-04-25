@@ -67,6 +67,15 @@ struct MFSConfig {
 // ── Registratur / naming settings ────────────────────────────
 // Controls the Roman-numeral department codes used in reg numbers
 // and the physical filing prefix (e.g. "XV" for dept XV).
+struct AdminConfig {
+    bool enabled { false };   ///< If true: extra workflow templates + delete-revision option
+};
+
+struct StorageConfig {
+    bool saveSpace { false }; ///< If true: remove MFS copies of non-active revisions
+                              ///< after workflow commit. Keeps only in_work and superseded=false.
+};
+
 struct RegistraturConfig {
     std::string diensteinheitKuerzel { "XV" };    ///< Department abbreviation (Roman numeral)
     std::string aktenfuehrendeStelle { "Rosenholz-Referat" };  ///< Filing authority name
@@ -110,6 +119,10 @@ public:
     const std::string& projectName() const { return m_projectName; }
 
     void setBasePath(const std::string& p)    { m_basePath = p; }
+    const AdminConfig&       admin()         const { return m_admin; }
+    const StorageConfig&     storage()       const { return m_storage; }
+    void setSaveSpace(bool v) { m_storage.saveSpace = v; }
+    void setAdminMode(bool v) { m_admin.enabled = v; }
     const RegistraturConfig& registratur()  const { return m_registratur; }
     void setDiensteinheit(const std::string& d)   { m_registratur.diensteinheitKuerzel = d; }
     void setLogLevel(const std::string& l)    { m_logLevel = l; }
@@ -141,6 +154,8 @@ private:
     MFSConfig    m_mfs;
     DBConfig     m_db;
     std::string  m_settingsPath { "settings.json" };
+    AdminConfig       m_admin;
+    StorageConfig     m_storage;
     RegistraturConfig m_registratur;
 };
 

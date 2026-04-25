@@ -1,6 +1,7 @@
 // test_workflow.cpp  —  WorkflowEngine tests with WorkflowFixture
 #include "TestFramework.h"
 #include "TestFixtures.h"
+#include "../src/core/OperationResult.h"
 #include "../src/model/f18/F18Operation.h"
 #include "../src/workflow/F77Workflow.h"
 #include "../src/workflow/F77Workflow.h"
@@ -19,7 +20,7 @@ void testSuiteWorkflow() {
         auto tpl = R::F77_WorkflowTemplate::create("Test-Freigabe","released","f16,f22");
         CHECK(tpl != nullptr, "F77_WorkflowTemplate::create");
         tpl->description = "Testvorlage";
-        CHECK(tpl->save(), "F77_WorkflowTemplate::save");
+        CHECK(opOk(tpl->save()), "F77_WorkflowTemplate::save");
 
         // Add template steps
         auto init = tpl->addTemplateStep("Init","sequential",true,false);

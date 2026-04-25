@@ -6,17 +6,19 @@
 // One revision per documentId holds superseded = false — that is
 // the "current active revision".
 //
-// State machine:
-//   in_work (0x00)  →  pre_released, locked, closed
-//   pre_released (0x01)  →  released, locked, closed, in_work
-//   released (0x02)  →  locked, closed  [immutable — no edits]
-//   locked (0x03)  →  pre_released (only if newest rev), closed
-//   closed (0x04)  →  [terminal — no transitions]
+// Standard state transitions (see isTransitionAllowed() for enforcement):
+//   in_work      → locked, pre_released, released, closed
+//   locked       → released, pre_released, in_work (unlock), closed
+//   pre_released → released, closed
+//   released     → closed only
+//   closed       → terminal, no transitions
 //
-// Superseded priority (who holds false):
-//   1. Latest released revision
-//   2. Latest non-locked/non-closed revision (if no released exists)
-//   3. Latest in_work revision (fallback)
+// Superseded priority (superseded=false = active revision):
+//   1. Latest RELEASED revision
+//   2. Latest LOCKED revision (no released exists)
+//   3. Latest PRE_RELEASED revision
+//   4. Latest IN_WORK revision
+//   Fallback: all CLOSED → latest closed is active
 // ============================================================
 
 #include <string>
@@ -27,15 +29,43 @@
 
 namespace Rosenholz {
 
-// ------------------------------
-// DocRevState — five states
-// ------------------------------
+// RevState — five states of a DocumentRevision
+// Stored as string in SQLite; convert with revStateToString / revStateFromString.
+enum class RevState {
+    IN_WORK,        // Mutable — objects in MFS, checkout allowed
+    LOCKED,         // Frozen — unlockable via workflow
+    PRE_RELEASED,   // Read-only — under review
+    RELEASED,       // Immutable — released and valid
+    CLOSED,         // Terminal — invalid, no further transitions
+};
+
+inline const char* revStateToString(RevState s) {
+    switch (s) {
+    case RevState::IN_WORK:      return "in_work";
+    case RevState::LOCKED:       return "locked";
+    case RevState::PRE_RELEASED: return "pre_released";
+    case RevState::RELEASED:     return "released";
+    case RevState::CLOSED:       return "closed";
+    }
+    return "in_work";  // unreachable, silence compiler
+}
+
+inline RevState revStateFromString(const std::string& s) {
+    if (s == "locked")       return RevState::LOCKED;
+    if (s == "pre_released") return RevState::PRE_RELEASED;
+    if (s == "released")     return RevState::RELEASED;
+    if (s == "closed")       return RevState::CLOSED;
+    return RevState::IN_WORK; // default and for "in_work"
+}
+
+// Keep DocRevState aliases for backward compatibility during migration
+// These will be removed once all callers use RevState directly.
 namespace DocRevState {
-    constexpr const char* IN_WORK      = "in_work";      // 0x00 mutable
-    constexpr const char* PRE_RELEASED = "pre_released"; // 0x01 read-only
-    constexpr const char* RELEASED     = "released";     // 0x02 immutable
-    constexpr const char* LOCKED       = "locked";       // 0x03 frozen
-    constexpr const char* CLOSED       = "closed";       // 0x04 terminal
+    constexpr const char* IN_WORK      = "in_work";
+    constexpr const char* PRE_RELEASED = "pre_released";
+    constexpr const char* RELEASED     = "released";
+    constexpr const char* LOCKED       = "locked";
+    constexpr const char* CLOSED       = "closed";
 }
 
 // ============================================================
@@ -51,7 +81,9 @@ public:
     uint32_t    parentRev   {0}; // 0 = initial revision (no parent)
 
     // ── State ─────────────────────────────────────────────────
-    std::string revState { DocRevState::IN_WORK };
+    RevState    revState { RevState::IN_WORK };
+    // Convenience: string representation for SQL persistence
+    std::string revStateStr() const { return revStateToString(revState); }
     // Exactly one revision per documentId holds superseded = false
     bool        superseded { true };
 
@@ -121,8 +153,9 @@ public:
     // isTransitionAllowed
     // Returns true if moving from revState → target is valid.
     // ------------------------------
-    static bool isTransitionAllowed(const std::string& from,
-                                    const std::string& to);
+    static bool isTransitionAllowed(RevState from,
+                                    RevState to,
+                                    bool adminMode = false);
 
     // ------------------------------
     // latestRevNumber

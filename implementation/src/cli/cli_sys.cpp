@@ -10,6 +10,10 @@
 //   globalSearch(query)    — search across all entity types
 // ============================================================
 #include "cli_common.h"
+#include "../model/dok/DocumentObject.h"
+#include "../model/dok/Document.h"
+#include "../repository/DocumentRevision.h"
+using Rosenholz::RevState;
 #include "../core/Config.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
@@ -70,7 +74,7 @@ void cmdLog(const std::string& level) {
     else if (l == "info")  Logger::instance().setLevel(LogLevel::INFO);
     else if (l == "warn")  Logger::instance().setLevel(LogLevel::WARN);
     else if (l == "error" || l == "err") Logger::instance().setLevel(LogLevel::ERR);
-    else die("Unbekannter Log-Level: " + level + "  (debug|info|warn|error)");
+    else { printErr("Unbekannter Log-Level: " + level + "  (debug|info|warn|error)"); return; }
     printOk("  Log-Level: " + level);
 }
 
@@ -98,7 +102,7 @@ void cmdMfs(const std::vector<std::string>& args) {
         return;
     }
 
-    if (!isId(args[0])) die("Ungültiges Argument: " + args[0] + "  (erwartet ID)");
+    if (!isId(args[0])) { printErr("Ungültiges Argument: " + args[0] + "  (erwartet ID)"); return; }
     const std::string& id = args[0];
 
     if (auto p = ProjectF16::loadById(id)) {
@@ -136,7 +140,7 @@ void cmdMfs(const std::vector<std::string>& args) {
         printOk(ok ? "  >> F77 " + id + " geschrieben." : "  >> Fehler.");
         return;
     }
-    die("ID nicht gefunden: " + id);
+    printErr("ID nicht gefunden: " + id); return;
 }
 
 // ── cmdSearch ─────────────────────────────────────────────────
@@ -146,7 +150,7 @@ void cmdMfs(const std::vector<std::string>& args) {
 
 void cmdSearch(const std::string& query) {
     if (query.empty()) {
-        die("-search benoetigt einen Suchbegriff");
+        printErr("-search benoetigt einen Suchbegriff"); return;
     }
     globalSearch(query);
 }
@@ -247,6 +251,109 @@ void globalSearch(const std::string& query) {
     } else if (h.typeCode == "WFI") {
         instanceMenu(h.id);
     }
+}
+
+
+// ── indexDokFolders ───────────────────────────────────────────────────────────
+// Scans all revision MFS folders for files not yet registered as DocumentObjects.
+// For each unregistered file found in an in_work revision, the user is asked
+// whether to add it to the document.
+//
+// Import modes:
+//   A. Titel eingeben → ID automatisch vergeben  (normal docObj ID)
+//   B. ID manuell eingeben → Titel eingeben       (normal docObj ID, custom display)
+//   C. Originaldateiname verwenden               (no ID — filename IS the identifier)
+// ─────────────────────────────────────────────────────────────────────────────
+void cmdIndexDokFolders() {
+    using namespace Rosenholz;
+    hdr("INDEX DOK-ORDNER — Nicht registrierte Dateien suchen");
+
+    // Load all documents
+    auto docs = Document::loadRecent(500);
+    if (docs.empty()) {
+        std::cout << "  (keine Dokumente vorhanden)\n";
+        return;
+    }
+
+    int totalFound = 0, totalAdded = 0;
+
+    for (auto& doc : docs) {
+        auto candidates = doc->indexMfsFolders();
+        if (candidates.empty()) continue;
+
+        for (auto& [revNum, filePath] : candidates) {
+            // Load the revision to check its state
+            auto rev = DocumentRevision::loadByRev(doc->documentId, revNum);
+            if (!rev) continue;
+
+            std::cout << "\n  Dokument : " << doc->documentId << "  "" << doc->title << ""\n"
+                      << "  Revision : " << revNum << "  [" << rev->revStateStr() << "]\n"
+                      << "  Datei    : " << filePath << "\n";
+            totalFound++;
+
+            if (rev->revState != RevState::IN_WORK) {
+                std::cout << "  (Revision ist nicht in_work — übersprungen)\n";
+                continue;
+            }
+
+            if (!yesno("  Zum Dokument hinzufügen?")) continue;
+
+            // Choose import mode
+            std::cout << "  Importmodus:\n"
+                      << "    A. Titel eingeben, ID automatisch vergeben (Standard)\n"
+                      << "    B. Titel eingeben, ID manuell eingeben\n"
+                      << "    C. Originaldateiname als Bezeichner verwenden (keine ID)\n";
+            std::string mode = readOpt("Modus (A/B/C, leer=A): ");
+            if (mode.empty()) mode = "A";
+            for (char& c : mode) c = std::toupper(c);
+
+            OperationResult res = OperationResult::OPERATION_ACK;
+
+            if (mode == "C") {
+                // Use original filename — no object ID, import as-is
+                auto obj = DocumentObject::importFile(doc->documentId, revNum, filePath, res);
+                if (opOk(res) && obj) {
+                    DocumentObject::writeKeyFile(doc->documentId, revNum, doc->title);
+                    std::cout << "  >> Importiert (Dateiname): " << obj->displayName() << "\n";
+                    totalAdded++;
+                } else {
+                    std::cout << "  >> " << opResultMessage(res) << "\n";
+                }
+            } else {
+                // Modes A and B: generate normal document object ID
+                std::string title;
+                std::string customId;
+
+                if (mode == "A") {
+                    title = readLine("  Bezeichnung/Titel: ");
+                } else { // B
+                    title   = readLine("  Bezeichnung/Titel: ");
+                    customId = readOpt("  Objekt-ID (5 Zeichen, leer=automatisch): ");
+                    if (customId.size() > 5) customId = customId.substr(0, 5);
+                    for (char& c : customId) c = std::toupper(c);
+                }
+
+                auto obj = DocumentObject::importFile(doc->documentId, revNum, filePath, res);
+                if (opOk(res) && obj) {
+                    if (!title.empty())    obj->originalName = title;
+                    if (!customId.empty()) {
+                        // Override objectId (stored as docId + ":" + customId)
+                        obj->objectId = doc->documentId + ":" + customId;
+                    }
+                    opOk(obj->update());
+                    DocumentObject::writeKeyFile(doc->documentId, revNum, doc->title);
+                    std::cout << "  >> Importiert: " << obj->objectId
+                              << "  "" << obj->displayName() << ""\n";
+                    totalAdded++;
+                } else {
+                    std::cout << "  >> " << opResultMessage(res) << "\n";
+                }
+            }
+        }
+    }
+
+    std::cout << "\n  Gesamt: " << totalFound << " Datei(en) gefunden, "
+              << totalAdded << " hinzugefügt.\n";
 }
 
 } // namespace CLI
