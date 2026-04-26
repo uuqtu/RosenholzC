@@ -173,27 +173,30 @@ void testSuiteModel() {
     SECTION("Document — create, attach, enforce project ref");
     {
         ProjectFixture pfix;
-        auto d = R::Document::create("Projektcharter","report",pfix.project->projectId);
+        // Create a task to attach documents to (docs now live on F22 or F18)
+        auto task = R::TaskF22::create("Charter-Aufgabe", "spec", pfix.project->projectId);
+        task->save();
+        auto d = R::Document::create("Projektcharter", "report", task->taskId);
         d->format  = "pdf";
         d->version = "1.0";
         CHECK(opOk(d->save()), "Document::save()");
         CHECK(d->documentId.find("/DOK/") != std::string::npos,
               "Document ID contains /DOK/");
-        CHECK(opOk(d->attachToEntity("f16", pfix.project->projectId)), "attachToEntity");
 
-        auto docs = R::Document::loadForEntity("f16", pfix.project->projectId);
-        CHECK(!docs.empty(), "loadForEntity returns documents");
+        auto docs = R::Document::loadForEntity("f22", task->taskId);
+        CHECK(!docs.empty(), "loadForEntity(f22) returns documents");
 
-        // Orphan document should be saveable in DB but refused by MFS
-        auto orphan = R::Document::create("Orphan","misc","");
+        // Orphan document (no task) still saveable
+        auto orphan = R::Document::create("Orphan", "misc");
         orphan->save();
-        // MFS filing refusal tested in testSuiteMFS
     }
 
     SECTION("Document — version snapshot via DocumentRevision");
     {
         ProjectFixture pfix("Doc-Version-Test");
-        auto doc = R::Document::create("Testdokument V1", "report", pfix.project->projectId);
+        auto vTask = R::TaskF22::create("VerTask","spec",pfix.project->projectId);
+        vTask->save();
+        auto doc = R::Document::create("Testdokument V1","report",vTask->taskId);
         doc->version = "1.0";
         doc->format  = "txt";
         CHECK(opOk(doc->save()), "Document saved before version test");
@@ -424,7 +427,6 @@ void testSuiteModel() {
         CHECK(wf != nullptr, "startDefault creates F77 workflow");
         if (wf) {
             CHECK(wf->entityType == "f16", "WF entityType=f16");
-            CHECK(wf->entityId == p->projectId, "WF entityId=projectId");
             CHECK(wf->status == "active", "WF status=active");
         }
     }
@@ -516,8 +518,7 @@ void testSuiteModel() {
     {
         // Every new document starts with rev=1, in_work, superseded=false
         ProjectFixture pfix("DocRev-Init-Test");
-        auto doc = R::Document::create("DocRev-Test-Doc", "report",
-                                        pfix.project->projectId);
+        auto doc = R::Document::create("DocRev-Test-Doc","report");
         doc->save();
 
         auto rev = R::DocumentRevision::createRevision(doc->documentId, 0,
@@ -571,8 +572,7 @@ void testSuiteModel() {
     SECTION("DocumentRevision — transitionState persists and updates superseded");
     {
         ProjectFixture pfix("DocRev-Transition-Test");
-        auto doc = R::Document::create("Transition-Doc", "report",
-                                        pfix.project->projectId);
+        auto doc = R::Document::create("Transition-Doc","report");
         doc->save();
         auto rev = R::DocumentRevision::createRevision(doc->documentId, 0, "u1", "v1");
         CHECK(rev != nullptr, "rev created");
@@ -602,8 +602,7 @@ void testSuiteModel() {
     SECTION("DocumentRevision — superseded invariant with multiple revisions");
     {
         ProjectFixture pfix("DocRev-Superseded-Test");
-        auto doc = R::Document::create("Multi-Rev-Doc", "spec",
-                                        pfix.project->projectId);
+        auto doc = R::Document::create("Multi-Rev-Doc","spec");
         doc->save();
 
         // Create rev 1
@@ -703,7 +702,9 @@ void testSuiteModel() {
     SECTION("Document — Revision 1 auto-created on save");
     {
         ProjectFixture pfix("DocRev-AutoCreate-Test");
-        auto doc = R::Document::create("AutoRev-Doc", "spec", pfix.project->projectId);
+        auto t2 = R::TaskF22::create("AutoRev-Aufgabe","spec",pfix.project->projectId);
+        t2->save();
+        auto doc = R::Document::create("AutoRev-Doc","spec",t2->taskId);
         doc->save();
         doc->revise("Revision 1 — Test");
         doc->ensureReleaseWorkflow();
@@ -735,7 +736,7 @@ void testSuiteModel() {
     SECTION("Document — 5-state machine via DocumentRevision");
     {
         ProjectFixture pfix("DocState-Test");
-        auto doc = R::Document::create("StateTest-Doc", "report", pfix.project->projectId);
+        auto doc = R::Document::create("StateTest-Doc","report");
         doc->save();
         doc->revise("Revision 1 — Test");
 

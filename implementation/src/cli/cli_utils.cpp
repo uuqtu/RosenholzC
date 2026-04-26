@@ -197,7 +197,6 @@ void printDocument(const Document& d) {
     std::cout << "  " << d.docType << "/" << d.format
               << "  Rev:" << (curRev ? std::to_string(curRev->rev) + "[" + curRev->revStateStr() + "]" : "—")
               << "  v" << d.version << "\n";
-    std::cout << "  F16:" << (d.projectId.empty()?"—":d.projectId.substr(0,26));
     if (!d.taskId.empty()) std::cout << "  F22:" << d.taskId.substr(0,26);
     std::cout << "\n";
     if (!d.releaseWorkflowId.empty())

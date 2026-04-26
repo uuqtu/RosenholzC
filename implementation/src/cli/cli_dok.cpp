@@ -57,7 +57,7 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
                       << projects[i]->title.substr(0, 36) << "\n";
         int pick = readInt("F16-Nr", 1, (int)projects.size());
-        return createDocumentWizard(projects[pick - 1]->projectId, "");
+        return createDocumentWizard("", "");
     }
 
     if (choice == 2) {
@@ -78,7 +78,7 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
         auto tasks = TaskF22::loadForProject(proj->projectId);
         if (tasks.empty()) {
             std::cout << "  (keine F22-Vorgänge in diesem Projekt — lege unter Projekt ab)\n";
-            return createDocumentWizard(proj->projectId, "");
+            return createDocumentWizard("", "");
         }
         hdr("F22 WÄHLEN");
         for (int i = 0; i < (int)tasks.size(); ++i)
@@ -166,7 +166,7 @@ void cmdDok(const std::vector<std::string>& args) {
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
                       << projects[i]->title.substr(0, 36) << "\n";
         int pick = readInt("F16-Nr", 1, (int)projects.size());
-        auto doc = createDocumentWizard(projects[pick - 1]->projectId, "");
+        auto doc = createDocumentWizard("", "");
         if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
         return;
     }
@@ -185,7 +185,7 @@ void cmdDok(const std::vector<std::string>& args) {
         auto tasks = TaskF22::loadForProject(proj->projectId);
         if (tasks.empty()) {
             std::cout << "  (keine F22-Vorgänge — lege unter Projekt ab)\n";
-            auto doc = createDocumentWizard(proj->projectId, "");
+            auto doc = createDocumentWizard("", "");
             if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
             return;
         }
@@ -238,7 +238,7 @@ void cmdDok(const std::vector<std::string>& args) {
 
     if (args.size() > 1) {
         // Additional argument → create document under this project
-        auto d = createDocumentWizard(proj->projectId, "");
+        auto d = createDocumentWizard("", "");
         if (d) printOk("  >> Dokument angelegt: " + d->documentId + "  " + d->title);
     } else {
         // Just a project ID → browse documents for this project
@@ -253,7 +253,7 @@ void cmdDok(const std::vector<std::string>& args) {
 // Source: local file, URL download, or new empty file.
 
 std::shared_ptr<Rosenholz::Document> createDocumentWizard(
-    const std::string& projectId, const std::string& taskId)
+    const std::string& taskId, const std::string& f18OpId)
 {
     using namespace Rosenholz;
 
@@ -273,12 +273,14 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         "evidence","plan","minutes","archive","other"};
     std::string docType = dtypes[dt-1];
 
-    // ── Optionale URL (für spätere Aktualisierung via Option 11) ─────────
-    std::string url = readOpt("URL (optional — für späteren Download): ");
+    // ── URL nur wenn Dokument einen Link-Ursprung hat ────────────────────
+    std::string url;
+    if (yesno("  Liegt ein Link/URL vor?")) {
+        url = readLine("URL: ");
+    }
 
     // ── Dokument-Datensatz speichern (keine Datei — Objekte später hinzufügen) ──
-    auto doc = Document::create(title, docType, projectId);
-    doc->taskId      = taskId;
+    auto doc = Document::create(title, docType, taskId, f18OpId);
     doc->format      = "pdf";  // default; overridden when a file is attached
     doc->fileUrl     = url;
     doc->dateCreated = nowIso();
@@ -597,7 +599,7 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
         std::string safeName = FileOps::sanitizeFilename(ctx.doc->title);
         if (safeName.size() > 40) safeName = safeName.substr(0, 40);
         std::string parentSane = sanitiseRegNr(
-            ctx.doc->projectId.empty() ? ctx.doc->taskId : ctx.doc->projectId);
+            ctx.doc->taskId.empty() ? ctx.doc->f18OperationId : ctx.doc->taskId);
         std::string dir = FileOps::joinPath(mfs, "DOK", parentSane);
         FileOps::makeDirs(dir);
         std::string fname = sane + "_" + safeName + "_v"
@@ -857,17 +859,65 @@ static bool dokHandleRevert(DocMenuCtx& ctx) {
 }
 
 // ch==11: dokHandleUrlDownload
+// Zeigt aktuelle URL, erlaubt Änderung, lädt neuen Stand herunter
+// und legt ihn als neues Objekt in der aktuellen Revision ab.
 static bool dokHandleUrlDownload(DocMenuCtx& ctx) {
-
-    // URL neu herunterladen
-    if (ctx.doc->fileUrl.empty()) { ctx.doc->fileUrl = readLine("URL: "); { auto r = ctx.doc->update(); (void)r; } }
-    if (!ctx.doc->fileUrl.empty()) {
-        auto rfRes = ctx.doc->refreshFromUrl();
-        if (opOk(rfRes))
-            std::cout << "  >> Aktualisiert: " << ctx.doc->filePath << "\n";
-        else
-            std::cout << "  >> " << opResultMessage(rfRes) << "\n";
+    if (!ctx.inWork) {
+        std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
+        return true;
     }
+
+    // Zeige und ggf. aktualisiere die URL
+    std::cout << "  Aktuelle URL: " << (ctx.doc->fileUrl.empty() ? "(keine)" : ctx.doc->fileUrl) << "\n";
+    std::string newUrl = readOpt("Neue URL (leer = behalten): ");
+    if (!newUrl.empty()) {
+        ctx.doc->fileUrl = newUrl;
+        { auto r = ctx.doc->update(); (void)r; }
+    }
+
+    if (ctx.doc->fileUrl.empty()) {
+        std::cout << "  >> Keine URL gesetzt — nichts heruntergeladen.\n";
+        return true;
+    }
+
+    // Download und als neues Objekt importieren
+    std::cout << "  Herunterladen von: " << ctx.doc->fileUrl << "\n";
+    const std::string& base = Config::instance().basePath();
+    std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
+    FileOps::makeDirs(tmpDir);
+    std::string downloaded = FileOps::downloadUrl(ctx.doc->fileUrl, tmpDir);
+    if (downloaded.empty()) {
+        std::cout << "  >> Download fehlgeschlagen.\n";
+        return true;
+    }
+
+    // Office → PDF conversion on Linux
+    std::string toImport = downloaded;
+    std::string ext = FileOps::extension(downloaded);
+    if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+    static const std::vector<std::string> officeExts =
+        {"xls","xlsx","doc","docx","ppt","pptx","odt","ods","odp"};
+    bool isOffice = false;
+    for (auto& e : officeExts) if (ext == e) { isOffice = true; break; }
+#ifndef _WIN32
+    if (isOffice) {
+        std::string pdfPath = downloaded.substr(0, downloaded.rfind('.')) + ".pdf";
+        std::string cmd = "libreoffice --headless --convert-to pdf --outdir \""
+                        + tmpDir + "\" \"" + downloaded + "\" 2>/dev/null";
+        if (std::system(cmd.c_str()) == 0 && FileOps::fileExists(pdfPath)) {
+            FileOps::deleteFile(downloaded);
+            toImport = pdfPath;
+        }
+    }
+#endif
+
+    OperationResult res = OperationResult::OPERATION_ACK;
+    auto obj = DocumentObject::importFile(ctx.doc->documentId, ctx.curRevNum, toImport, res);
+    FileOps::deleteFile(toImport);
+    if (opOk(res) && obj)
+        std::cout << "  >> Aktualisiert: " << obj->displayName() << "\n";
+    else
+        std::cout << "  >> " << opResultMessage(res) << "\n";
     return true;
 }
 
@@ -1081,7 +1131,7 @@ static LoadRuleCtx askLoadRule() {
 }
 
 
-void documentBrowserMenu(const std::string& projectId, const std::string& taskId) {
+void documentBrowserMenu(const std::string& taskId, const std::string& f18OpId) {
     // Use the global default load rule from settings, allow override
     Rosenholz::DocLoadRule globalRule;
     std::string globalDate;
@@ -1108,21 +1158,21 @@ void documentBrowserMenu(const std::string& projectId, const std::string& taskId
         std::vector<std::shared_ptr<Document>> docs;
         if (!taskId.empty())
             docs = Document::loadForEntity("f22", taskId);
-        else if (!projectId.empty())
-            docs = Document::loadForProject(projectId, lrc.rule, lrc.targetDate);
+        else if (!f18OpId.empty())
+            docs = Document::loadForEntity("f18", f18OpId);
         else
-            docs = Document::loadRecent(30, lrc.rule, lrc.targetDate);
+            docs = Document::loadRecent(50);
         
         listDocuments(docs, "DOKUMENTE (" + std::to_string(docs.size()) + ")");
         // Check parent released status
         bool parentReleased = false;
         if (!taskId.empty()) {
-            auto t = TaskF22::loadById(taskId);  // warns internally if not found
+            auto t = TaskF22::loadById(taskId);
             if (t) parentReleased = t->isReleased();
             // If task not found, silently continue — docs may still be linked
-        } else if (!projectId.empty()) {
-            auto p = ProjectF16::loadById(projectId);
-            parentReleased = p && p->isReleased();
+        } else if (!f18OpId.empty()) {
+            auto op = F18Operation::loadById(f18OpId);
+            if (op) parentReleased = op->isReleased();
         }
         if (parentReleased)
             std::cout << "  1.Öffnen  0.Zurück  (Released — kein Neu anlegen)\n";
@@ -1134,11 +1184,7 @@ void documentBrowserMenu(const std::string& projectId, const std::string& taskId
             documentMenu(docs[pick-1]);
         } else if (ch==2) {
             if (parentReleased) { std::cout << "  >> Released — kein Neu anlegen.\n"; continue; }
-            std::string pid = projectId, tid = taskId;
-            if (pid.empty() && !tid.empty()) {
-                auto t = TaskF22::loadById(tid); if (t) pid = t->projectId;
-            }
-            auto d = createDocumentWizard(pid, tid);
+            auto d = createDocumentWizard(taskId, f18OpId);
             if (d) documentMenu(d);
         }
     }

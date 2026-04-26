@@ -310,10 +310,22 @@ static bool prjMenuOpt1(std::shared_ptr<ProjectF16> p) {
     return true;
 }
 
+// 2: Liste aller F22
 static bool prjMenuOpt2(std::shared_ptr<ProjectF16> p) {
     listTasks(p->projectId);
+    return true;
+}
 
-
+// 3: F22 nach ID öffnen
+static bool prjMenuOpt3_openById(std::shared_ptr<ProjectF16> p) {
+    std::string id = readLine("F22-ID: ");
+    if (id.empty()) return true;
+    auto t = Rosenholz::TaskF22::loadById(id);
+    if (!t || t->projectId != p->projectId) {
+        std::cout << "  >> F22 nicht gefunden oder nicht in diesem F16.\n";
+        return true;
+    }
+    taskMenu(t);
     return true;
 }
 
@@ -331,18 +343,44 @@ if (yn=="j"||yn=="J") taskMenu(task);
 }
 
 static bool prjMenuOpt4(std::shared_ptr<ProjectF16> p) {
-    documentBrowserMenu(p->projectId, "");
+    documentBrowserMenu();
 
 
     return true;
 }
 
+// 5: DOK alle
 static bool prjMenuOpt5(std::shared_ptr<ProjectF16> p) {
-    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; return true; }
-    auto doc = createDocumentWizard(p->projectId, "");
+    documentBrowserMenu();
+    return true;
+}
+
+// 6: DOK nach ID öffnen
+static bool prjMenuOpt5_openById(std::shared_ptr<ProjectF16> p) {
+    std::string id = readLine("DOK-ID: ");
+    if (id.empty()) return true;
+    auto d = Rosenholz::Document::loadById(id);
+    if (!d) {
+        std::cout << "  >> DOK nicht gefunden.\n";
+        return true;
+    }
+    // Verify the DOK is linked to a F22 under this F16:
+    if (!d->taskId.empty()) {
+        auto t = Rosenholz::TaskF22::loadById(d->taskId);
+        if (!t || t->projectId != p->projectId) {
+            std::cout << "  >> DOK gehört nicht zu diesem F16.\n";
+            return true;
+        }
+    }
+    documentMenu(d);
+    return true;
+}
+
+// 7: DOK neu
+static bool prjMenuOpt5_new(std::shared_ptr<ProjectF16> p) {
+    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — kein neues DOK.\n"; return true; }
+    auto doc = createDocumentWizard();
     if (doc) documentMenu(doc);
-
-
     return true;
 }
 
@@ -391,17 +429,17 @@ static bool prjMenuOpt6_NEW(std::shared_ptr<ProjectF16> p) {
 
 using prjMenuFn = bool(*)(std::shared_ptr<ProjectF16> p);
 static const prjMenuFn prjMenuTable[11] = {
-    nullptr,
-    prjMenuOpt1,
-    prjMenuOpt2,
-    prjMenuOpt3,
-    prjMenuOpt4,
-    prjMenuOpt5,
-    prjMenuOpt6,
-    prjMenuOpt7,
-    prjMenuOpt6,
-    prjMenuOpt7,
-    prjMenuOpt6_NEW,
+    nullptr,           // 0
+    prjMenuOpt1,       // 1 Bearbeiten
+    prjMenuOpt2,       // 2 F22: Alle
+    prjMenuOpt3_openById, // 3 F22: Öffnen per ID
+    prjMenuOpt3,       // 4 F22: Neu
+    prjMenuOpt5,       // 5 DOK: Alle
+    prjMenuOpt5_openById, // 6 DOK: Öffnen per ID
+    prjMenuOpt5_new,   // 7 DOK: Neu
+    prjMenuOpt6,       // 8 Komm.
+    prjMenuOpt7,       // 9 Meilenstein
+    prjMenuOpt6_NEW,   // 10 F77
 };
 
 void projectMenu(std::shared_ptr<ProjectF16> p) {
@@ -419,9 +457,9 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
             << "  6.Komm.       7.Meilenstein  8.F77  0.Zurück\n";
         hr();
 
-        int ch = readInt("Wahl", 0, 8);
+        int ch = readInt("Wahl", 0, 10);
         if (ch == 0) break;
-        if (ch >= 1 && ch <= 8 && prjMenuTable[ch])
+        if (ch >= 1 && ch <= 10 && prjMenuTable[ch])
             if (!prjMenuTable[ch](p)) break;
     }
 }

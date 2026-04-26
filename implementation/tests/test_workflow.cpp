@@ -70,7 +70,7 @@ void testSuiteWorkflow() {
         if (wf) {
             CHECK(wf->entityType == "f22", "entityType correct");
             CHECK(wf->status == "active", "workflow is active");
-            CHECK(wf->steps.size() == 3, "3 steps created from template");
+            CHECK(wf->steps.size() == 4, "4 steps created from template (Init + mid + DB schreiben + End)");
 
             // Init step auto-approved
             bool initOk = false;
@@ -163,7 +163,7 @@ void testSuiteWorkflow() {
         auto fresh = R::F77_Workflow::loadById(wf->workflowId);
         CHECK(fresh != nullptr, "workflow reloadable");
         if (fresh) {
-            CHECK(fresh->steps.size() == 3, "running workflow has original 3 steps (not 4)");
+            CHECK(fresh->steps.size() == 4, "running workflow has 4 steps (Init + mid + DB schreiben + End)");
             CHECK(fresh->templateName == "Snapshot-Test", "templateName snapshotted at start");
         }
     }
@@ -256,26 +256,27 @@ void testSuiteWorkflow() {
         bool filed = Rosenholz::MFSWriter::writeDocument(*orphan, cfg.mfsPath());
         CHECK(!filed, "Orphan document refused by MFSWriter");
 
-        // Document with project gets filed
+        // Document with task (F22) gets filed
         ProjectFixture pfix("MFS-DOK-Test");
-        auto doc = R::Document::create("Testdokument","report",pfix.project->projectId);
+        auto task = R::TaskF22::create("MFS-Testaufgabe", "spec", pfix.project->projectId);
+        task->save();
+        auto doc = R::Document::create("Testdokument","report", task->taskId);
         doc->save();
         bool ok = Rosenholz::MFSWriter::writeDocument(*doc, cfg.mfsPath());
-        CHECK(ok, "Document with project ref filed in MFS");
+        CHECK(ok, "Document with F22 task ref filed in MFS");
 
         // Re-filing after rename — document now in its own subfolder
         doc->title = "Testdokument v2";
         doc->update();
         Rosenholz::MFSWriter::writeDocument(*doc, cfg.mfsPath());
-        // Verify the document subfolder exists under F16/<reg>/DOK/<docId>/
-        auto proj = R::ProjectF16::loadById(pfix.project->projectId);
-        if (proj) {
-            std::string projSane = Rosenholz::sanitiseRegNr(proj->regNumber.toString());
+        // Verify the document subfolder: F22/<taskReg>/DOK/<docId>/
+        {
+            std::string taskReg  = Rosenholz::sanitiseRegNr(task->regNumber.toString());
             std::string docSane  = Rosenholz::sanitiseRegNr(doc->documentId);
             std::string docDir = Rosenholz::FileOps::joinPath(
                 Rosenholz::FileOps::joinPath(
                     Rosenholz::FileOps::joinPath(
-                        Rosenholz::FileOps::joinPath(cfg.mfsPath(), "F16"), projSane),
+                        Rosenholz::FileOps::joinPath(cfg.mfsPath(), "F22"), taskReg),
                     "DOK"),
                 docSane);
             CHECK(Rosenholz::FileOps::dirExists(docDir),

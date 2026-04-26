@@ -9,8 +9,7 @@ CREATE TABLE IF NOT EXISTS documents (
     -- Core identity
     document_id            TEXT PRIMARY KEY,
     release_workflow_id    TEXT,               -- F77 Main-Workflow instance
-    project_id             TEXT,               -- Mandatory: filing parent
-    task_id                TEXT,               -- Optional: task-scoped
+    task_id                TEXT,               -- Filing parent (F22)
 
     -- Context links
     f18_operation_id       TEXT,               -- F18 Operation reference
@@ -66,7 +65,6 @@ CREATE TABLE IF NOT EXISTS entity_documents (
     linked_at   TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_docs_project  ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_docs_task     ON documents(task_id);
 CREATE INDEX IF NOT EXISTS idx_ent_docs_key  ON entity_documents(entity_type, entity_id);
 

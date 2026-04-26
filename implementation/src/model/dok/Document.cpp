@@ -43,11 +43,14 @@ namespace Rosenholz {
 //   Shared pointer to in-memory Document
 // ------------------------------
 std::shared_ptr<Document> Document::create(
-    const std::string& title_, const std::string& type_, const std::string& pid)
+    const std::string& title_, const std::string& type_,
+    const std::string& taskId_, const std::string& f18OpId_)
 {
     auto d = std::make_shared<Document>();
     d->documentId  = genId("DOK"); d->title = title_;
-    d->docType     = type_; d->projectId = pid;
+    d->docType     = type_;
+    d->taskId      = taskId_;
+    d->f18OperationId = f18OpId_;
     d->dateCreated = nowIso();
     d->createdAt   = d->dateCreated; d->updatedAt = d->createdAt;
     d->notes       = "{}";
@@ -77,16 +80,16 @@ OperationResult Document::save() const {
     OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO documents
         (document_id,release_workflow_id,
-         project_id,task_id,f18_operation_id,f18_step_id,author_id,approved_by,
+         task_id,f18_operation_id,f18_step_id,author_id,approved_by,
          doc_type,doc_category,title,version,
          date_created,date_modified,date_approved,date_expires,classification,
          volume_number,page_count,language,format,file_path,file_size,file_hash,file_url,
          external_ref,tags,summary,links,notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
         BindParam::text(documentId),
         BindParam::nullOrText(releaseWorkflowId),
-        BindParam::nullOrText(projectId), BindParam::nullOrText(taskId),
+        BindParam::nullOrText(taskId),
         BindParam::nullOrText(f18OperationId), BindParam::nullOrText(f18StepId),
         BindParam::nullOrText(authorId), BindParam::nullOrText(approvedBy),
         BindParam::text(docType), BindParam::nullOrText(docCategory),
@@ -109,8 +112,7 @@ void Document::fromRow(const Row& r) {
     auto g=[&](const std::string& k){ auto it=r.find(k); return it!=r.end()?it->second:""; };
     documentId=g("document_id");
     releaseWorkflowId=g("release_workflow_id");
-    projectId=g("project_id"); taskId=g("task_id");
-    f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
+    taskId=g("task_id");
     f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
     authorId=g("author_id"); approvedBy=g("approved_by");
     docType=g("doc_type"); docCategory=g("doc_category");
@@ -149,33 +151,7 @@ OperationResult Document::update() {
 
 std::shared_ptr<Document> Document::loadById(const std::string& id) {
     auto d=std::make_shared<Document>(); if(!d->load(id)) return nullptr; return d;
-}
-std::vector<std::shared_ptr<Document>> Document::loadForProject(
-    const std::string& pid, DocLoadRule rule, const std::string& targetDate) {
-    auto* db=DatabasePool::instance().get("dok");
-    std::vector<std::shared_ptr<Document>> result;
-    if (!db) return result;
-    auto rows=db->query("SELECT * FROM documents WHERE project_id=? ORDER BY date_created DESC;",
-                        {BindParam::text(pid)});
-    for (auto& r:rows) {
-        auto d=std::make_shared<Document>(); d->fromRow(r);
-        // DATE_RELEASED: only include documents that had a released revision
-        // on or before the targetDate. Skip if no match.
-        if (rule == DocLoadRule::DATE_RELEASED && !targetDate.empty()) {
-            auto revs = Rosenholz::DocumentRevision::loadAllRevisions(d->documentId);
-            bool hasReleasedByDate = false;
-            for (auto& rev : revs) {
-                if (rev->revState == RevState::RELEASED && rev->createdAt <= targetDate) {
-                    hasReleasedByDate = true; break;
-                }
-            }
-            if (!hasReleasedByDate) continue;
-        }
-        result.push_back(d);
-    }
-    return result;
-}
-std::vector<std::shared_ptr<Document>> Document::loadForEntity(
+}std::vector<std::shared_ptr<Document>> Document::loadForEntity(
     const std::string& et, const std::string& eid)
 {
     auto* db=DatabasePool::instance().get("dok");
@@ -186,13 +162,6 @@ std::vector<std::shared_ptr<Document>> Document::loadForEntity(
     if (et == "f22") {
         auto rows = db->query(
             "SELECT * FROM documents WHERE task_id=? ORDER BY date_created DESC;",
-            {BindParam::text(eid)});
-        for (auto& r : rows) {
-            auto d = std::make_shared<Document>(); d->fromRow(r); result.push_back(d);
-        }
-    } else if (et == "f16") {
-        auto rows = db->query(
-            "SELECT * FROM documents WHERE project_id=? ORDER BY date_created DESC;",
             {BindParam::text(eid)});
         for (auto& r : rows) {
             auto d = std::make_shared<Document>(); d->fromRow(r); result.push_back(d);
@@ -312,7 +281,6 @@ OperationResult Document::attachToEntity(const std::string& et, const std::strin
         ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 OperationResult Document::reassignAuthor(const std::string& id) { authorId=id; return update(); }
-OperationResult Document::reassignToProject(const std::string& id) { projectId=id; return update(); }
 OperationResult Document::reassignToTask(const std::string& id) { taskId=id; return update(); }
 nlohmann::json Document::toJson() const {
     return {{"documentId",documentId},{"title",title},{"docType",docType},
@@ -346,8 +314,8 @@ static std::string computeSHA256(const std::string& filePath) {
 // ── MFS document directory for this document ─────────────────
 static std::string docMFSDir(const Document& d) {
     const std::string& mfsRoot = Config::instance().mfsPath();
-    // Primary parent: project or task
-    std::string parent = d.projectId.empty() ? d.taskId : d.projectId;
+    // Parent: F22 task or F18 operation
+    std::string parent = d.taskId.empty() ? d.f18OperationId : d.taskId;
     if (parent.empty()) return "";
     std::string sane = sanitiseRegNr(parent);
     // mfs/DOK/{parent_sane}/
@@ -377,7 +345,7 @@ OperationResult Document::importLocalFile(const std::string& srcPath) {
 
     std::string dir = docMFSDir(*this);
     if (dir.empty()) {
-        LOG_ERROR("importLocalFile: document has no project/task reference");
+        LOG_ERROR("importLocalFile: document has no task/f18 reference");
         return OperationResult::DB_ERROR;
     }
     FileOps::makeDirs(dir);
@@ -829,8 +797,7 @@ std::string Document::mfsSchluesselText() const {
     s << "  ID      : " << documentId << "\n"
       << "  Titel   : " << title << "\n"
       << "  Typ     : " << docType << "\n"
-      << "  Status  : " << (cur ? cur->revStateStr() : "?") << "\n"
-      << "  F16     : " << projectId << "\n";
+      << "  Status  : " << (cur ? cur->revStateStr() : "?") << "\n";
     if (!taskId.empty())        s << "  F22     : " << taskId << "\n";
     if (!f18OperationId.empty()) s << "  F18     : " << f18OperationId << "\n";
     if (cur) {

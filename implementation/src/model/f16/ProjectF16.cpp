@@ -473,7 +473,7 @@ std::string ProjectF16::mfsSchluesselText() const {
         for (auto& t : tasks) s << " " << t->taskId;
         s << "\n";
     }
-    auto docs = Rosenholz::Document::loadForProject(projectId);
+    auto docs = Rosenholz::Document::loadForEntity("f22", projectId);
     if (!docs.empty()) {
         s << "  DOK     :";
         for (auto& d : docs) s << " " << d->documentId;

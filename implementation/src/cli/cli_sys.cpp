@@ -112,7 +112,7 @@ void cmdMfs(const std::vector<std::string>& args) {
         for (auto& t2 : TaskF22::loadForProject(p->projectId))
             for (auto& v : F18Operation::loadForTask(t2->taskId))
                 ok &= MFSWriter::writeF18(*v, root);
-        for (auto& d : Document::loadForProject(p->projectId))
+        for (auto& d : Document::loadForEntity("f22", p->projectId))
             ok &= MFSWriter::writeDocument(*d, root);
         printOk(ok ? "  >> F16 " + id + " geschrieben." : "  >> Fehler.");
         return;

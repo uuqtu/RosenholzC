@@ -34,8 +34,7 @@ class Document {
 public:
     std::string documentId;
     std::string releaseWorkflowId;    ///< Main WFI controlling this doc lifecycle
-    std::string projectId;
-    std::string taskId;
+    std::string taskId;          ///< Filing parent — F22 (or empty for F18-scoped)
     std::string f18OperationId;  ///< F18 Operation (vorgang) reference
     std::string f18StepId;       ///< F18 Operation Step reference
     std::string authorId, approvedBy;
@@ -130,8 +129,9 @@ public:
     // ------------------------------
     static std::shared_ptr<Document> create(
         const std::string& title,
-        const std::string& docType   = "report",
-        const std::string& projectId = "");
+        const std::string& docType     = "report",
+        const std::string& taskId      = "",
+        const std::string& f18OpId     = "");
 
     static std::vector<std::shared_ptr<Document>> loadRecent(
         int n = 20,
@@ -177,7 +177,6 @@ public:
 
     // ── Reassign ─────────────────────────────────────────
     OperationResult reassignAuthor(const std::string& newAuthorId);
-    OperationResult reassignToProject(const std::string& newProjectId);
     OperationResult reassignToTask(const std::string& newTaskId);
 
     nlohmann::json toJson() const;

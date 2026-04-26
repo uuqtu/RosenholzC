@@ -21,6 +21,8 @@
 #include <chrono>
 #include <iomanip>
 
+
+
 namespace Rosenholz {
 
 // ── DB helper ────────────────────────────────────────────────
@@ -490,6 +492,58 @@ void F77_Engine::detachWorkflow(const std::string& entityType,
 }
 
 
+// ── propagateDokWorkflowToParent ─────────────────────────────────────────────
+// When a DOK gets a F77 workflow, create an F18OperationStep on the parent
+// F22 (via its tracking F18) so the document release is visible in the chain.
+static void propagateDokWorkflowToParent(const std::string& docId,
+                                          const std::string& workflowId,
+                                          const std::string& targetState) {
+    auto doc = Rosenholz::Document::loadById(docId);
+    if (!doc) return;
+
+    // Find or create the parent tracking F18:
+    std::string parentEntityId;
+    std::string parentEntityType;
+    if (!doc->taskId.empty()) {
+        parentEntityId   = doc->taskId;
+        parentEntityType = "f22";
+    } else if (!doc->f18OperationId.empty()) {
+        parentEntityId   = doc->f18OperationId;
+        parentEntityType = "f18";
+    } else {
+        return; // No linked F22 or F18
+    }
+
+    // Find existing tracking F18 on the parent (releaseWorkflowId matches, or any F77_STEP type):
+    std::shared_ptr<Rosenholz::F18Operation> trackingF18;
+    auto ops = Rosenholz::F18Operation::loadForTask(parentEntityId);
+    for (auto& op : ops) {
+        if (op->vorgangType == "f77_step" || op->vorgangType == "F77_STEP") {
+            trackingF18 = op; break;
+        }
+    }
+
+    // If none found, create one:
+    if (!trackingF18) {
+        trackingF18 = Rosenholz::F18Operation::create(
+            parentEntityId,
+            "Workflow-Tracking [" + parentEntityType + "]",
+            Rosenholz::F18OperationType::F77_STEP);
+        if (!trackingF18) { LOG_WARN("[F77] propagateDok: could not create tracking F18"); return; }
+        trackingF18->save();
+        trackingF18->loadSteps();
+    } else {
+        trackingF18->loadSteps();
+    }
+
+    // Add a step describing the DOK workflow:
+    std::string stepTitle = "DOK Freigabe [" + workflowId + "] → " + targetState;
+    trackingF18->addStep(stepTitle, "review", "", false);
+    LOG_INFO("[F77] propagateDok: added step '" + stepTitle + "' to F18 " + trackingF18->vorgangId);
+}
+
+
+
 std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
     const std::string& templateId, const std::string& entityType,
     const std::string& entityId, const std::string& initiatedBy)
@@ -581,14 +635,51 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
         wf->steps.push_back(rs);
     }
 
+    // Inject "DB schreiben" step: auto-approved system step before the End step.
+    // Ensures MFS/LMDB commit is visible in the chain, after all manual steps.
+    {
+        // Find End step and last non-End step:
+        std::string endStepId, lastManualId;
+        int maxNonEndSeq = -1;
+        for (auto& s : wf->steps) {
+            if (s.isFinal) { endStepId = s.stepId; continue; }
+            if (s.sequenceOrder > maxNonEndSeq) { maxNonEndSeq = s.sequenceOrder; lastManualId = s.stepId; }
+        }
+        if (!endStepId.empty() && !lastManualId.empty()) {
+            F77_WorkflowStep dbStep;
+            dbStep.stepId        = genId("F77S"); dbStep.workflowId = wf->workflowId;
+            dbStep.title         = "DB schreiben";
+            dbStep.sequenceOrder = maxNonEndSeq + 1;
+            dbStep.executionMode = "sequential";
+            dbStep.predecessors  = { lastManualId };
+            dbStep.autoApprove   = true; dbStep.isSystem = true;
+            dbStep.systemAction  = SystemAction::COMMIT_DB_OBJECTS;
+            dbStep.status        = "pending";
+            dbStep.createdAt     = nowIso(); dbStep.updatedAt = nowIso();
+            dbStep.save(); wf->steps.push_back(dbStep);
+            // Rewire End step to wait for DB schreiben:
+            for (auto& s : wf->steps) {
+                if (s.stepId == endStepId) {
+                    s.predecessors = { dbStep.stepId };
+                    s.save();
+                    break;
+                }
+            }
+            LOG_INFO("[F77] Injected DB schreiben step before End");
+        }
+    }
+
     LOG_INFO("[F77] Workflow started from template '"+tpl->name+"' for "+entityType+"/"+entityId);
     tick(*wf);
 
     // Store the workflow ID back into the entity's releaseWorkflowId field
     storeWorkflowId(entityType, entityId, wf->workflowId);
+    if (entityType == "dok")
+        propagateDokWorkflowToParent(entityId, wf->workflowId, wf->targetState);
 
     return wf;
 }
+
 
 std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     const std::string& entityType, const std::string& entityId,
@@ -679,6 +770,8 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
 
     // Store the workflow ID back into the entity's releaseWorkflowId field
     storeWorkflowId(entityType, entityId, wf->workflowId);
+    if (entityType == "dok")
+        propagateDokWorkflowToParent(entityId, wf->workflowId, targetState);
 
     return wf;
 }

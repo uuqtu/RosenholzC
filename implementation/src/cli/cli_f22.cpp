@@ -261,7 +261,7 @@ static bool tskMenuOpt2(std::shared_ptr<TaskF22> t) {
 
 static bool tskMenuOpt2_NEW(std::shared_ptr<TaskF22> t) {
     if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; return true; }
-    auto doc = createDocumentWizard(t->projectId, t->taskId);
+    auto doc = createDocumentWizard(t->taskId);
     if (doc) documentMenu(doc);
 
 

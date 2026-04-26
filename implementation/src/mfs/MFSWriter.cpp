@@ -143,10 +143,13 @@ bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
         auto tasks = TaskF22::loadForProject(p.regNumber.toString());
         for (auto& t : tasks)
             sk << "  " << t->taskId << "  " << t->title << "\n";
-        sk << "\nVerbundene Dokumente:\n";
-        auto docs = Document::loadForProject(p.regNumber.toString());
-        for (auto& d : docs)
-            sk << "  " << d->documentId << "  " << d->title << "\n";
+        sk << "\nVerbundene Dokumente (via F22-Vorgänge):\n";
+        for (auto& t : tasks) {
+            auto tDocs = Document::loadForEntity("f22", t->taskId);
+            for (auto& d : tDocs)
+                sk << "  [F22:" << t->taskId.substr(0,16) << "] "
+                   << d->documentId << "  " << d->title << "\n";
+        }
         FileOps::writeTextFile(FileOps::joinPath(dir, "_SCHLUESSEL.txt"), sk.str());
     }
 
@@ -285,13 +288,7 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
     std::string parentDir;
     std::string parentRef;
 
-    if (!d.projectId.empty()) {
-        auto proj = ProjectF16::loadById(d.projectId);
-        if (proj) {
-            parentDir = f16Dir(mfsRoot, proj->regNumber.toString());
-            parentRef = "F16/" + proj->regNumber.toString();
-        }
-    } else if (!d.taskId.empty()) {
+    if (!d.taskId.empty()) {
         auto task = TaskF22::loadById(d.taskId);
         if (task) {
             parentDir = f22Dir(mfsRoot, task->regNumber.toString());
@@ -534,9 +531,19 @@ bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
             for (auto& v : f18s) { ok &= writeF18(*v, mfsRoot); ++nF18; }
         }
 
-        // Documents — filed under their parent entity folder
-        auto docs = Document::loadForProject(p->projectId);
-        for (auto& d : docs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
+        // Documents filed under their parent F22 task
+        for (auto& t : tasks) {
+            auto tDocs = Document::loadForEntity("f22", t->taskId);
+            for (auto& d : tDocs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
+        }
+        // Documents filed under F18 operations
+        for (auto& t : TaskF22::loadForProject(p->projectId)) {
+            auto f18s = F18Operation::loadForTask(t->taskId);
+            for (auto& v : f18s) {
+                auto fDocs = Document::loadForEntity("f18", v->vorgangId);
+                for (auto& d : fDocs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
+            }
+        }
     }
 
     // F77 active workflows — filed under F77/<id>/

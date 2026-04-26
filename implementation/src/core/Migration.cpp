@@ -60,7 +60,25 @@ std::vector<Migration> MigrationEngine::registry() {
     // Add future deltas here as the schema evolves beyond v4.
     //
     return {
-        // (empty — fresh installs start at v4 via SQL schema files)
+        // dok v5: remove project_id column (docs now linked F22/F18 only)
+        {"dok", 5,
+         "v5: project_id removed — documents belong to F22 or F18 only",
+         // SQLite < 3.35 has no DROP COLUMN — recreate table without project_id
+         R"SQL(
+            CREATE TABLE IF NOT EXISTS documents_v5 AS
+                SELECT document_id, release_workflow_id, task_id,
+                       f18_operation_id, f18_step_id, author_id, approved_by,
+                       doc_type, doc_category, title, version,
+                       date_created, date_modified, date_approved, date_expires,
+                       classification, volume_number, page_count, language,
+                       format, file_path, file_size, file_hash, file_url,
+                       external_ref, tags, summary, links, notes,
+                       created_at, updated_at
+                FROM documents;
+            DROP TABLE documents;
+            ALTER TABLE documents_v5 RENAME TO documents;
+         )SQL"
+        },
     }; // end registry
 }
 
