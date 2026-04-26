@@ -24,8 +24,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 CREATE TABLE IF NOT EXISTS f18_operations (
     vorgang_id          TEXT PRIMARY KEY,
     vorgang_type        TEXT NOT NULL DEFAULT 'generic',
-    project_id          TEXT,           -- → F16
-    task_id             TEXT,           -- → F22
+    task_id             TEXT NOT NULL,  -- → F22 (required: F18 always belongs to a task)
     parent_vorgang_id   TEXT,           -- → F18 (CO only, → ChangeRequest)
     release_workflow_id    TEXT,           -- WFI ID of controlling Main Workflow
     title               TEXT NOT NULL,
@@ -123,7 +122,6 @@ CREATE TABLE IF NOT EXISTS f18_operations (
     updated_at          TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_f18_project    ON f18_operations(project_id, vorgang_type);
 CREATE INDEX IF NOT EXISTS idx_f18_task       ON f18_operations(task_id, vorgang_type);
 CREATE INDEX IF NOT EXISTS idx_f18_parent     ON f18_operations(parent_vorgang_id);
 CREATE INDEX IF NOT EXISTS idx_f18_status     ON f18_operations(status);

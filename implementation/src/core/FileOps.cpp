@@ -13,6 +13,7 @@
 #include <ctime>
 #include <chrono>
 #include <thread>
+#include <filesystem>
 
 #ifdef _WIN32
   #include <windows.h>
@@ -456,19 +457,30 @@ bool FileOps::ensureMFSTree(const std::string& mfsRoot) {
 
 }
 namespace Rosenholz {
-std::vector<std::string> FileOps::listFiles(const std::string& dir, bool /*recursive*/) {
+std::vector<std::string> FileOps::listFiles(const std::string& dir, bool recursive) {
     std::vector<std::string> result;
-    DIR* dp = ::opendir(dir.c_str());
-    if (!dp) return result;
-    struct dirent* ep;
-    while ((ep = ::readdir(dp)) != nullptr) {
-        if (ep->d_name[0] == '.') continue;
-        std::string full = dir + "/" + ep->d_name;
-        struct stat st{};
-        if (::stat(full.c_str(), &st) == 0 && S_ISREG(st.st_mode))
-            result.push_back(full);
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::exists(dir, ec)) return result;
+    if (recursive) {
+        for (auto& e : fs::recursive_directory_iterator(dir, ec))
+            if (e.is_regular_file(ec)) result.push_back(e.path().string());
+    } else {
+        for (auto& e : fs::directory_iterator(dir, ec))
+            if (e.is_regular_file(ec)) result.push_back(e.path().string());
     }
-    ::closedir(dp);
     return result;
 }
+
+
+bool FileOps::deleteDir(const std::string& path) {
+    if (path.empty()) return false;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::exists(path, ec)) return true;  // already gone
+    fs::remove_all(path, ec);
+    return !ec;
+}
+
+
 } // namespace Rosenholz (listFiles)

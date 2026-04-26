@@ -120,7 +120,6 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
     if (title.empty()) return nullptr;
     std::string desc      = readOpt("Beschreibung (optional): ");
     std::string assignee  = readOpt("Bearbeiter Person-ID (optional): ");
-    std::string parent    = readOpt("Übergeordnete Aufgabe-ID (optional): ");
     std::string priority  = readOpt("Priorität (high/medium/low, leer=medium): ");
     std::string wbs       = readOpt("WBS-Code (z.B. 1.2.3, optional): ");
     std::string startP    = readOpt("Geplanter Start (YYYY-MM-DD, optional): ");
@@ -129,7 +128,7 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
     double effort = 0.0;
     if (!effortStr.empty()) try { effort = std::stod(effortStr); } catch (...) {}
 
-    auto t = Rosenholz::TaskF22::create(projectId, title, assignee, parent);
+    auto t = Rosenholz::TaskF22::create(projectId, title, assignee, "");
     t->description       = desc;
     t->priority          = priority.empty() ? "medium" : priority;
     t->wbsCode           = wbs;
@@ -139,12 +138,12 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
 
     if (opOk(t->save())) {
         std::cout << "\n  >> Aufgabe angelegt: " << t->regNumber.toString()
-                  << " (" << t->taskId << ")\n\n";
+                  << " (" << t->taskId << ")\n";
         auto& cfg = Rosenholz::Config::instance();
         if (cfg.mfs().enabled) t->writeMFSFile(cfg.mfsPath());
         return t;
     } else {
-        std::cout << "\n  >> FEHLER: Aufgabe konnte nicht gespeichert werden.\n\n";
+        std::cout << "\n  >> FEHLER: Aufgabe konnte nicht gespeichert werden.\n";
         return nullptr;
     }
 }
@@ -216,8 +215,8 @@ void cmdF22(const std::vector<std::string>& args) {
     }
 
     // All remaining paths require a valid ID
-    if (!isId(args[0])) die("Ungültiges Argument: " + args[0]
-                            + "  (erwartet ID oder -n)");
+    if (!isId(args[0])) { printErr("Ungültiges Argument: " + args[0]
+                            + "  (erwartet ID oder -n)"); return; }
 
     // Try as task ID first
     auto task = TaskF22::loadById(args[0]);
@@ -242,70 +241,92 @@ void cmdF22(const std::vector<std::string>& args) {
 }
 
 
+
+// ── void taskMenu(std::shared_ptr<TaskF22> t) handlers ──────────────────────────────────────────────
+static bool tskMenuOpt1(std::shared_ptr<TaskF22> t) {
+    if (t->canEdit()) editMenu(t);
+    else std::cout << "  >> Released — kein Bearbeiten.\n";
+
+
+    return true;
+}
+
+
+static bool tskMenuOpt2(std::shared_ptr<TaskF22> t) {
+    documentBrowserMenu("", t->taskId);
+
+
+    return true;
+}
+
+static bool tskMenuOpt2_NEW(std::shared_ptr<TaskF22> t) {
+    if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; return true; }
+    auto doc = createDocumentWizard(t->projectId, t->taskId);
+    if (doc) documentMenu(doc);
+
+
+    return true;
+}
+
+static bool tskMenuOpt2_NEW_NEW(std::shared_ptr<TaskF22> t) {
+    f18BrowserMenu(t->taskId);
+
+
+    return true;
+}
+
+static bool tskMenuOpt2_NEW_NEW_NEW(std::shared_ptr<TaskF22> t) {
+    if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen F18-Vorgaenge.\n"; return true; }
+    auto v = createF18Wizard(t->taskId);
+    if (v) f18Menu(v);
+
+
+    return true;
+}
+
+static bool tskMenuOpt2_NEW_NEW_NEW_NEW(std::shared_ptr<TaskF22> t) {
+    communicationMenu(t->taskId, "task");
+
+
+    return true;
+}
+
+static bool tskMenuOpt2_NEW_NEW_NEW_NEW_NEW(std::shared_ptr<TaskF22> t) {
+    mainWorkflowMenu(t);
+
+    return true;
+}
+
+using tskMenuFn = bool(*)(std::shared_ptr<TaskF22> t);
+static const tskMenuFn tskMenuTable[9] = {
+    nullptr,
+    tskMenuOpt1,
+    tskMenuOpt2,
+    tskMenuOpt2,
+    tskMenuOpt2_NEW,
+    tskMenuOpt2_NEW_NEW,
+    tskMenuOpt2_NEW_NEW_NEW,
+    tskMenuOpt2_NEW_NEW_NEW_NEW,
+    tskMenuOpt2_NEW_NEW_NEW_NEW_NEW,
+};
+
 void taskMenu(std::shared_ptr<TaskF22> t) {
     while (true) {
         if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
         printTask(*t);
 
         if (t->isReleased())
-            std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n\n";
+            std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
 
         std::cout
-            << "  [AUFGABE]\n"
-            << "    1. Bearbeiten (Edit-Untermenü)\n"
-            << "    2. Teilaufgabe anlegen\n"
-            << "\n  [DOKUMENTE]\n"
-            << "    3. Dokumente anzeigen\n"
-            << "    4. Neues Dokument anlegen\n"
-            << "\n  [F18 VORGÄNGE]\n"
-            << "    5. F18 Vorgänge anzeigen / öffnen\n"
-            << "    6. Neuen F18 Vorgang anlegen\n"
-            << "\n  [KOMMUNIKATION]\n"
-            << "    7. Communications (Meetings, Calls, ...)\n"
-            << "\n  [WORKFLOW]\n"
-            << "    8. Starte Workflow...\n"
-            << "\n    0. Zurück\n";
+            << "  1.Bearbeiten  2.Dokumente  3.Dok+  4.F18-Anzeigen  5.F18+\n"
+            << "  6.Komm.       7.Workflow   0.Zurück\n";
         hr();
 
-        int ch = readInt("Wahl",0,8); if (ch==0) break;
-
-        if (ch==1) {
-            if (t->canEdit()) editMenu(t);
-            else std::cout << "  >> Released — kein Bearbeiten.\n";
-
-        } else if (ch==2) {
-            if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Teilaufgaben.\n"; continue; }
-            auto child = createTaskWizard(t->projectId);
-            if (child) {
-                child->parentTaskId = t->taskId;
-                child->update();
-                std::cout << "  Teilaufgabe öffnen? (j/n): ";
-                std::string yn; std::getline(std::cin, yn);
-                if (yn=="j"||yn=="J") taskMenu(child);
-            }
-
-        } else if (ch==3) {
-            documentBrowserMenu("", t->taskId);
-
-        } else if (ch==4) {
-            if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; continue; }
-            auto doc = createDocumentWizard(t->projectId, t->taskId);
-            if (doc) documentMenu(doc);
-
-        } else if (ch==5) {
-            f18BrowserMenu("", t->taskId);
-
-        } else if (ch==6) {
-            if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen F18-Vorgaenge.\n"; continue; }
-            auto v = createF18Wizard(t->projectId, t->taskId);
-            if (v) f18Menu(v);
-
-        } else if (ch==7) {
-            communicationMenu(t->taskId, "task");
-
-        } else if (ch==8) {
-            mainWorkflowMenu(t);
-        }
+        int ch = readInt("Wahl", 0, 7);
+        if (ch == 0) break;
+        if (ch >= 1 && ch <= 7 && tskMenuTable[ch])
+            if (!tskMenuTable[ch](t)) break;
     }
 }
 

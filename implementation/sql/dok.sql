@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS documents (
     project_id             TEXT,               -- Mandatory: filing parent
     task_id                TEXT,               -- Optional: task-scoped
 
+    -- Context links
+    f18_operation_id       TEXT,               -- F18 Operation reference
+    f18_step_id            TEXT,               -- F18 Step reference
+
     -- Authorship
     author_id              TEXT,
     approved_by            TEXT,

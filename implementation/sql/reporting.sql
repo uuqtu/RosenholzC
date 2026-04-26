@@ -1,2 +1,0 @@
--- reporting.sql — stub, not embedded (no pool registered)
--- Kept as empty placeholder to satisfy CMake dependency graph.

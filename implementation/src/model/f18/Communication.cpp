@@ -40,9 +40,6 @@ void Communication::fromRow(const Row& r) {
 
 bool Communication::save() const {
     auto* d = db(); if (!d) return false;
-    auto t = [](const std::string& s) { return BindParam::text(s); };
-    auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
-    auto i = [](int v) { return BindParam::int64(v); };
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO communications
@@ -51,11 +48,11 @@ bool Communication::save() const {
          participants, decisions, actions, notes, status, created_at, updated_at)
         VALUES(?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,?,?,?)
     )SQL", {
-        t(commId), t(ownerId), t(ownerType), t(commType), t(title), n(agenda),
-        n(scheduledDate), n(actualDate), i(durationMins), n(channel), n(location), n(organiserId),
-        t(participants.empty()?"[]":participants),
-        n(decisions), t(actions.empty()?"[]":actions), n(notes),
-        t(status), t(createdAt), t(updatedAt)
+        BindParam::text(commId), BindParam::text(ownerId), BindParam::text(ownerType), BindParam::text(commType), BindParam::text(title), BindParam::nullOrText(agenda),
+        BindParam::nullOrText(scheduledDate), BindParam::nullOrText(actualDate), BindParam::int64(durationMins), BindParam::nullOrText(channel), BindParam::nullOrText(location), BindParam::nullOrText(organiserId),
+        BindParam::text(participants.empty()?"[]":participants),
+        BindParam::nullOrText(decisions), BindParam::text(actions.empty()?"[]":actions), BindParam::nullOrText(notes),
+        BindParam::text(status), BindParam::text(createdAt), BindParam::text(updatedAt)
     });
 }
 

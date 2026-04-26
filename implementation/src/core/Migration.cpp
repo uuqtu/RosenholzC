@@ -19,7 +19,7 @@ namespace Rosenholz {
 // per database. runAll() applies any registry() deltas that bring
 // currentVersion up to targetVersion.
 //
-// v2 baseline: all databases start here on a fresh install.
+// v4 baseline: all databases start here on a fresh install.
 // To evolve the schema: (1) bump the version in SchemaVersions,
 // (2) add a delta in registry(), (3) update the SQL file.
 // ------------------------------
@@ -53,25 +53,14 @@ std::map<std::string, int> MigrationEngine::targetVersionMap() {
 //     deltas handle ALTER TABLE for existing databases only
 // ------------------------------
 std::vector<Migration> MigrationEngine::registry() {
-    // ── v2 Baseline: no historical deltas ─────────────────────
+    // ── v4 Baseline: no historical deltas ─────────────────────
     //
-    // This codebase establishes version 2 as the clean starting point.
-    // All databases are created fresh at v2 via their SQL schema files.
-    // No backwards compatibility with pre-v2 databases is provided or needed.
-    //
-    // Add future deltas here as the schema evolves beyond v2.
-    // Each delta increments the version in SchemaVersions (Migration.h)
-    // and has a matching entry here so runFor() can apply it automatically.
-    //
-    // Example (future delta for workflow v3):
-    //   {
-    //       "f77", 3,
-    //       "Add xyz column to workflow_steps",
-    //       R"SQL( ALTER TABLE f18_operation_steps ADD COLUMN xyz TEXT; )SQL"
-    //   },
+    // v4 is the clean starting point. No backwards compatibility.
+    // Changes from v3: F18 removed from F16, F18 exclusively owned by F22.
+    // Add future deltas here as the schema evolves beyond v4.
     //
     return {
-        // (empty — no historical deltas; fresh installs start at v2)
+        // (empty — fresh installs start at v4 via SQL schema files)
     }; // end registry
 }
 
@@ -97,7 +86,7 @@ bool MigrationEngine::ensureSchemaVersionTable(Database* db, const std::string& 
         int tv = targetVersion(dbName);
         db->exec(
             "INSERT INTO schema_version(db_name, version, applied_at, description) "
-            "VALUES(?, ?, ?, 'v2 baseline — initial install');",
+            "VALUES(?, ?, ?, 'v4 baseline — initial install');",
             {BindParam::text(dbName),
              BindParam::int64(tv),
              BindParam::text(Rosenholz::nowIso())});

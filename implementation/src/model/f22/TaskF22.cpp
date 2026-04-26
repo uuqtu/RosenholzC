@@ -4,6 +4,7 @@
 
 #include "../../mfs/MFSWriter.h"
 #include "TaskF22.h"
+#include "../dok/Document.h"
 #include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "../../core/Database.h"
@@ -32,7 +33,7 @@ std::shared_ptr<TaskF22> TaskF22::create(
     LOG_INFO("Creating TaskF22: " + title_ + " in project " + projectId_);
     auto t = std::make_shared<TaskF22>();
     t->taskId        = genId("F22");
-    t->regNumber     = RegNumberGenerator::next(RegDept::TASK);
+    t->regNumber     = RegNumber::fromString(t->taskId);
     t->projectId     = projectId_;
     t->title         = title_;
     t->assigneeId    = assigneeId_;
@@ -74,38 +75,38 @@ OperationResult TaskF22::save() const {
         ) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?,?,?,?)
     )", {
         BindParam::text(taskId),
-        textOrNull(workflowInstanceId),
-        textOrNull(workflowStatus),
-        textOrNull(workflowCurrentState),
-        textOrNull(releaseWorkflowId),
+        BindParam::nullOrText(workflowInstanceId),
+        BindParam::nullOrText(workflowStatus),
+        BindParam::nullOrText(workflowCurrentState),
+        BindParam::nullOrText(releaseWorkflowId),
         BindParam::text(regNumber.toString()),
         BindParam::text(projectId),
-        textOrNull(parentTaskId),
-        textOrNull(assigneeId),
-        textOrNull(assignedBy),
-        textOrNull(taskCode),
+        BindParam::nullOrText(parentTaskId),
+        BindParam::nullOrText(assigneeId),
+        BindParam::nullOrText(assignedBy),
+        BindParam::nullOrText(taskCode),
         BindParam::text(title),
-        textOrNull(description),
-        textOrNull(taskType),
+        BindParam::nullOrText(description),
+        BindParam::nullOrText(taskType),
         BindParam::text(status),
-        textOrNull(priority),
+        BindParam::nullOrText(priority),
         BindParam::real(effortPlannedHrs),
         BindParam::real(effortActualHrs),
         BindParam::real(effortRemainingHrs),
         BindParam::real(costPlanned),
         BindParam::real(costActual),
-        textOrNull(startDatePlanned),
-        textOrNull(startDateActual),
-        textOrNull(dueDatePlanned),
-        textOrNull(dueDateActual),
+        BindParam::nullOrText(startDatePlanned),
+        BindParam::nullOrText(startDateActual),
+        BindParam::nullOrText(dueDatePlanned),
+        BindParam::nullOrText(dueDateActual),
         BindParam::int64(scheduleVarianceDays),
         BindParam::int64(percentComplete),
-        textOrNull(qualityCriteria),
-        textOrNull(acceptanceCriteria),
-        textOrNull(milestones),
-        textOrNull(wbsCode),
-        textOrNull(sprintOrPhase),
-        textOrNull(links),
+        BindParam::nullOrText(qualityCriteria),
+        BindParam::nullOrText(acceptanceCriteria),
+        BindParam::nullOrText(milestones),
+        BindParam::nullOrText(wbsCode),
+        BindParam::nullOrText(sprintOrPhase),
+        BindParam::nullOrText(links),
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
@@ -157,7 +158,7 @@ bool TaskF22::load(const std::string& id) {
     auto* db = DatabasePool::instance().get("f22");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM tasks WHERE task_id=?;", {BindParam::text(id)});
-    if (rows.empty()) { LOG_WARN("TaskF22 not found: " + id); return false; }
+    if (rows.empty()) { LOG_DEBUG("TaskF22 not found: " + id); return false; }
     fromRow(rows[0]);
     loadQTCSLinks();
     return true;
@@ -290,10 +291,10 @@ std::string TaskF22::convertToProject(const std::string& projectType_) {
         BindParam::text(title + " [promoted from F22/" + taskId + "]"),
         BindParam::text(projectType_),
         BindParam::text(status),
-        textOrNull(acceptanceCriteria),
+        BindParam::nullOrText(acceptanceCriteria),
         BindParam::real(costPlanned),
-        textOrNull(startDatePlanned),
-        textOrNull(dueDatePlanned),
+        BindParam::nullOrText(startDatePlanned),
+        BindParam::nullOrText(dueDatePlanned),
         BindParam::text(notes),
         BindParam::text(nowIso())
     });
@@ -358,19 +359,29 @@ bool TaskF22::isWorkflowComplete() const {
 
 void TaskF22::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
+    // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
     auto wf = Rosenholz::F77_Engine::startDefault("f22", taskId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
-    status         = "in_work";
-    auto* db = DatabasePool::instance().get("f22");
-    if (db) db->exec(
-        "UPDATE tasks SET release_workflow_id=?, status='in_work', updated_at=? "
-            "WHERE task_id=?;",
-            {BindParam::text(releaseWorkflowId),
-             BindParam::text(nowIso()),
-             BindParam::text(taskId)});
-    LOG_INFO("[F77] Main WFI ensured for F22: " + taskId +
-             " wfi=" + releaseWorkflowId);
+    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for f22/" + taskId);
+}
+
+
+
+std::string TaskF22::mfsSchluesselText() const {
+    std::ostringstream s;
+    s << "  ID      : " << taskId << "\n"
+      << "  Titel   : " << title << "\n"
+      << "  Status  : " << status << "\n"
+      << "  F16     : " << projectId << "\n";
+    auto docs = Rosenholz::Document::loadForEntity("f22", taskId);
+    if (!docs.empty()) {
+        s << "  DOK     :";
+        for (auto& d : docs) s << " " << d->documentId;
+        s << "\n";
+    }
+    s << "\n";
+    return s.str();
 }
 
 } // namespace Rosenholz

@@ -47,22 +47,17 @@ void cmdPer(const std::vector<std::string>& args) {
 }
 
 void printPerson(const Rosenholz::Person& p) {
-    hdr("PERSON  " + p.regNumber.toString());
-    auto row = [](const std::string& k, const std::string& v){
-        std::cout << "  | " << std::left << std::setw(24) << k
-                  << std::setw(28) << v << "|\n";
-    };
-    row("ID",           p.personId);
-    row("Name",         p.fullName());
-    row("Email",        fval(p.email));
-    row("Phone",        fval(p.phone));
-    row("Role",         fval(p.roleTitle));
-    row("Dept",         fval(p.department));
-    row("Type",         fval(p.personType));
-    row("Status",       fval(p.status));
-    row("Day-rate",     std::to_string((int)p.dayRate) + " EUR");
-    row("Avail.%",      std::to_string((int)p.availabilityPct));
-    std::cout << "  +" << std::string(52,'-') << "+\n\n";
+    using namespace Rosenholz;
+    std::string name = p.firstName + " " + p.lastName;
+    hdr("PER " + p.regNumber.toString() + "  " + name.substr(0,38));
+    std::cout << "  ID:" << p.personId
+              << "  Typ:" << p.personType
+              << "  Status:" << p.status << "\n";
+    if (!p.email.empty() || !p.phone.empty())
+        std::cout << "  Mail:" << (p.email.empty()?"—":p.email.substr(0,30))
+                  << "  Tel:" << (p.phone.empty()?"—":p.phone) << "\n";
+    if (!p.orgUnit.empty())
+        std::cout << "  OrgUnit:" << p.orgUnit.substr(0,30) << "\n";
 }
 
 
@@ -116,10 +111,10 @@ std::shared_ptr<Rosenholz::Person> createPersonWizard() {
 
     if (opOk(p->save())) {
         std::cout << "\n  >> Person created: " << p->regNumber.toString()
-                  << " (" << p->personId << ")\n\n";
+                  << " (" << p->personId << ")\n";
         return p;
     } else {
-        std::cout << "\n  >> ERROR: Person could not be saved.\n\n";
+        std::cout << "\n  >> ERROR: Person could not be saved.\n";
         return nullptr;
     }
 }

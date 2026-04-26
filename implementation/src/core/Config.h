@@ -76,6 +76,13 @@ struct StorageConfig {
                               ///< after workflow commit. Keeps only in_work and superseded=false.
 };
 
+// Default document loading rule — persisted in settings.json
+// Can be overridden per-session in the document browser.
+struct UiConfig {
+    int  defaultLoadRule { 1 };  ///< 1=LATEST_RELEASED 2=LATEST_WORKING 3=DATE_RELEASED
+    std::string defaultLoadDate; ///< ISO date for DATE_RELEASED rule
+};
+
 struct RegistraturConfig {
     std::string diensteinheitKuerzel { "XV" };    ///< Department abbreviation (Roman numeral)
     std::string aktenfuehrendeStelle { "Rosenholz-Referat" };  ///< Filing authority name
@@ -122,6 +129,8 @@ public:
     const AdminConfig&       admin()         const { return m_admin; }
     const StorageConfig&     storage()       const { return m_storage; }
     void setSaveSpace(bool v) { m_storage.saveSpace = v; }
+    const UiConfig&          ui()            const { return m_ui; }
+    UiConfig&                uiMut()               { return m_ui; }
     void setAdminMode(bool v) { m_admin.enabled = v; }
     const RegistraturConfig& registratur()  const { return m_registratur; }
     void setDiensteinheit(const std::string& d)   { m_registratur.diensteinheitKuerzel = d; }
@@ -156,6 +165,7 @@ private:
     std::string  m_settingsPath { "settings.json" };
     AdminConfig       m_admin;
     StorageConfig     m_storage;
+    UiConfig          m_ui;
     RegistraturConfig m_registratur;
 };
 

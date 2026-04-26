@@ -9,6 +9,7 @@
 //   startWfInstanceWizard(..) — guided workflow start wizard
 // ============================================================
 #include "cli_common.h"
+#include "../model/Utils.h"
 #include "../core/Config.h"
 #include "../core/Logger.h"
 #include "../model/f16/ProjectF16.h"
@@ -164,13 +165,32 @@ void instanceMenu(const std::string& workflowId) {
         std::cout << "  Workflow-Kette:";
         drawF77Chain(wf->steps, false);
 
-        std::cout << "  1.Schritt ausfuehren  2.Schritt validieren  3.Engine-Tick\n"
-                     "  4.Workflow sperren    5.Zielzustand aendern\n"
-                     "  6.Workflow abbrechen  0.Zurueck\n";
-        int ch = readInt("Wahl", 0, 6);
+        bool adminMode = Config::instance().admin().enabled;
+        // In non-admin mode F77 runs fully automatic — users only add steps or cancel.
+        // Admin mode additionally allows manual step firing for diagnostics.
+        if (adminMode)
+            std::cout << "  [ADMIN] 1.Schritt manuell ausfuehren  2.Schritt validieren\n"
+                         "         3.Schritt hinzufuegen  4.Engine-Tick\n"
+                         "  5.Workflow abbrechen  0.Zurueck\n";
+        else
+            std::cout << "  1.Schritt hinzufuegen  2.Schritt validieren\n"
+                         "  3.Engine-Tick (automatisch)\n"
+                         "  4.Workflow abbrechen   0.Zurueck\n";
+        int ch = readInt("Wahl", 0, adminMode ? 5 : 4);
         if (ch == 0) break;
 
-        else if (ch == 1) {
+        // Remap ch to logical action:
+        // Admin:     1=fire 2=validate 3=add-step 4=tick 5=cancel
+        // Non-admin: 1=add-step 2=validate 3=tick 4=cancel
+        int action = ch;
+        if (!adminMode) {
+            // Non-admin mapping: 1→add, 2→validate, 3→tick, 4→cancel
+            static const int map[] = {0, 3, 2, 4, 5};
+            action = (ch >= 1 && ch <= 4) ? map[ch] : 0;
+        }
+
+        if (action == 1) {
+            // ── [ADMIN ONLY] Manuelles Step-Firing ──────────────────────────
             std::vector<F77_WorkflowStep*> fireable;
             for (auto& s : wf->steps)
                 if (!s.isInitialize && !s.isFinal && !s.isComplete())
@@ -182,10 +202,8 @@ void instanceMenu(const std::string& workflowId) {
                 std::cout << "    " << (i+1) << ". " << fireable[i]->title
                           << " [" << fireable[i]->status << "]\n";
             int pick = readInt("Schritt #", 1, (int)fireable.size());
-            // Capture stepId and flags as plain values before any reload
-            const std::string stepId       = fireable[pick-1]->stepId;
-            const bool needsComment        = fireable[pick-1]->requiresComment;
-
+            const std::string stepId   = fireable[pick-1]->stepId;
+            const bool needsComment    = fireable[pick-1]->requiresComment;
             std::cout << "  Entscheidung:  1.Genehmigen  2.Ablehnen  3.Ueberspringen\n";
             int dec = readInt("Entscheidung", 1, 3);
             static const char* decisions[] = {"approved", "rejected", "skipped"};
@@ -196,15 +214,14 @@ void instanceMenu(const std::string& workflowId) {
             }
             std::string actor = readOpt("Bearbeiter (Person-ID, leer=System): ");
             if (actor.empty()) actor = "system";
-
             if (F77_Engine::fireStep(*wf, stepId, decisions[dec-1], actor, comment))
                 std::cout << "  >> Schritt ausgefuehrt.\n";
             else
-                std::cout << "  >> Fehler -- Vorbedingungen nicht erfuellt?\n";
+                std::cout << "  >> Fehler — Vorbedingungen nicht erfuellt?\n";
         }
 
-        else if (ch == 2) {
-            // Validation: dry-run check without state change
+        else if (action == 2) {
+            // Validierung — Trockenlauf ohne Zustandsänderung
             if (wf->steps.empty()) { std::cout << "  Keine Schritte.\n"; continue; }
             hdr("VALIDIERUNG — " + wf->templateName);
             for (const auto& s : wf->steps) {
@@ -215,38 +232,71 @@ void instanceMenu(const std::string& workflowId) {
             std::cout << "\n  (Keine Aenderungen vorgenommen)\n";
         }
 
-        else if (ch == 3) {
+        else if (action == 3) {
+            // ── Optionalen Schritt hinzufügen ─────────────────────────────────
+            // Only allowed while workflow is active and End step not yet reached
+            if (wf->status != "active") {
+                std::cout << "  >> Nur bei aktivem Workflow moeglich.\n"; continue;
+            }
+            // Check End step not yet done
+            bool endDone = false;
+            for (auto& s : wf->steps) if (s.isFinal && s.isComplete()) { endDone = true; break; }
+            if (endDone) {
+                std::cout << "  >> End-Schritt bereits abgeschlossen.\n"; continue;
+            }
+            std::cout << "  Neuen optionalen Schritt hinzufuegen.\n"
+                      << "  Jeder Schritt spawnt eine F18-Operation (Typ: measure)\n"
+                      << "  die manuell als erledigt markiert werden muss.\n";
+            std::string title = readLine("Schritt-Titel (leer=Abbrechen): ");
+            if (title.empty()) continue;
+            std::string desc  = readOpt("Beschreibung (optional): ");
+
+            // Spawn F18 Operation of type "measure" linked to this workflow step
+            auto f18 = F18Operation::create(title, "measure", wf->entityId.empty()
+                                             ? wf->workflowId : wf->entityId);
+            if (f18) {
+                if (!desc.empty()) f18->description = desc;
+                f18->notes = "Automatisch aus F77-Workflow: " + wf->workflowId;
+                f18->save();
+
+                // Add the step to the running workflow instance (before End step)
+                F77_WorkflowStep step;
+                step.stepId      = genId("F77S");
+                step.workflowId  = wf->workflowId;
+                step.title       = title;
+                step.autoApprove = false;
+                step.isInitialize= false;
+                step.isFinal     = false;
+                step.f18OperationId = f18->vorgangId;
+                // Insert before End step: give it sequenceOrder = end-1
+                int endOrder = 999;
+                for (auto& s : wf->steps)
+                    if (s.isFinal) { endOrder = s.sequenceOrder - 1; break; }
+                step.sequenceOrder = endOrder;
+                // Predecessor: last non-final step
+                for (auto& s : wf->steps)
+                    if (!s.isFinal && !s.predecessors.empty())
+                        step.predecessors = {s.stepId};
+                step.save();
+                wf->loadSteps();
+                std::cout << "  >> Schritt '" << title << "' angelegt.\n"
+                          << "  >> F18-Operation: " << f18->vorgangId << "\n"
+                          << "  >> Schritt wird automatisch abgehakt, sobald F18 abgeschlossen.\n";
+            } else {
+                std::cout << "  >> Fehler beim Anlegen der F18-Operation.\n";
+            }
+        }
+
+        else if (action == 4) {
             F77_Engine::tick(*wf);
             std::cout << "  >> Engine-Tick ausgefuehrt.\n";
         }
 
-        else if (ch == 4) {
-            std::string confirm = readOpt("Workflow wirklich sperren? (ja/nein): ");
-            if (confirm == "ja") {
-                wf->status = "locked";
-                wf->update();
-                std::cout << "  >> Workflow gesperrt.\n";
-            }
-        }
-
-        else if (ch == 5) {
-            std::cout << "  1.in_work  2.pre_released  3.released  4.locked  5.closed\n";
-            static const char* sts[] = {"in_work","pre_released","released","locked","closed"};
-            int si = readInt("Zielzustand", 1, 5);
-            wf->targetState = sts[si-1];
-            wf->update();
-            std::cout << "  >> Zielzustand gesetzt: " << wf->targetState << "\n";
-        }
-
-        else if (ch == 6) {
-            // Cancel workflow: sets status = cancelled.
-            // The entity's releaseWorkflowId remains set so history is visible,
-            // but the entity is free to start a new workflow afterwards.
+        else if (action == 5) {
+            // Workflow abbrechen
             std::string confirm = readOpt("Workflow wirklich abbrechen? (ja/nein): ");
             if (confirm == "ja") {
-                wf->status = "cancelled";
-                wf->update();
-                F77_Engine::detachWorkflow(wf->entityType, wf->entityId);
+                F77_Engine::cancelWorkflow(*wf);
                 std::cout << "  >> Workflow abgebrochen. Entitaet kann neuen Workflow starten.\n";
                 break;
             }
@@ -275,7 +325,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
         for (auto& t : templates)
             std::cout << "    " << ti++ << ". " << t->name
                       << "  -> " << t->targetState << "\n";
-        std::cout << "    " << ti << ". Standard-Freigabe (ohne Vorlage)\n\n";
+        std::cout << "    " << ti << ". Standard-Freigabe (ohne Vorlage)\n";
         int choice = readInt("Vorlage waehlen", 1, (int)templates.size() + 1);
         std::string actor = readOpt("Gestartet von (Person-ID, leer=System): ");
         if (actor.empty()) actor = "system";
@@ -301,8 +351,54 @@ std::string startWfInstanceWizard(const std::string& entityType,
     if (!wf) { std::cout << "  >> FEHLER beim Starten.\n"; return ""; }
 
     F77_Engine::attachWorkflow(effType, effId, wf->workflowId);
-
     std::cout << "  >> F77-Workflow gestartet: " << wf->workflowId << "\n";
+
+    // ── Optional: zusätzliche Schritte hinzufügen ─────────────────────────────
+    // Ask if the user wants to insert manual steps (spawning F18 operations)
+    // BEFORE the automatic DB-write and End steps run.
+    std::cout << "\n  Optional: Weitere Schritte hinzufuegen?\n"
+              << "  (Jeder Schritt erzeugt eine F18-Operation, die manuell\n"
+              << "   abzuschliessen ist. Der Workflow wartet auf jeden Schritt.)\n";
+    while (yesno("  Weiteren Schritt hinzufuegen?")) {
+        std::string title = readLine("  Schritt-Titel: ");
+        if (title.empty()) break;
+        std::string desc = readOpt("  Beschreibung (optional): ");
+
+        auto f18 = F18Operation::create(title, "measure", effId);
+        if (f18) {
+            if (!desc.empty()) f18->description = desc;
+            f18->notes = "F77-Workflow Pflichtschritt: " + wf->workflowId;
+            f18->save();
+
+            F77_WorkflowStep step;
+            step.stepId         = genId("F77S");
+            step.workflowId     = wf->workflowId;
+            step.title          = title;
+            step.autoApprove    = false;
+            step.isInitialize   = false;
+            step.isFinal        = false;
+            step.f18OperationId = f18->vorgangId;
+            // Place before the DB-write/End steps
+            wf->loadSteps();
+            int endOrder = 999;
+            for (auto& s : wf->steps)
+                if (s.isFinal) { endOrder = s.sequenceOrder - 1; break; }
+            step.sequenceOrder = endOrder;
+            // Chain after last non-final step
+            for (auto& s : wf->steps)
+                if (!s.isFinal && s.isInitialize == false && !s.predecessors.empty())
+                    step.predecessors = {s.stepId};
+            step.save();
+            wf->loadSteps();
+            std::cout << "  >> Schritt '" << title << "' + F18 '" << f18->vorgangId
+                      << "' angelegt.\n";
+        } else {
+            std::cout << "  >> Fehler beim Anlegen.\n"; break;
+        }
+    }
+
+    // Run initial tick to start the engine
+    F77_Engine::tick(*wf);
     return wf->workflowId;
 }
 
@@ -316,7 +412,7 @@ static void templateMenu(const std::string& templateId) {
                   << "  Version:      " << tpl->version    << "\n"
                   << "  Zielzustand:  " << tpl->targetState << "\n"
                   << "  Entitaeten:   " << fval(tpl->entityTypes) << "\n"
-                  << "  Status:       " << tpl->status << "\n\n";
+                  << "  Status:       " << tpl->status << "\n";
 
         std::cout << "  Vorlage-Schritte:\n";
         if (tpl->steps.empty()) {
@@ -382,11 +478,11 @@ void workflowMenu() {
         std::cout << "  VORLAGEN (deklarativ, nur Admin)\n"
                      "    1. Alle Vorlagen anzeigen\n"
                      "    2. Neue Vorlage erstellen\n"
-                     "    3. Vorlage oeffnen/bearbeiten\n\n"
+                     "    3. Vorlage oeffnen/bearbeiten\n"
                      "  LAUFENDE WORKFLOWS\n"
                      "    4. Alle aktiven F77-Workflows\n"
                      "    5. Workflow per ID oeffnen\n"
-                     "    6. Neuen Workflow starten\n\n"
+                     "    6. Neuen Workflow starten\n"
                      "    0. Zurueck\n";
         int ch = readInt("Wahl", 0, 6); if (ch == 0) break;
 

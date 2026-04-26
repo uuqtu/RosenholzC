@@ -18,6 +18,7 @@
 #include <sstream>
 #include <set>
 #include <iomanip>
+#include <openssl/evp.h>
 #include <algorithm>
 
 namespace Rosenholz {
@@ -76,15 +77,17 @@ OperationResult Document::save() const {
     OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO documents
         (document_id,release_workflow_id,
-         project_id,task_id,author_id,approved_by,doc_type,doc_category,title,version,
+         project_id,task_id,f18_operation_id,f18_step_id,author_id,approved_by,
+         doc_type,doc_category,title,version,
          date_created,date_modified,date_approved,date_expires,classification,
          volume_number,page_count,language,format,file_path,file_size,file_hash,file_url,
          external_ref,tags,summary,links,notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
         BindParam::text(documentId),
         BindParam::nullOrText(releaseWorkflowId),
         BindParam::nullOrText(projectId), BindParam::nullOrText(taskId),
+        BindParam::nullOrText(f18OperationId), BindParam::nullOrText(f18StepId),
         BindParam::nullOrText(authorId), BindParam::nullOrText(approvedBy),
         BindParam::text(docType), BindParam::nullOrText(docCategory),
         BindParam::text(title), BindParam::nullOrText(version),
@@ -107,6 +110,7 @@ void Document::fromRow(const Row& r) {
     documentId=g("document_id");
     releaseWorkflowId=g("release_workflow_id");
     projectId=g("project_id"); taskId=g("task_id");
+    f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
     f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
     authorId=g("author_id"); approvedBy=g("approved_by");
     docType=g("doc_type"); docCategory=g("doc_category");
@@ -153,7 +157,22 @@ std::vector<std::shared_ptr<Document>> Document::loadForProject(
     if (!db) return result;
     auto rows=db->query("SELECT * FROM documents WHERE project_id=? ORDER BY date_created DESC;",
                         {BindParam::text(pid)});
-    for (auto& r:rows) { auto d=std::make_shared<Document>(); d->fromRow(r); result.push_back(d); }
+    for (auto& r:rows) {
+        auto d=std::make_shared<Document>(); d->fromRow(r);
+        // DATE_RELEASED: only include documents that had a released revision
+        // on or before the targetDate. Skip if no match.
+        if (rule == DocLoadRule::DATE_RELEASED && !targetDate.empty()) {
+            auto revs = Rosenholz::DocumentRevision::loadAllRevisions(d->documentId);
+            bool hasReleasedByDate = false;
+            for (auto& rev : revs) {
+                if (rev->revState == RevState::RELEASED && rev->createdAt <= targetDate) {
+                    hasReleasedByDate = true; break;
+                }
+            }
+            if (!hasReleasedByDate) continue;
+        }
+        result.push_back(d);
+    }
     return result;
 }
 std::vector<std::shared_ptr<Document>> Document::loadForEntity(
@@ -242,6 +261,10 @@ std::shared_ptr<Document> Document::archiveFromUrl(
 }
 
 std::string Document::archiveWebsite(const std::string& url, const std::string& destDir) {
+#ifdef _WIN32
+    return FileOps::downloadUrl(url, destDir);
+#else
+
     // Derive filename from URL
     std::string safe = FileOps::sanitizeFilename(url);
     if (safe.size() > 80) safe = safe.substr(0, 80);
@@ -263,8 +286,8 @@ std::string Document::archiveWebsite(const std::string& url, const std::string& 
     }
     // Final fallback: plain curl
     return FileOps::downloadUrl(url, destDir);
+#endif // _WIN32
 }
-
 // ------------------------------
 // attachToEntity
 //
@@ -301,17 +324,23 @@ nlohmann::json Document::toJson() const {
 // ══════════════════════════════════════════════════════════════
 
 // ── SHA-256 via /usr/bin/sha256sum ───────────────────────────
-static std::string computeSHA256(const std::string& path) {
-    if (!FileOps::fileExists(path)) return "";
-    FILE* pipe = popen(("sha256sum \"" + path + "\" 2>/dev/null").c_str(), "r");
-    if (!pipe) return "";
-    char buf[256] = {};
-    if (!fgets(buf, sizeof(buf), pipe)) buf[0] = '\0';
-    pclose(pipe);
-    std::string s(buf);
-    // sha256sum output: "hash  filename"
-    size_t sp = s.find(' ');
-    return (sp != std::string::npos) ? s.substr(0, sp) : "";
+static std::string computeSHA256(const std::string& filePath) {
+    if (!FileOps::fileExists(filePath)) return "";
+    std::ifstream in(filePath, std::ios::binary);
+    if (!in) return "";
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) return "";
+    if (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) != 1) {
+        EVP_MD_CTX_free(ctx); return ""; }
+    char buf[65536];
+    while (in.read(buf, sizeof(buf)) || in.gcount() > 0)
+        EVP_DigestUpdate(ctx, buf, static_cast<size_t>(in.gcount()));
+    unsigned char hash[EVP_MAX_MD_SIZE]; unsigned int hashLen = 0;
+    EVP_DigestFinal_ex(ctx, hash, &hashLen); EVP_MD_CTX_free(ctx);
+    std::ostringstream oss;
+    for (unsigned int i = 0; i < hashLen; ++i)
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+    return oss.str();
 }
 
 // ── MFS document directory for this document ─────────────────
@@ -413,18 +442,44 @@ OperationResult Document::refreshFromUrl() {
 
 
 // ── revertChanges ─────────────────────────────────────────────
-OperationResult Document::revertChanges() {
-    // Restore the document to the state of the PREVIOUS revision.
-    //
-    // Rules:
-    //   - Only works when current active revision is in_work.
-    //   - Finds the revision BEFORE the current one (parentRev).
-    //   - Restores that revision's content into the current in_work revision
-    //     (overwrites its LMDB content). No new revision is created.
-    //   - If no previous revision exists (rev == 1 with no parent): does nothing.
-    //   - Discards the local checked-out working copy.
+// Restore content to the previous revision's state.
+// Helper: discard local checkout without touching LMDB.
+static void discardCheckout(std::string& coPath, uint32_t& preRevId) {
+    if (!coPath.empty()) { std::remove(coPath.c_str()); coPath.clear(); }
+    preRevId = 0;
+}
 
-    // Must have a checkout in progress
+// Helper: copy previous revision content into current in_work revision in LMDB.
+static bool restoreContentFromLMDB(
+    Rosenholz::Archive::ArchiveStore& store,
+    const std::string& documentId,
+    const std::string& format,
+    std::shared_ptr<Rosenholz::DocumentRevision> prevRev,
+    std::shared_ptr<Rosenholz::DocumentRevision> curRev)
+{
+    if (prevRev->contentHash.empty() || !store.isOpen()) return false;
+
+    std::string tmpDir  = FileOps::joinPath(Config::instance().basePath(), "tmp_revert");
+    FileOps::makeDirs(tmpDir);
+    std::string tmpPath = FileOps::joinPath(tmpDir,
+        documentId + (format.empty() ? "" : "." + format));
+
+    if (!store.retrieveContent(documentId, prevRev->rev, tmpPath)) return false;
+
+    std::string stagePath;
+    auto ref = store.stageContent(tmpPath, stagePath);
+    if (!ref.valid()) return false;
+    if (!store.commitContent(stagePath, ref, documentId, curRev->rev)) return false;
+
+    curRev->contentHash = ref.sha256;
+    curRev->contentSize = static_cast<int64_t>(ref.size);
+    curRev->update();
+    FileOps::deleteFile(tmpPath);
+    return true;
+}
+
+OperationResult Document::revertChanges() {
+    // Guard clauses — all failure conditions up front, success path runs flat.
     if (preCheckoutRevId == 0 && checkedOutPath.empty()) {
         LOG_WARN("[Document] revertChanges: kein aktiver Checkout fuer " + documentId);
         return OperationResult::IO_ERROR;
@@ -432,79 +487,40 @@ OperationResult Document::revertChanges() {
 
     auto curRev = Rosenholz::DocumentRevision::currentRevision(documentId);
     if (!curRev) {
-        LOG_ERROR("[Document] revertChanges: keine aktive Revision fuer " + documentId);
-        return OperationResult::DB_ERROR;
+        LOG_ERROR("[Document] revertChanges: keine aktive Revision"); return OperationResult::DB_ERROR;
     }
     if (curRev->revState != RevState::IN_WORK) {
-        LOG_ERROR("[Document] revertChanges: aktive Revision ist nicht in_work");
-        return OperationResult::DB_ERROR;
+        LOG_ERROR("[Document] revertChanges: Revision ist nicht in_work"); return OperationResult::DB_ERROR;
     }
-
-    // Find the previous revision via parentRev
     if (curRev->parentRev == 0) {
-        // This IS revision 1 — no previous revision to restore from.
-        // Just discard the local copy and leave the revision content empty.
-        if (!checkedOutPath.empty()) {
-            std::remove(checkedOutPath.c_str());
-            checkedOutPath.clear();
-        }
-        preCheckoutRevId = 0;
-        LOG_INFO("[Document] revertChanges: erste Revision — kein Vorzustand vorhanden, "
-                 "ausgecheckte Datei verworfen");
-        return OperationResult::DB_ERROR; // nothing to restore
+        // Rev 1: no parent — discard checkout and return
+        discardCheckout(checkedOutPath, preCheckoutRevId);
+        LOG_INFO("[Document] revertChanges: erste Revision — keine Vorgaenger");
+        return OperationResult::DOC_NO_PARENT_REV;
     }
 
     auto prevRev = Rosenholz::DocumentRevision::loadByRev(documentId, curRev->parentRev);
     if (!prevRev) {
-        LOG_ERROR("[Document] revertChanges: Vorgaenger-Revision " +
-                  std::to_string(curRev->parentRev) + " nicht gefunden");
+        LOG_ERROR("[Document] revertChanges: Vorgaenger-Revision nicht gefunden");
         return OperationResult::DB_ERROR;
     }
 
+    // Success path — flat, no deep nesting
     auto& store = Rosenholz::Archive::ArchiveStore::instance();
+    bool restored = restoreContentFromLMDB(store, documentId, format, prevRev, curRev);
 
-    // Restore previous revision's content into the current in_work revision
-    if (!prevRev->contentHash.empty() && store.isOpen()) {
-        std::string tmpDir = FileOps::joinPath(Config::instance().basePath(), "tmp_revert");
-        FileOps::makeDirs(tmpDir);
-        std::string fname = documentId + (format.empty() ? "" : "." + format);
-        std::string tmpPath = FileOps::joinPath(tmpDir, fname);
-
-        if (store.retrieveContent(documentId, prevRev->rev, tmpPath)) {
-            std::string stagePath;
-            auto ref = store.stageContent(tmpPath, stagePath);
-            if (ref.valid()) {
-                // Overwrite current in_work revision's content in LMDB
-                if (store.commitContent(stagePath, ref, documentId, curRev->rev)) {
-                    curRev->contentHash = ref.sha256;
-                    curRev->contentSize = (int64_t)ref.size;
-                    curRev->update();
-                    fileHash = ref.sha256;
-                    fileSize = (int64_t)ref.size;
-                    update();
-                    FileOps::deleteFile(tmpPath);
-                    if (!checkedOutPath.empty()) {
-                        std::remove(checkedOutPath.c_str());
-                        checkedOutPath.clear();
-                    }
-                    preCheckoutRevId = 0;
-                    LOG_INFO("[Document] revertChanges: Inhalt auf Rev " +
-                             std::to_string(prevRev->rev) + " zurueckgesetzt fuer " + documentId);
-                    return OperationResult::OPERATION_ACK;
-                }
-            }
-        }
+    if (restored) {
+        fileHash = curRev->contentHash;
+        fileSize = curRev->contentSize;
+        update();
+        LOG_INFO("[Document] revertChanges: auf Rev " +
+                 std::to_string(prevRev->rev) + " zurueckgesetzt");
+    } else {
+        LOG_WARN("[Document] revertChanges: kein LMDB-Inhalt in Vorgaenger-Revision");
     }
 
-    // Fallback: no LMDB content in previous revision
-    if (!checkedOutPath.empty()) {
-        std::remove(checkedOutPath.c_str());
-        checkedOutPath.clear();
-    }
-    preCheckoutRevId = 0;
-    LOG_WARN("[Document] revertChanges: Vorgaenger-Revision hat keinen LMDB-Inhalt — "
-             "Arbeitskopie verworfen, Revision-Inhalt unveraendert");
-    return OperationResult::DB_ERROR;
+    discardCheckout(checkedOutPath, preCheckoutRevId);
+    return restored ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
 std::vector<Document::VersionRecord> Document::loadVersions() const {
@@ -621,19 +637,13 @@ bool Document::canEdit() const { return isInWork(); }
 // ── Lifecycle: ensure Main WFI for this document ─────────────
 void Document::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
+    // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
     auto wf = Rosenholz::F77_Engine::startDefault("dok", documentId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
-    auto* db = DatabasePool::instance().get("dok");
-    if (db) db->exec(
-        "UPDATE documents SET release_workflow_id=?, updated_at=? "
-            "WHERE document_id=?;",
-            {BindParam::text(releaseWorkflowId),
-             BindParam::text(nowIso()),
-             BindParam::text(documentId)});
-    LOG_INFO("[F77] Workflow created: " + releaseWorkflowId +
-             " for doc " + documentId);
+    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for dok/" + documentId);
 }
+
 
 // ── revise ────────────────────────────────────────────────────
 //
@@ -810,6 +820,26 @@ bool Document::checkin(const std::string& srcPath) {
     LOG_INFO("[Document] Checked in: " + documentId + " Rev " +
              std::to_string(newRev->rev));
     return true;
+}
+
+
+std::string Document::mfsSchluesselText() const {
+    auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
+    std::ostringstream s;
+    s << "  ID      : " << documentId << "\n"
+      << "  Titel   : " << title << "\n"
+      << "  Typ     : " << docType << "\n"
+      << "  Status  : " << (cur ? cur->revStateStr() : "?") << "\n"
+      << "  F16     : " << projectId << "\n";
+    if (!taskId.empty())        s << "  F22     : " << taskId << "\n";
+    if (!f18OperationId.empty()) s << "  F18     : " << f18OperationId << "\n";
+    if (cur) {
+        auto objs = Rosenholz::DocumentObject::loadForRevision(documentId, cur->rev);
+        for (auto& o : objs)
+            s << "  OBJ     : " << o->objectId << "  " << o->displayName() << "\n";
+    }
+    s << "\n";
+    return s.str();
 }
 
 } // namespace Rosenholz

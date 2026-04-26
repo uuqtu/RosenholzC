@@ -1,20 +1,37 @@
 cmake_minimum_required(VERSION 3.16)
-project(Rosenholz VERSION 2.0.0 LANGUAGES CXX)
+project(Rosenholz VERSION 4.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ── Platform detection ─────────────────────────────────────────
+if(WIN32)
+    message(STATUS "Building for Windows")
+    add_definitions(-DUNICODE -D_UNICODE)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS)
+    add_definitions(-DNOMINMAX -DWIN32_LEAN_AND_MEAN)
+    set(PLATFORM_LIBS ws2_32)
+else()
+    message(STATUS "Building for Unix/Linux")
+    set(PLATFORM_LIBS pthread dl)
+endif()
+
 # ── Find dependencies ─────────────────────────────────────────
+find_package(OpenSSL REQUIRED)
+message(STATUS "OpenSSL: ${OPENSSL_VERSION}")
+
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(SQLITE3 sqlite3)
 
 # ── LMDB (file-content archive) ───────────────────────────
 find_path(LMDB_INCLUDE_DIR lmdb.h
-    HINTS /usr/include /usr/local/include)
+    HINTS /usr/include /usr/local/include
+          $ENV{LMDB_DIR}/include C:/vcpkg/installed/x64-windows/include)
 find_library(LMDB_LIBRARY NAMES lmdb
-    HINTS /usr/lib /usr/local/lib)
+    HINTS /usr/lib /usr/local/lib
+          $ENV{LMDB_DIR}/lib C:/vcpkg/installed/x64-windows/lib)
 if(LMDB_INCLUDE_DIR AND LMDB_LIBRARY)
     message(STATUS "LMDB: ${LMDB_LIBRARY}")
 else()
@@ -81,8 +98,8 @@ set(CORE_SOURCES
 )
 
 set(MODEL_SOURCES
-    src/model/Person.cpp
-    src/model/Team.cpp
+    src/model/person/Person.cpp
+    src/model/team/Team.cpp
     src/model/f16/ProjectF16.cpp
     src/model/f22/TaskF22.cpp
     src/model/dok/Document.cpp
@@ -126,9 +143,19 @@ target_link_libraries(rosenholz_lib PUBLIC
     ${LMDB_LIBRARY}
     ${SQLITE3_LIBRARIES}
     nlohmann_json::nlohmann_json
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    ${PLATFORM_LIBS}
 )
 if(UNIX)
     target_compile_options(rosenholz_lib PRIVATE -Wall -Wextra)
+
+# Windows MSVC-specific options
+if(MSVC)
+    target_compile_options(rosenholz_lib PRIVATE /W3 /wd4996)
+    target_compile_options(rosenholz_cli PRIVATE /W3 /wd4996)
+endif()
+
     target_link_libraries(rosenholz_lib PUBLIC
     ${LMDB_LIBRARY} pthread)
 endif()

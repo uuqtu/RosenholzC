@@ -2,6 +2,7 @@
 // F18Operation.cpp  —  Implementation of the unified F18Operation entity
 // ============================================================
 #include "F18Operation.h"
+#include "../dok/Document.h"
 #include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "F18OperationStep.h"
@@ -33,7 +34,6 @@ void F18Operation::fromRow(const Row& r) {
 
     vorgangId          = g("vorgang_id");
     vorgangType        = g("vorgang_type");
-    projectId          = g("project_id");
     taskId             = g("task_id");
     parentVorgangId    = g("parent_vorgang_id");
     releaseWorkflowId     = g("release_workflow_id");
@@ -132,78 +132,90 @@ void F18Operation::fromRow(const Row& r) {
 
 // ── save ─────────────────────────────────────────────────────
 OperationResult F18Operation::save() const {
-    auto* d = db(); if (!d) return OperationResult::DB_ERROR;
-    auto t = [](const std::string& s) { return BindParam::text(s); };
-    auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
-    auto i = [](int v)     { return BindParam::int64(v); };
-    auto r = [](double v)  { return BindParam::real(v); };
+    auto* d = db();
+    if (!d) return OperationResult::DB_ERROR;
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f18_operations
-        (vorgang_id, vorgang_type, project_id, task_id, parent_vorgang_id, release_workflow_id,
-         title, description, status, owner_id, priority,
-         incident_type, severity, occurred_date, resolved_date,
-         root_cause, immediate_action, resolution,
-         cost_impact, schedule_impact_days, scope_impact, quality_impact,
-         risk_level, probability_score,
-         impact_score_time, impact_score_cost, impact_score_quality, impact_score_scope,
-         overall_risk_score, response_strategy, contingency_plan,
-         trigger_condition, residual_risk_level, cost_reserve, schedule_reserve_days,
-         measure_category, planned_date, actual_date, effectiveness,
-         verification_method, verified_date, verified_by,
-         phase, criteria, acceptance_criteria, findings, gate_result, gate_decision,
-         ac_type, validated_date, validated_by, impact,
-         audience, frequency, channel, responsible,
-         lesson_type, recommendation, applicable_phases,
-         decision_type, rationale, decision_date, decision_by, alternatives_considered,
-         change_type, justification, cr_impact, raised_date,
-         cr_decision_date, cr_decision_rationale, cr_schedule_impact_days,
-         executed_by, execution_date,
-         notes, links, created_at, updated_at)
-        VALUES(?,?,?,?,?,?, ?,?,?,?,?,
-               ?,?,?,?, ?,?,?, ?,?,?,?,
-               ?,?, ?,?,?,?, ?,?,?, ?,?,?,?,
-               ?,?,?,?, ?,?,?,
-               ?,?,?,?,?,?, ?,?,?,?,
-               ?,?,?,?,
-               ?,?,?,
-               ?,?,?,?,?,
-               ?,?,?,?,
-               ?,?,?,
-               ?,?,
-               ?,?,?,?)
+        (vorgang_id, vorgang_type, task_id, parent_vorgang_id, release_workflow_id, title, description, status, owner_id, priority, incident_type, severity, occurred_date, resolved_date, root_cause, immediate_action, resolution, cost_impact, schedule_impact_days, scope_impact, quality_impact, risk_level, probability_score, impact_score_time, impact_score_cost, impact_score_quality, impact_score_scope, overall_risk_score, response_strategy, contingency_plan, trigger_condition, residual_risk_level, cost_reserve, schedule_reserve_days, measure_category, planned_date, actual_date, effectiveness, verification_method, verified_date, verified_by, phase, criteria, acceptance_criteria, findings, gate_result, gate_decision, ac_type, validated_date, validated_by, impact, audience, frequency, channel, responsible, lesson_type, recommendation, applicable_phases, decision_type, rationale, decision_date, decision_by, alternatives_considered, change_type, justification, cr_impact, raised_date, cr_decision_date, cr_decision_rationale, cr_schedule_impact_days, executed_by, execution_date, notes, links, created_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     )SQL", {
-        t(vorgangId), t(vorgangType), n(projectId), n(taskId), n(parentVorgangId), n(releaseWorkflowId),
-        t(title), n(description), t(status), n(ownerId), t(priority),
-        // incident
-        n(incidentType), n(severity), n(occurredDate), n(resolvedDate),
-        n(rootCause), n(immediateAction), n(resolution),
-        r(costImpact), i(scheduleImpactDays), n(scopeImpact), n(qualityImpact),
-        // risk
-        t(riskLevel.empty()?"medium":riskLevel), i(probabilityScore),
-        i(impactScoreTime), i(impactScoreCost), i(impactScoreQuality), i(impactScoreScope),
-        i(overallRiskScore), n(responseStrategy), n(contingencyPlan),
-        n(triggerCondition), n(residualRiskLevel), r(costReserve), i(scheduleReserveDays),
-        // measure
-        n(measureCategory), n(plannedDate), n(actualDate), n(effectiveness),
-        n(verificationMethod), n(verifiedDate), n(verifiedBy),
-        // quality gate
-        n(phase), n(criteria), n(acceptanceCriteria), n(findings), n(gateResult), n(gateDecision),
-        // ac
-        n(acType), n(validatedDate), n(validatedBy), n(impact),
-        // comm plan
-        n(audience), n(frequency), n(channel), n(responsible),
-        // ll
-        n(lessonType), n(recommendation), n(applicablePhases),
-        // dl
-        n(decisionType), n(rationale), n(decisionDate), n(decisionBy), n(alternativesConsidered),
-        // cr
-        n(changeType), n(justification), n(crImpact), n(raisedDate),
-        n(crDecisionDate), n(crDecisionRationale), i(crScheduleImpactDays),
-        // co
-        n(executedBy), n(executionDate),
-        // tail
-        t(notes.empty()?"{}":notes), n(links), t(createdAt), t(updatedAt)
+        BindParam::text(vorgangId),
+        BindParam::text(vorgangType),
+        BindParam::nullOrText(taskId),
+        BindParam::nullOrText(parentVorgangId),
+        BindParam::nullOrText(releaseWorkflowId),
+        BindParam::text(title),
+        BindParam::nullOrText(description),
+        BindParam::text(status),
+        BindParam::nullOrText(ownerId),
+        BindParam::text(priority),
+        BindParam::nullOrText(incidentType),
+        BindParam::nullOrText(severity),
+        BindParam::nullOrText(occurredDate),
+        BindParam::nullOrText(resolvedDate),
+        BindParam::nullOrText(rootCause),
+        BindParam::nullOrText(immediateAction),
+        BindParam::nullOrText(resolution),
+        BindParam::real(costImpact),
+        BindParam::int64(scheduleImpactDays),
+        BindParam::nullOrText(scopeImpact),
+        BindParam::nullOrText(qualityImpact),
+        BindParam::nullOrText(riskLevel),
+        BindParam::int64(probabilityScore),
+        BindParam::int64(impactScoreTime),
+        BindParam::int64(impactScoreCost),
+        BindParam::int64(impactScoreQuality),
+        BindParam::int64(impactScoreScope),
+        BindParam::int64(overallRiskScore),
+        BindParam::nullOrText(responseStrategy),
+        BindParam::nullOrText(contingencyPlan),
+        BindParam::nullOrText(triggerCondition),
+        BindParam::nullOrText(residualRiskLevel),
+        BindParam::real(costReserve),
+        BindParam::int64(scheduleReserveDays),
+        BindParam::nullOrText(measureCategory),
+        BindParam::nullOrText(plannedDate),
+        BindParam::nullOrText(actualDate),
+        BindParam::nullOrText(effectiveness),
+        BindParam::nullOrText(verificationMethod),
+        BindParam::nullOrText(verifiedDate),
+        BindParam::nullOrText(verifiedBy),
+        BindParam::nullOrText(phase),
+        BindParam::nullOrText(criteria),
+        BindParam::nullOrText(acceptanceCriteria),
+        BindParam::nullOrText(findings),
+        BindParam::nullOrText(gateResult),
+        BindParam::nullOrText(gateDecision),
+        BindParam::nullOrText(acType),
+        BindParam::nullOrText(validatedDate),
+        BindParam::nullOrText(validatedBy),
+        BindParam::nullOrText(impact),
+        BindParam::nullOrText(audience),
+        BindParam::nullOrText(frequency),
+        BindParam::nullOrText(channel),
+        BindParam::nullOrText(responsible),
+        BindParam::nullOrText(lessonType),
+        BindParam::nullOrText(recommendation),
+        BindParam::nullOrText(applicablePhases),
+        BindParam::nullOrText(decisionType),
+        BindParam::nullOrText(rationale),
+        BindParam::nullOrText(decisionDate),
+        BindParam::nullOrText(decisionBy),
+        BindParam::nullOrText(alternativesConsidered),
+        BindParam::nullOrText(changeType),
+        BindParam::nullOrText(justification),
+        BindParam::nullOrText(crImpact),
+        BindParam::nullOrText(raisedDate),
+        BindParam::nullOrText(crDecisionDate),
+        BindParam::nullOrText(crDecisionRationale),
+        BindParam::int64(crScheduleImpactDays),
+        BindParam::nullOrText(executedBy),
+        BindParam::nullOrText(executionDate),
+        BindParam::text(notes.empty() ? "{}" : notes),
+        BindParam::nullOrText(links),
+        BindParam::text(createdAt),
+        BindParam::text(nowIso())
     }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
@@ -237,15 +249,13 @@ bool F18Operation::load(const std::string& id) {
 
 // ── Factory ───────────────────────────────────────────────────
 std::shared_ptr<F18Operation> F18Operation::create(
-    const std::string& projectId,
+    const std::string& taskId,
     const std::string& title,
-    const std::string& type,
-    const std::string& taskId)
+    const std::string& type)
 {
     auto v = std::make_shared<F18Operation>();
     v->vorgangId   = genId("F18");
     v->vorgangType = type.empty() ? F18OperationType::GENERIC : type;
-    v->projectId   = projectId;
     v->taskId      = taskId;
     v->title       = title;
     v->status      = "in_work";
@@ -306,22 +316,6 @@ std::shared_ptr<F18Operation> F18Operation::loadById(const std::string& id) {
     auto v = std::make_shared<F18Operation>();
     if (!v->load(id)) return nullptr;
     return v;
-}
-
-std::vector<std::shared_ptr<F18Operation>> F18Operation::loadForProject(
-    const std::string& projectId, const std::string& type)
-{
-    auto* d = db();
-    std::vector<std::shared_ptr<F18Operation>> result;
-    if (!d) return result;
-    std::string sql = "SELECT * FROM f18_operations WHERE project_id=?";
-    std::vector<BindParam> params = {BindParam::text(projectId)};
-    if (!type.empty()) { sql += " AND vorgang_type=?"; params.push_back(BindParam::text(type)); }
-    sql += " ORDER BY created_at DESC;";
-    for (auto& r : d->query(sql, params)) {
-        auto v = std::make_shared<F18Operation>(); v->fromRow(r); result.push_back(v);
-    }
-    return result;
 }
 
 std::vector<std::shared_ptr<F18Operation>> F18Operation::loadForTask(
@@ -521,19 +515,29 @@ bool F18Operation::isWorkflowComplete() const {
 
 void F18Operation::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
+    // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
     auto wf = Rosenholz::F77_Engine::startDefault("f18", vorgangId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
-    status         = "in_work";
-    auto* db = F18Operation::db();
-    if (db) db->exec(
-        "UPDATE f18_operations SET release_workflow_id=?, status='in_work', updated_at=? "
-            "WHERE vorgang_id=?;",
-            {BindParam::text(releaseWorkflowId),
-             BindParam::text(nowIso()),
-             BindParam::text(vorgangId)});
-    LOG_INFO("[F77] Main WFI ensured for F18: " + vorgangId +
-             " wfi=" + releaseWorkflowId);
+    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for f18/" + vorgangId);
+}
+
+
+
+std::string F18Operation::mfsSchluesselText() const {
+    std::ostringstream s;
+    s << "  ID      : " << vorgangId << "\n"
+      << "  Typ     : " << vorgangType << "\n"
+      << "  Status  : " << status << "\n"
+      << "  F22     : " << taskId << "\n";
+    auto docs = Rosenholz::Document::loadForEntity("f18", vorgangId);
+    if (!docs.empty()) {
+        s << "  DOK     :";
+        for (auto& d : docs) s << " " << d->documentId;
+        s << "\n";
+    }
+    s << "\n";
+    return s.str();
 }
 
 } // namespace Rosenholz

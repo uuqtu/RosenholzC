@@ -83,6 +83,8 @@ public:
     /// Ensure all required subdirectories under mfsRoot exist
     static bool ensureMFSTree(const std::string& mfsRoot);
 
+    static bool deleteDir(const std::string& path);  ///< Recursive directory delete
+
 private:
     FileOps() = delete; // static-only class
 };

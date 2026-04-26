@@ -279,14 +279,12 @@ std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
     p->budgetPlanned   = budget;
 
     if (opOk(p->save())) {
-        std::cout << "\n  >> Project created: " << p->regNumber.toString()
-                  << " (" << p->projectId << ")\n\n";
         // write MFS file
         auto& cfg = Rosenholz::Config::instance();
         if (cfg.mfs().enabled) p->writeMFSFile(cfg.mfsPath());
         return p;
     } else {
-        std::cout << "\n  >> ERROR: Project could not be saved.\n\n";
+        std::cout << "\n  >> ERROR: Project could not be saved.\n";
         return nullptr;
     }
 }
@@ -302,6 +300,110 @@ std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
 // Re-loads the project each loop iteration to pick up any
 // changes made by sub-menus.
 
+
+// ── void projectMenu(std::shared_ptr<ProjectF16> p) handlers ──────────────────────────────────────────────
+static bool prjMenuOpt1(std::shared_ptr<ProjectF16> p) {
+    if (p->canEdit()) editMenu(p);
+    else std::cout << "  >> Released — kein Bearbeiten moeglich.\n";
+
+
+    return true;
+}
+
+static bool prjMenuOpt2(std::shared_ptr<ProjectF16> p) {
+    listTasks(p->projectId);
+
+
+    return true;
+}
+
+static bool prjMenuOpt3(std::shared_ptr<ProjectF16> p) {
+    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Aufgaben.\n"; return true; }
+    auto task = createTaskWizard(p->projectId);
+    if (task) {
+std::cout << "  Aufgabe jetzt öffnen? (j/n): ";
+std::string yn; std::getline(std::cin, yn);
+if (yn=="j"||yn=="J") taskMenu(task);
+    }
+
+
+    return true;
+}
+
+static bool prjMenuOpt4(std::shared_ptr<ProjectF16> p) {
+    documentBrowserMenu(p->projectId, "");
+
+
+    return true;
+}
+
+static bool prjMenuOpt5(std::shared_ptr<ProjectF16> p) {
+    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; return true; }
+    auto doc = createDocumentWizard(p->projectId, "");
+    if (doc) documentMenu(doc);
+
+
+    return true;
+}
+
+
+
+static bool prjMenuOpt6(std::shared_ptr<ProjectF16> p) {
+    communicationMenu(p->projectId, "project");
+
+
+    return true;
+}
+
+static bool prjMenuOpt7(std::shared_ptr<ProjectF16> p) {
+    hdr("MEILENSTEIN-NOTIZEN — " + p->projectId.substr(0,20));
+    if (!p->milestones.empty())
+std::cout << "  Aktuell:\n" << p->milestones << "\n";
+    else
+std::cout << "  (keine Notizen)\n";
+    std::cout << "  1.Neu schreiben  2.Anfügen  0.Zurück\n";
+    int ms = readInt("Wahl",0,2);
+    if (ms==1) {
+std::cout << "  Text (leere Zeile = fertig):\n";
+std::string all, line;
+while (std::getline(std::cin, line) && !line.empty())
+    all += line + "\n";
+p->milestones = all; p->update();
+std::cout << "  >> Gespeichert.\n";
+    } else if (ms==2) {
+std::string add = readLine("Anfügen: ");
+if (!add.empty()) {
+    if (!p->milestones.empty()) p->milestones += "\n";
+    p->milestones += add; p->update();
+    std::cout << "  >> Angefügt.\n";
+}
+    }
+
+
+    return true;
+}
+
+static bool prjMenuOpt6_NEW(std::shared_ptr<ProjectF16> p) {
+    mainWorkflowMenu(p);
+
+    return true;
+}
+
+using prjMenuFn = bool(*)(std::shared_ptr<ProjectF16> p);
+static const prjMenuFn prjMenuTable[11] = {
+    nullptr,
+    prjMenuOpt1,
+    prjMenuOpt2,
+    prjMenuOpt3,
+    prjMenuOpt4,
+    prjMenuOpt5,
+    prjMenuOpt6,
+    prjMenuOpt7,
+    prjMenuOpt6,
+    prjMenuOpt7,
+    prjMenuOpt6_NEW,
+};
+
 void projectMenu(std::shared_ptr<ProjectF16> p) {
     while (true) {
         // Reload to show current state
@@ -310,93 +412,17 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
 
         // Block editing if released
         if (p->isReleased())
-            std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n\n";
+            std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
 
         std::cout
-            << "  [PROJEKT]\n"
-            << "    1. Bearbeiten (Edit-Untermenü)\n"
-            << "\n  [F22 AUFGABEN]\n"
-            << "    2. Aufgaben anzeigen\n"
-            << "    3. Neue Aufgabe anlegen\n"
-            << "\n  [DOKUMENTE]\n"
-            << "    4. Dokumente anzeigen\n"
-            << "    5. Neues Dokument anlegen\n"
-            << "\n  [F18 VORGÄNGE]\n"
-            << "    6. F18 Vorgänge anzeigen / öffnen\n"
-            << "    7. Neuen F18 Vorgang anlegen\n"
-            << "\n  [KOMMUNIKATION]\n"
-            << "    8. Communications (Meetings, Calls, ...)\n"
-            << "\n  [MEILENSTEINE]\n"
-            << "    9. Meilenstein-Notizen bearbeiten\n"
-            << "\n  [WORKFLOW]\n"
-            << "   10. Starte Workflow...\n"
-            << "\n    0. Zurück\n";
+            << "  1.Bearbeiten  2.Aufgaben  3.Aufgabe+  4.Dokumente  5.Dok+\n"
+            << "  6.Komm.       7.Meilestein  8.Workflow  0.Zurück\n";
         hr();
 
-        int ch = readInt("Wahl", 0, 10); if (ch==0) break;
-
-        if (ch==1) {
-            if (p->canEdit()) editMenu(p);
-            else std::cout << "  >> Released — kein Bearbeiten moeglich.\n";
-
-        } else if (ch==2) {
-            listTasks(p->projectId);
-
-        } else if (ch==3) {
-            if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Aufgaben.\n"; continue; }
-            auto task = createTaskWizard(p->projectId);
-            if (task) {
-                std::cout << "  Aufgabe jetzt öffnen? (j/n): ";
-                std::string yn; std::getline(std::cin, yn);
-                if (yn=="j"||yn=="J") taskMenu(task);
-            }
-
-        } else if (ch==4) {
-            documentBrowserMenu(p->projectId, "");
-
-        } else if (ch==5) {
-            if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; continue; }
-            auto doc = createDocumentWizard(p->projectId, "");
-            if (doc) documentMenu(doc);
-
-        } else if (ch==6) {
-            f18BrowserMenu(p->projectId, "");
-
-        } else if (ch==7) {
-            if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen F18-Vorgaenge.\n"; continue; }
-            auto v = createF18Wizard(p->projectId, "");
-            if (v) f18Menu(v);
-
-        } else if (ch==8) {
-            communicationMenu(p->projectId, "project");
-
-        } else if (ch==9) {
-            hdr("MEILENSTEIN-NOTIZEN — " + p->projectId.substr(0,20));
-            if (!p->milestones.empty())
-                std::cout << "  Aktuell:\n" << p->milestones << "\n\n";
-            else
-                std::cout << "  (keine Notizen)\n\n";
-            std::cout << "  1.Neu schreiben  2.Anfügen  0.Zurück\n";
-            int ms = readInt("Wahl",0,2);
-            if (ms==1) {
-                std::cout << "  Text (leere Zeile = fertig):\n";
-                std::string all, line;
-                while (std::getline(std::cin, line) && !line.empty())
-                    all += line + "\n";
-                p->milestones = all; p->update();
-                std::cout << "  >> Gespeichert.\n";
-            } else if (ms==2) {
-                std::string add = readLine("Anfügen: ");
-                if (!add.empty()) {
-                    if (!p->milestones.empty()) p->milestones += "\n";
-                    p->milestones += add; p->update();
-                    std::cout << "  >> Angefügt.\n";
-                }
-            }
-
-        } else if (ch==10) {
-            mainWorkflowMenu(p);
-        }
+        int ch = readInt("Wahl", 0, 8);
+        if (ch == 0) break;
+        if (ch >= 1 && ch <= 8 && prjMenuTable[ch])
+            if (!prjMenuTable[ch](p)) break;
     }
 }
 

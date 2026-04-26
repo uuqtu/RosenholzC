@@ -68,7 +68,7 @@ void communicationMenu(const std::string& ownerId, const std::string& ownerType)
         auto comms = Communication::loadForOwner(ownerId, ownerType);
         hdr("COMMUNICATIONS — " + ownerType + " / " + ownerId.substr(0,20));
         if (comms.empty()) {
-            std::cout << "  (keine Communications)\n\n";
+            std::cout << "  (keine Communications)\n";
         } else {
             int n = 1;
             for (auto& c : comms)

@@ -49,7 +49,10 @@ void testSuiteWorkflow() {
         ProjectFixture pfix("F77-Template-Test");
 
         // Build a minimal template
-        auto tpl = R::F77_WorkflowTemplate::create("Minimal","released","f16");
+        // Template uses f22 so mid-steps get F18 operations linked (v4: f22 only)
+        auto task = R::TaskF22::create("WF-Template-Task","spec",pfix.project->projectId);
+        task->save();
+        auto tpl = R::F77_WorkflowTemplate::create("Minimal","released","f22");
         tpl->save();
         auto init = tpl->addTemplateStep("Init","sequential",true,false);
         init.save();
@@ -61,11 +64,11 @@ void testSuiteWorkflow() {
         end.autoApprove = true;
         end.save();
 
-        auto wf = R::F77_Engine::startFromTemplate(tpl->templateId,"f16",
-                                                     pfix.project->projectId,"tester");
+        auto wf = R::F77_Engine::startFromTemplate(tpl->templateId,"f22",
+                                                     task->taskId,"tester");
         CHECK(wf != nullptr, "startFromTemplate returns workflow");
         if (wf) {
-            CHECK(wf->entityType == "f16", "entityType correct");
+            CHECK(wf->entityType == "f22", "entityType correct");
             CHECK(wf->status == "active", "workflow is active");
             CHECK(wf->steps.size() == 3, "3 steps created from template");
 
@@ -106,7 +109,10 @@ void testSuiteWorkflow() {
     SECTION("F77_Engine — fireStep completes workflow and applies targetState");
     {
         ProjectFixture pfix("F77-Fire-Test");
-        auto wf = R::F77_Engine::startDefault("f16", pfix.project->projectId,
+        auto task_fire = R::TaskF22::create("Fire-Task","spec",pfix.project->projectId);
+        task_fire->save();
+        // Complete the linked F18 "Workflow-Aufgaben" before firing mid step
+        auto wf = R::F77_Engine::startDefault("f22", task_fire->taskId,
                                                "released", "system");
         CHECK(wf != nullptr, "workflow created");
         if (!wf) return;
@@ -302,8 +308,10 @@ void testSuiteReporting() {
     SECTION("F18Operation — LessonsLearned type");
     {
         ProjectFixture pfix("LL-F18-Test");
+        auto task_ll = Rosenholz::TaskF22::create("LL-Task", "spec", pfix.project->projectId);
+        task_ll->save();
         auto ll = Rosenholz::F18Operation::create(
-            pfix.project->projectId, "Test-Lessons-Learned",
+            task_ll->taskId, "Test-Lessons-Learned",
             Rosenholz::F18OperationType::LESSONS_LEARNED);
         CHECK(ll != nullptr, "LessonsLearned F18Operation created");
         ll->lessonType = "positive";
@@ -317,9 +325,11 @@ void testSuiteReporting() {
     SECTION("F18Operation — DecisionLog type");
     {
         ProjectFixture pfix("DL-Test-Vorgang");
+        auto task_dl = Rosenholz::TaskF22::create("DL-Task", "spec", pfix.project->projectId);
+        task_dl->save();
         // Create a DecisionLog F18 Operation
         auto dl = Rosenholz::F18Operation::create(
-            pfix.project->projectId, "Test-Entscheidung",
+            task_dl->taskId, "Test-Entscheidung",
             Rosenholz::F18OperationType::DECISION_LOG);
         CHECK(dl != nullptr, "DecisionLog F18Operation created");
         if (dl) {

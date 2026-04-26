@@ -32,7 +32,16 @@
 namespace Rosenholz {
 
 // ── F77_WorkflowTemplateStep ──────────────────────────────────
+// SystemAction — what a system step (isSystem=true) does when auto-approved.
+// Replaces the fragile `title == "Create DB Objects"` magic string.
+// Adding a new system action: add an enum value + a case in executeSystemStep().
+enum class SystemAction {
+    NONE,               // Not a system step (default)
+    COMMIT_DB_OBJECTS,  // Commit all uncommitted DocumentObjects to LMDB archive
+};
+
 struct F77_WorkflowTemplateStep {
+    // Mirror of F77_WorkflowStep.systemAction — set when defining the template.
     std::string tplStepId;
     std::string templateId;
     std::string title;
@@ -54,6 +63,7 @@ struct F77_WorkflowTemplateStep {
     bool        requiresComment    { false };
     bool        requiresDocument   { false };
     bool        isSystem           { false }; ///< Auto-added step, cannot be edited/deleted
+    SystemAction systemAction     { SystemAction::NONE }; ///< what this system step does
 
     std::string createdAt;
     std::string updatedAt;
@@ -130,6 +140,7 @@ struct F77_WorkflowStep {
     bool        requiresComment { false };
     bool        requiresDocument{ false };
     bool        isSystem        { false }; ///< System-managed, cannot be skipped/deleted
+    SystemAction systemAction   { SystemAction::NONE }; ///< what this step does when auto-executed
     std::string completedDate;
     std::string createdAt;
     std::string updatedAt;
@@ -242,6 +253,8 @@ public:
     /// Remove the workflow ID from the entity (after cancel/complete).
     static void detachWorkflow(const std::string& entityType,
                                 const std::string& entityId);
+    // Cancel a running workflow: sets status=cancelled, detaches from entity.
+    static void cancelWorkflow(F77_Workflow& wf);
 
     static bool canRelease(
         const std::string& entityType,
@@ -278,16 +291,18 @@ private:
 
 
 struct Version {
-    static constexpr int  major       = 2;
+    static constexpr int  major       = 4;
     static constexpr int  minor       = 0;
     static constexpr int  patch       = 0;
-    static constexpr char tag[]       = "refactor";
+    static constexpr char tag[]       = "";
     static constexpr char buildDate[] = __DATE__;
 
     static std::string toString() {
-        return std::to_string(major) + "." +
-               std::to_string(minor) + "." +
-               std::to_string(patch) + "-" + tag;
+        std::string v = std::to_string(major) + "." +
+                        std::to_string(minor) + "." +
+                        std::to_string(patch);
+        if (tag[0] != '\0') v += std::string("-") + tag;
+        return v;
     }
     static std::string full() {
         return "Rosenholz PM v" + toString() + " (built " + buildDate + ")";

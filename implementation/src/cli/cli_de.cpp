@@ -24,22 +24,111 @@ void cmdDe(const std::vector<std::string>& /*args*/) {
 
 
 static void printTeam(const Team& t) {
-    auto row = [&](const std::string& k, const std::string& v) {
-        std::cout << "  | " << std::left << std::setw(22) << k
-                  << std::setw(38) << v << "|\n";
-    };
-    std::cout << "  +" << std::string(60,'-') << "+\n";
-    row("ID",          t.teamId);
-    row("Name",        t.name);
-    row("Typ",         fval(t.type));
-    row("Lead-ID",     fval(t.leadId));
-    row("Parent-Team", fval(t.parentTeamId));
-    row("Status",      t.status);
-    row("Standort",    fval(t.location));
-    row("Budget",      t.budgetAllocated > 0 ?
-                       std::to_string((int)t.budgetAllocated) + " EUR" : "—");
-    std::cout << "  +" << std::string(60,'-') << "+\n\n";
+    hdr("DE " + t.regNumber.toString() + "  " + t.name.substr(0,38));
+    std::cout << "  ID:" << t.teamId
+              << "  Typ:" << t.type
+              << "  Status:" << t.status << "\n";
+    if (!t.leadId.empty())
+        std::cout << "  Lead:" << t.leadId.substr(0,26) << "\n";
 }
+
+
+// ── static void teamDetailMenu(std::shared_ptr<Team> t) handlers ──────────────────────────────────────────────
+static bool tmdMenuOpt1(std::shared_ptr<Team> t) {
+    std::string n = readOpt("Neuer Name (leer=unverändert): ");
+    if (!n.empty()) t->name = n;
+    t->type  = readOpt("Typ (delivery/platform/governance/advisory/ops, leer=delivery): ");
+    t->location  = readOpt("Standort: ");
+            t->update();
+    std::cout << "  >> Gespeichert.\n";
+
+    return true;
+}
+
+static bool tmdMenuOpt2(std::shared_ptr<Team> t) {
+    std::string pid = readLine("Neue Lead Person-ID: ");
+    if (opOk(t->reassignLead(pid)))
+std::cout << "  >> Lead geändert: " << pid << "\n";
+    else
+std::cout << "  >> Fehler.\n";
+
+    return true;
+}
+
+static bool tmdMenuOpt3(std::shared_ptr<Team> t) {
+    std::string pid = readOpt("Parent-Team-ID (leer=kein Parent): ");
+    t->parentTeamId = pid;
+    t->update();
+    std::cout << "  >> Parent gesetzt.\n";
+
+    return true;
+}
+
+static bool tmdMenuOpt4(std::shared_ptr<Team> t) {
+    std::string pid = readLine("Person-ID: ");
+    if (pid.empty()) return true;
+    std::string role = readOpt("Rolle (developer/qa/pm/designer/..., leer=member): ");
+    if (role.empty()) role = "member";
+    std::string allStr = readOpt("Allokation % (leer=100): ");
+    int alloc = 100;
+    if (!allStr.empty()) try { alloc = std::stoi(allStr); } catch(...) {}
+    auto m = t->addMember(pid, role);
+    if (m) {
+m->allocationPct = (double)alloc;
+m->save();
+std::cout << "  >> Mitglied hinzugefügt: " << pid << "\n";
+    } else {
+std::cout << "  >> Fehler beim Hinzufügen.\n";
+    }
+
+    return true;
+}
+
+static bool tmdMenuOpt5(std::shared_ptr<Team> t) {
+    if (t->members.empty()) { std::cout << "  Keine Mitglieder.\n"; return true; }
+    std::cout << "  Mitglieder:\n";
+    int n = 1;
+    for (auto& m : t->members)
+std::cout << "    " << n++ << ". " << m->personId << "\n";
+    int pick = readInt("Nummer", 1, (int)t->members.size());
+    auto& m = t->members[pick-1];
+    m->remove();
+    std::cout << "  >> Mitglied entfernt.\n";
+
+    return true;
+}
+
+static bool tmdMenuOpt6(std::shared_ptr<Team> t) {
+    std::string bStr = readOpt("Budget EUR: ");
+    if (!bStr.empty()) try { t->budgetAllocated = std::stod(bStr); } catch(...) {}
+    t->update();
+    std::cout << "  >> Budget gesetzt: " << (int)t->budgetAllocated << " EUR\n";
+
+    return true;
+}
+
+static bool tmdMenuOpt7(std::shared_ptr<Team> t) {
+    std::cout << "  Status: 1.active  2.inactive  3.archived\n";
+    int s = readInt("Status", 1, 3);
+    static const char* stats[] = {"active","inactive","archived"};
+    t->status = stats[s-1];
+    t->update();
+    std::cout << "  >> Status: " << t->status << "\n";
+
+    return true;
+}
+
+using tmdMenuFn = bool(*)(std::shared_ptr<Team> t);
+static const tmdMenuFn tmdMenuTable[8] = {
+    nullptr,
+    tmdMenuOpt1,
+    tmdMenuOpt2,
+    tmdMenuOpt3,
+    tmdMenuOpt4,
+    tmdMenuOpt5,
+    tmdMenuOpt6,
+    tmdMenuOpt7,
+};
 
 static void teamDetailMenu(std::shared_ptr<Team> t) {
     while (true) {
@@ -83,76 +172,8 @@ static void teamDetailMenu(std::shared_ptr<Team> t) {
                      "  7.Status ändern        0.Zurück\n";
         int ch = readInt("Wahl", 0, 7);
         if (ch == 0) break;
-
-        else if (ch == 1) {
-            std::string n = readOpt("Neuer Name (leer=unverändert): ");
-            if (!n.empty()) t->name = n;
-            t->type  = readOpt("Typ (delivery/platform/governance/advisory/ops, leer=delivery): ");
-            t->location  = readOpt("Standort: ");
-                            t->update();
-            std::cout << "  >> Gespeichert.\n";
-        }
-
-        else if (ch == 2) {
-            std::string pid = readLine("Neue Lead Person-ID: ");
-            if (opOk(t->reassignLead(pid)))
-                std::cout << "  >> Lead geändert: " << pid << "\n";
-            else
-                std::cout << "  >> Fehler.\n";
-        }
-
-        else if (ch == 3) {
-            std::string pid = readOpt("Parent-Team-ID (leer=kein Parent): ");
-            t->parentTeamId = pid;
-            t->update();
-            std::cout << "  >> Parent gesetzt.\n";
-        }
-
-        else if (ch == 4) {
-            std::string pid = readLine("Person-ID: ");
-            if (pid.empty()) continue;
-            std::string role = readOpt("Rolle (developer/qa/pm/designer/..., leer=member): ");
-            if (role.empty()) role = "member";
-            std::string allStr = readOpt("Allokation % (leer=100): ");
-            int alloc = 100;
-            if (!allStr.empty()) try { alloc = std::stoi(allStr); } catch(...) {}
-            auto m = t->addMember(pid, role);
-            if (m) {
-                m->allocationPct = (double)alloc;
-                m->save();
-                std::cout << "  >> Mitglied hinzugefügt: " << pid << "\n";
-            } else {
-                std::cout << "  >> Fehler beim Hinzufügen.\n";
-            }
-        }
-
-        else if (ch == 5) {
-            if (t->members.empty()) { std::cout << "  Keine Mitglieder.\n"; continue; }
-            std::cout << "  Mitglieder:\n";
-            int n = 1;
-            for (auto& m : t->members)
-                std::cout << "    " << n++ << ". " << m->personId << "\n";
-            int pick = readInt("Nummer", 1, (int)t->members.size());
-            auto& m = t->members[pick-1];
-            m->remove();
-            std::cout << "  >> Mitglied entfernt.\n";
-        }
-
-        else if (ch == 6) {
-            std::string bStr = readOpt("Budget EUR: ");
-            if (!bStr.empty()) try { t->budgetAllocated = std::stod(bStr); } catch(...) {}
-            t->update();
-            std::cout << "  >> Budget gesetzt: " << (int)t->budgetAllocated << " EUR\n";
-        }
-
-        else if (ch == 7) {
-            std::cout << "  Status: 1.active  2.inactive  3.archived\n";
-            int s = readInt("Status", 1, 3);
-            static const char* stats[] = {"active","inactive","archived"};
-            t->status = stats[s-1];
-            t->update();
-            std::cout << "  >> Status: " << t->status << "\n";
-        }
+        if (ch >= 1 && ch <= 7 && tmdMenuTable[ch])
+            if (!tmdMenuTable[ch](t)) break;
     }
 }
 
@@ -162,7 +183,7 @@ void teamMenu() {
 
         hdr("DIENSTEINHEITEN (DE)");
         if (teams.empty()) {
-            std::cout << "  (keine Diensteinheiten)\n\n";
+            std::cout << "  (keine Diensteinheiten)\n";
         } else {
             std::cout << "  " << std::left
                       << std::setw(5)  << "#"
@@ -190,7 +211,7 @@ void teamMenu() {
 
         else if (ch == 1) {
             std::string name = readLine("Name der Diensteinheit: ");
-            if (name.empty()) continue;
+            if (name.empty()) return;
             std::string typ = readOpt("Typ (delivery/platform/governance/advisory/ops, leer=delivery): ");
             if (typ.empty()) typ = "delivery";
             auto t = Team::create(name, typ);
@@ -204,7 +225,7 @@ void teamMenu() {
         }
 
         else if (ch == 2) {
-            if (teams.empty()) { std::cout << "  Keine Teams.\n"; continue; }
+            if (teams.empty()) { std::cout << "  Keine Teams.\n"; return; }
             int n = readInt("Nummer", 1, (int)teams.size());
             teamDetailMenu(teams[n-1]);
         }

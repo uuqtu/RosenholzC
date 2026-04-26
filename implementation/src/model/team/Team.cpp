@@ -1,13 +1,13 @@
 // ============================================================
 // Team.cpp  —  Team and TeamMember implementation
 // ============================================================
-#include "Team.h"
-#include "../core/OperationResult.h"
-#include "../core/Database.h"
-#include "../core/Logger.h"
-#include "Utils.h"
-#include "../core/Repository.h"
-#include "../core/RegNumber.h"
+#include "../team/Team.h"
+#include "../../core/OperationResult.h"
+#include "../../core/Database.h"
+#include "../../core/Logger.h"
+#include "../Utils.h"
+#include "../../core/Repository.h"
+#include "../../core/RegNumber.h"
 
 using json = nlohmann::json;
 namespace Rosenholz {
@@ -194,7 +194,7 @@ std::shared_ptr<Team> Team::create(
     LOG_INFO("Creating Team: " + name_);
     auto t = std::make_shared<Team>();
     t->teamId       = genId("DE");
-    t->regNumber    = RegNumberGenerator::next(RegDept::TEAM);
+    t->regNumber    = RegNumber::fromString(t->teamId);
     t->name         = name_;
     t->type         = type_;
     t->parentTeamId = parentId;

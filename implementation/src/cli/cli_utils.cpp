@@ -55,14 +55,13 @@ bool isId(const std::string& s) {
 // ── Display primitives ────────────────────────────────────────
 
 void hr() {
-    std::cout << "  " << std::string(54, '-') << "\n";
+    // compact mode: no separator line
+    (void)0;
 }
 
 void hdr(const std::string& t) {
-    std::cout << "\n  +" << std::string(52, '-') << "+\n";
-    std::string line = t.size() > 50 ? t.substr(0, 50) : t;
-    std::cout << "  |  " << std::left << std::setw(49) << line << "|\n";
-    std::cout << "  +" << std::string(52, '-') << "+\n";
+    std::string line = t.size() > 54 ? t.substr(0, 54) : t;
+    std::cout << "  -- " << line << " --\n";
 }
 
 std::string fval(const std::string& v) {
@@ -166,74 +165,43 @@ bool yesno(const std::string& prompt) {
 // ── Entity print functions ─────────────────────────────────────
 
 void printProject(const ProjectF16& p) {
-    auto row = [](const std::string& k, const std::string& v) {
-        std::cout << "  | " << std::left << std::setw(10) << k
-                  << std::setw(40) << v << "|\n";
-    };
-    hdr("F16 — " + p.regNumber.toString() + "  " + p.title.substr(0,30));
-    std::cout << "  +" << std::string(52,'-') << "+\n";
-    row("ID (rh -f16 <id>)", p.projectId);
-    row("Status",   p.status + " / " + p.phase);
-    row("Lead",     p.leadId.empty() ? "—" : p.leadId.substr(0,26));
-    row("Budget",   std::to_string((int)p.budgetPlanned) + " " + p.currency);
-    row("CPI/SPI",  std::to_string(p.cpi).substr(0,4) + " / " + std::to_string(p.spi).substr(0,4));
-    row("Start",    p.startDatePlanned.empty() ? "—" : p.startDatePlanned.substr(0,10));
-    row("Ende",     p.endDatePlanned.empty()   ? "—" : p.endDatePlanned.substr(0,10));
+    hdr("F16 " + p.regNumber.toString() + "  " + p.title.substr(0,38));
+    std::cout << "  ID:" << p.projectId
+              << "  Status:" << p.status << "/" << p.sizeClass << "\n";
+    if (!p.leadId.empty() || p.budgetPlanned > 0)
+        std::cout << "  Lead:" << (p.leadId.empty()?"—":p.leadId.substr(0,26))
+                  << "  Budget:" << (int)p.budgetPlanned << " " << p.currency << "\n";
+    if (!p.startDatePlanned.empty() || !p.endDatePlanned.empty())
+        std::cout << "  " << (p.startDatePlanned.empty()?"—":p.startDatePlanned.substr(0,10))
+                  << " → " << (p.endDatePlanned.empty()?"—":p.endDatePlanned.substr(0,10)) << "\n";
     if (!p.releaseWorkflowId.empty())
-        row("F77 WFI", p.releaseWorkflowId.substr(0,26));
-    if (!p.milestones.empty())
-        std::cout << "  Meilsteine:\n" << p.milestones.substr(0,120) << "\n";
-    std::cout << "  +" << std::string(52,'-') << "+\n\n";
+        std::cout << "  WFI:" << p.releaseWorkflowId.substr(0,36) << "\n";
 }
-
-
 void printTask(const TaskF22& t) {
-    auto row = [](const std::string& k, const std::string& v) {
-        std::cout << "  | " << std::left << std::setw(10) << k
-                  << std::setw(40) << v << "|\n";
-    };
-    hdr("F22 — " + t.regNumber.toString() + "  " + t.title.substr(0,30));
-    std::cout << "  +" << std::string(52,'-') << "+\n";
-    row("ID (rh -f22 <id>)", t.taskId);
-    row("Status", t.status + " / " + t.priority);
-    row("Projekt",t.projectId.substr(0,26));
-    row("Person", t.assigneeId.empty() ? "—" : t.assigneeId.substr(0,26));
-    row("Fortsch",std::to_string(t.percentComplete) + "%");
-    row("Start",  t.startDatePlanned.empty() ? "—" : t.startDatePlanned.substr(0,10));
-    row("Ende",   t.dueDatePlanned.empty()   ? "—" : t.dueDatePlanned.substr(0,10));
-    if (!t.releaseWorkflowId.empty())
-        row("F77 WFI", t.releaseWorkflowId.substr(0,26));
-    std::cout << "  +" << std::string(52,'-') << "+\n\n";
-}
-
-
-void printDocument(const Document& d) {
-    hdr("DOK — " + d.documentId.substr(0,26) + "  " + d.title.substr(0,24));
-    // Show current revision state (the authoritative lifecycle state)
-    auto curRev = Rosenholz::DocumentRevision::currentRevision(d.documentId);
-    std::string revInfo = curRev
-        ? "Rev " + std::to_string(curRev->rev) + " [" + curRev->revStateStr() + "]"
-        : "(keine Revision)";
-    std::cout << "  Revision   : " << revInfo << "\n";
-    std::cout << "  Dok-Status : " << revStateToString(d.currentRevisionState()) << "\n";
-    std::cout << "  Typ        : " << d.docType << " / " << d.format << "\n";
-    std::cout << "  Version    : " << d.version << "\n";
-    std::cout << "  Projekt    : " << (d.projectId.empty() ? "—" : d.projectId.substr(0,32)) << "\n";
-    if (!d.taskId.empty())
-        std::cout << "  Aufgabe    : " << d.taskId.substr(0,32) << "\n";
-    if (!d.releaseWorkflowId.empty())
-        std::cout << "  Main WFI   : " << d.releaseWorkflowId.substr(0,36) << "\n";
-    // Show current revision
-    auto cur = DocumentRevision::currentRevision(d.documentId);
-    if (cur)
-        std::cout << "  Revision   : Rev " << cur->rev
-                  << " [" << cur->revStateStr() << "]"
-                  << (cur->superseded ? "" : " ← aktiv") << "\n";
-    else
-        std::cout << "  Revision   : (keine)\n";
-    if (!d.filePath.empty())
-        std::cout << "  Datei      : " << FileOps::baseName(d.filePath) << "\n";
+    hdr("F22 " + t.regNumber.toString() + "  " + t.title.substr(0,38));
+    std::cout << "  ID:" << t.taskId
+              << "  " << t.status << "/" << t.priority
+              << "  " << t.percentComplete << "%\n";
+    std::cout << "  Projekt:" << t.projectId.substr(0,26);
+    if (!t.assigneeId.empty()) std::cout << "  Person:" << t.assigneeId.substr(0,26);
     std::cout << "\n";
+    if (!t.startDatePlanned.empty() || !t.dueDatePlanned.empty())
+        std::cout << "  " << (t.startDatePlanned.empty()?"—":t.startDatePlanned.substr(0,10))
+                  << " → " << (t.dueDatePlanned.empty()?"—":t.dueDatePlanned.substr(0,10)) << "\n";
+    if (!t.releaseWorkflowId.empty())
+        std::cout << "  WFI:" << t.releaseWorkflowId.substr(0,36) << "\n";
+}
+void printDocument(const Document& d) {
+    hdr("DOK " + d.documentId.substr(0,26) + "  " + d.title.substr(0,28));
+    auto curRev = Rosenholz::DocumentRevision::currentRevision(d.documentId);
+    std::cout << "  " << d.docType << "/" << d.format
+              << "  Rev:" << (curRev ? std::to_string(curRev->rev) + "[" + curRev->revStateStr() + "]" : "—")
+              << "  v" << d.version << "\n";
+    std::cout << "  Projekt:" << (d.projectId.empty()?"—":d.projectId.substr(0,26));
+    if (!d.taskId.empty()) std::cout << "  Task:" << d.taskId.substr(0,26);
+    std::cout << "\n";
+    if (!d.releaseWorkflowId.empty())
+        std::cout << "  WFI:" << d.releaseWorkflowId.substr(0,36) << "\n";
 }
 
 
@@ -246,9 +214,9 @@ void listDocuments(const std::vector<std::shared_ptr<Document>>& docs,
         auto cur = DocumentRevision::currentRevision(d->documentId);
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << std::left << std::setw(28) << d->title.substr(0,26)
-                  << "  " << std::setw(12) << revStateToString(d->currentRevisionState())
+                  << "  " << std::setw(12) << d->currentRevisionState()
                   << "  v" << d->version;
-        if (cur) std::cout << "  [Rev " << cur->rev << " " << cur->revStateStr() << "]";
+        if (cur) std::cout << "  [Rev " << cur->rev << " " << cur->revState << "]";
         std::cout << "\n";
     }
     std::cout << "\n";

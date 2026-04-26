@@ -3,6 +3,10 @@
 // ============================================================
 
 #include "RegNumber.h"
+#include <iomanip>
+#include <sstream>
+#include <vector>
+#include "Config.h"
 #include "Database.h"
 #include "Logger.h"
 #include <chrono>
@@ -14,21 +18,37 @@ namespace Rosenholz {
 
 // ── RegNumber struct ─────────────────────────────────────────
 std::string RegNumber::toString() const {
+    // Format: {de-kürzel}/{type}/{seq:04d}/{year2}
+    // e.g.   XV/F16/0001/26
+    // de-kürzel comes from Config; dept holds the type code (F16, F22, etc.)
+    const std::string& de = Config::instance().registratur().diensteinheitKuerzel;
     std::ostringstream oss;
-    oss << dept << "/" << sequence << "/" << year;
+    oss << de << "/" << dept << "/"
+        << std::setw(4) << std::setfill('0') << sequence
+        << "/" << (year % 100);
     return oss.str();
 }
 
 RegNumber RegNumber::fromString(const std::string& s) {
+    // Accepts both formats:
+    //   Old: XV/0042/2026 (dept=XV, seq=42, year=2026)
+    //   New: XV/F16/0001/26 (de=XV, dept=F16, seq=1, year2=26 → 2000+26)
     RegNumber rn;
-    auto p1 = s.find('/');
-    if (p1 == std::string::npos) return rn;
-    auto p2 = s.find('/', p1 + 1);
-    if (p2 == std::string::npos) return rn;
-
-    rn.dept     = s.substr(0, p1);
-    rn.sequence = std::stoll(s.substr(p1 + 1, p2 - p1 - 1));
-    rn.year     = std::stoi(s.substr(p2 + 1));
+    std::vector<std::string> parts;
+    std::string tok; std::istringstream ss(s);
+    while (std::getline(ss, tok, '/')) parts.push_back(tok);
+    if (parts.size() == 4) {
+        // New format: de / type / seq / year2
+        rn.dept     = parts[1];
+        rn.sequence = std::stoll(parts[2]);
+        int y2      = std::stoi(parts[3]);
+        rn.year     = (y2 < 100) ? 2000 + y2 : y2;
+    } else if (parts.size() == 3) {
+        // Old format: dept / seq / year
+        rn.dept     = parts[0];
+        rn.sequence = std::stoll(parts[1]);
+        rn.year     = std::stoi(parts[2]);
+    }
     return rn;
 }
 
@@ -109,8 +129,11 @@ RegNumber RegNumberGenerator::peek(const std::string& dept) {
 }
 
 std::string RegNumberGenerator::format(const std::string& dept, int64_t seq, int year) {
+    const std::string& de = Config::instance().registratur().diensteinheitKuerzel;
     std::ostringstream oss;
-    oss << dept << "/" << seq << "/" << year;
+    oss << de << "/" << dept << "/"
+        << std::setw(4) << std::setfill('0') << seq
+        << "/" << (year % 100);
     return oss.str();
 }
 

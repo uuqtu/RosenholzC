@@ -22,18 +22,17 @@
 namespace Rosenholz {
 
 /// Current schema versions — bump these when adding migrations
-// ── Schema baseline v2 ────────────────────────────────────────
-// This codebase IS the v2 baseline. No backwards compatibility.
-// Fresh databases are created at v2 directly via SQL files.
-// Increment a version here AND add a delta in registry() for
-// future schema changes going forward from this baseline.
+// ── Schema baseline v4 ────────────────────────────────────────
+// v4: F18 exclusively owned by F22 (removed F16→F18 relationship).
+// No backwards compatibility with v2/v3 databases.
+// Fresh databases start at v4 directly via SQL files.
 struct SchemaVersions {
-    static constexpr int core      = 2;  // v2 baseline
-    static constexpr int f16       = 2;  // v2 baseline
-    static constexpr int f22       = 1;  // v1 initial
-    static constexpr int f77       = 2;  // v2 baseline
-    static constexpr int dok       = 2;  // v2 baseline
-    static constexpr int f18       = 2;  // v2 baseline (unified F18 schema)
+    static constexpr int core      = 4;  // v4 baseline
+    static constexpr int f16       = 4;  // v4 baseline
+    static constexpr int f22       = 4;  // v4 baseline
+    static constexpr int f77       = 4;  // v4 baseline
+    static constexpr int dok       = 4;  // v4 baseline
+    static constexpr int f18       = 4;  // v4: no project_id, task_id required
 };
 
 /// A single migration step

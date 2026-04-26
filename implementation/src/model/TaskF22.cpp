@@ -9,7 +9,6 @@
 #include "Utils.h"
 #include "../core/Repository.h"
 #ifndef _WIN32
-#include <sys/stat.h>
 #endif
 #include "../core/RegNumber.h"
 #include "../core/FileOps.h"
@@ -150,7 +149,7 @@ bool TaskF22::load(const std::string& id) {
     auto* db = DatabasePool::instance().get("projects");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM tasks WHERE task_id=?;", {BindParam::text(id)});
-    if (rows.empty()) { LOG_WARN("TaskF22 not found: " + id); return false; }
+    if (rows.empty()) { LOG_DEBUG("TaskF22 not found: " + id); return false; }
     fromRow(rows[0]);
     loadQTCSLinks();
     return true;

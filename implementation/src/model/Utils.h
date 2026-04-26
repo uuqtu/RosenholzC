@@ -11,6 +11,7 @@
 // ============================================================
 #include "../core/Database.h"
 #include "../core/Config.h"
+#include "../core/RegNumber.h"
 #include <string>
 #include <chrono>
 #include <ctime>
@@ -65,24 +66,31 @@ namespace detail {
 /// Generate a DDR-style internal ID.
 /// typeCode: F16, F22, F18, DOK, MSR, QG, KPI, LL, DL, CR, AC, MTG, MS, RISK, TRK, PER, DE, etc.
 inline std::string genId(const std::string& typeCode) {
+    // Persistent, per-type sequence via RegNumberGenerator (SQLite-backed).
+    // Format: {de}/{type}/{seq:04d}/{year2}  e.g.  XV/F16/0001/26
+    try {
+        auto rn = RegNumberGenerator::next(typeCode);
+        if (rn.isValid()) return rn.toString();
+    } catch (...) {}
+
+    // Fallback (DB unavailable): in-memory counter + 2-digit year
     uint32_t seq = detail::seqCounter().fetch_add(1);
     int year = currentYear();
-
-    // Get department code from config (may not be loaded yet → fallback "XX")
     std::string de = "XX";
     try {
         const std::string& cfg = Config::instance().registratur().diensteinheitKuerzel;
         if (!cfg.empty()) de = cfg;
     } catch (...) {}
-
     std::ostringstream o;
     o << de << "/" << typeCode << "/" << std::setw(4) << std::setfill('0') << seq
-      << "/" << year;
+      << "/" << (year % 100);
     return o.str();
 }
 
 /// Return NULL BindParam when string is empty, TEXT otherwise.
 /// Prevents FK constraint failures on soft references.
+// textOrNull: legacy alias — use BindParam::nullOrText() in new code
+// Kept for compatibility with non-compiled v2 model files.
 inline BindParam textOrNull(const std::string& s) {
     return s.empty() ? BindParam::null() : BindParam::text(s);
 }

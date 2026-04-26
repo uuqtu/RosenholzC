@@ -1,12 +1,12 @@
 // ============================================================
 // Person.cpp
 // ============================================================
-#include "Person.h"
-#include "../core/Database.h"
-#include "../core/Logger.h"
-#include "Utils.h"
-#include "../core/Repository.h"
-#include "../core/RegNumber.h"
+#include "../person/Person.h"
+#include "../../core/Database.h"
+#include "../../core/Logger.h"
+#include "../Utils.h"
+#include "../../core/Repository.h"
+#include "../../core/RegNumber.h"
 
 using json = nlohmann::json;
 namespace Rosenholz {
@@ -19,7 +19,7 @@ std::shared_ptr<Person> Person::create(
     LOG_INFO("Creating Person: " + first + " " + last);
     auto p = std::make_shared<Person>();
     p->personId   = genId("PER");
-    p->regNumber  = RegNumberGenerator::next(RegDept::PERSON);
+    p->regNumber  = RegNumber::fromString(p->personId);
     p->firstName  = first;
     p->lastName   = last;
     p->email      = email_;

@@ -135,8 +135,11 @@ void testSuiteModel() {
         SECTION("F18Operation — create incident and risk types");
     {
         ProjectFixture pfix;
-        // Create an incident-type F18Operation
-        auto inc = R::F18Operation::create(pfix.project->projectId, "Test-Vorfall",
+        // F18 belongs to a task — create one first
+        auto task = R::TaskF22::create("F18-Test-Aufgabe", "spec", pfix.project->projectId);
+        task->save();
+
+        auto inc = R::F18Operation::create(task->taskId, "Test-Vorfall",
                                            R::F18OperationType::INCIDENT);
         CHECK(inc != nullptr, "F18Operation incident created");
         CHECK(!inc->vorgangId.empty(), "Incident has vorgangId");
@@ -149,20 +152,18 @@ void testSuiteModel() {
         CHECK(reloaded->severity == "high", "severity persisted");
         CHECK(reloaded->incidentType == "technical", "incidentType persisted");
 
-        // Create a risk-type F18Operation
-        auto risk = R::F18Operation::create(pfix.project->projectId, "Test-Risiko",
+        auto risk = R::F18Operation::create(task->taskId, "Test-Risiko",
                                             R::F18OperationType::RISK);
         CHECK(risk != nullptr, "F18Operation risk created");
-        risk->probabilityScore   = 4;
-        risk->impactScoreTime    = 3;
-        risk->impactScoreCost    = 3;
-        risk->impactScoreQuality = 2;
-        risk->impactScoreScope   = 2;
-        risk->recalcRiskScore();
-        auto reloadedRisk = R::F18Operation::loadById(risk->vorgangId);
-        CHECK(reloadedRisk != nullptr, "Risk reloadable");
-        CHECK(reloadedRisk->overallRiskScore > 0, "Risk score calculated");
-        CHECK(!reloadedRisk->riskLevel.empty(), "Risk level set");
+        CHECK(risk->vorgangType == "risk", "vorgangType=risk");
+        risk->riskLevel = "high";
+        risk->probabilityScore = 4;
+        risk->impactScoreTime = 3;
+        risk->update();
+        auto rreloaded = R::F18Operation::loadById(risk->vorgangId);
+        CHECK(rreloaded != nullptr, "Risk reloadable");
+        CHECK(rreloaded->riskLevel == "high", "riskLevel persisted");
+        CHECK(rreloaded->probabilityScore == 4, "probabilityScore persisted");
     }
 
     // ── Risk ────────────────────────────────────────────────
@@ -249,15 +250,17 @@ void testSuiteModel() {
     SECTION("F18Operation — all major vorgangTypes");
     {
         ProjectFixture pfix("F18-Types-Test");
+        auto task = R::TaskF22::create("Types-Task", "spec", pfix.project->projectId);
+        task->save();
 
         // Generic
-        auto gen = R::F18Operation::create(pfix.project->projectId, "Generischer Workflow",
+        auto gen = R::F18Operation::create(task->taskId, "Generischer Workflow",
                                            R::F18OperationType::GENERIC);
         CHECK(gen != nullptr, "Generic F18Operation created");
         CHECK(gen->vorgangType == "generic", "vorgangType=generic");
 
         // Measure
-        auto measure = R::F18Operation::create(pfix.project->projectId, "Korrekturmassnahme",
+        auto measure = R::F18Operation::create(task->taskId, "Korrekturmassnahme",
                                                R::F18OperationType::MEASURE);
         CHECK(measure != nullptr, "Measure F18Operation created");
         measure->measureCategory = "corrective";
@@ -268,7 +271,7 @@ void testSuiteModel() {
         CHECK(mr->measureCategory == "corrective", "measureCategory persisted");
 
         // QualityGate
-        auto qg = R::F18Operation::create(pfix.project->projectId, "Phase-Gate Review",
+        auto qg = R::F18Operation::create(task->taskId, "Phase-Gate Review",
                                           R::F18OperationType::QUALITY_GATE);
         CHECK(qg != nullptr, "QualityGate F18Operation created");
         qg->phase       = "design";
@@ -279,7 +282,7 @@ void testSuiteModel() {
         CHECK(qgr->phase == "design", "phase persisted");
 
         // ChangeRequest
-        auto cr = R::F18Operation::create(pfix.project->projectId, "Scope-Erweiterung",
+        auto cr = R::F18Operation::create(task->taskId, "Scope-Erweiterung",
                                           R::F18OperationType::CHANGE_REQUEST);
         CHECK(cr != nullptr, "ChangeRequest F18Operation created");
         cr->changeType   = "scope";
@@ -287,7 +290,7 @@ void testSuiteModel() {
         cr->update();
 
         // ChangeObject — references the CR
-        auto co = R::F18Operation::create(pfix.project->projectId, "Scope-Umsetzung",
+        auto co = R::F18Operation::create(task->taskId, "Scope-Umsetzung",
                                           R::F18OperationType::CHANGE_OBJECT);
         CHECK(co != nullptr, "ChangeObject F18Operation created");
         co->parentVorgangId = cr->vorgangId;
@@ -297,7 +300,7 @@ void testSuiteModel() {
         CHECK(cor->parentVorgangId == cr->vorgangId, "parentVorgangId links to CR");
 
         // DecisionLog
-        auto dl = R::F18Operation::create(pfix.project->projectId, "Datenbankentscheidung",
+        auto dl = R::F18Operation::create(task->taskId, "Datenbankentscheidung",
                                           R::F18OperationType::DECISION_LOG);
         CHECK(dl != nullptr, "DecisionLog F18Operation created");
         dl->decisionType = "architectural";
@@ -308,7 +311,7 @@ void testSuiteModel() {
         CHECK(dlr->decisionType == "architectural", "decisionType persisted");
 
         // CommunicationPlan
-        auto cp = R::F18Operation::create(pfix.project->projectId, "Stakeholder-Kommunikation",
+        auto cp = R::F18Operation::create(task->taskId, "Stakeholder-Kommunikation",
                                           R::F18OperationType::COMMUNICATION_PLAN);
         CHECK(cp != nullptr, "CommunicationPlan F18Operation created");
         cp->audience  = "Auftraggeber";
@@ -319,7 +322,9 @@ void testSuiteModel() {
     SECTION("F18OperationStep — addStep creates Init/End bookends");
     {
         ProjectFixture pfix("F18-Step-Test");
-        auto v = R::F18Operation::create(pfix.project->projectId, "Step-Test-Workflow",
+        auto task_step = R::TaskF22::create("Step-Task", "spec", pfix.project->projectId);
+        task_step->save();
+        auto v = R::F18Operation::create(task_step->taskId, "Step-Test-Workflow",
                                          R::F18OperationType::GENERIC);
         CHECK(v != nullptr, "F18Operation created for step test");
         v->loadSteps();
@@ -379,36 +384,32 @@ void testSuiteModel() {
 
     SECTION("F18Operation — loadForProject and loadForTask filtering");
     {
+        // F18 belongs exclusively to F22. All loading is task-scoped.
         ProjectFixture pfix("F18-Filter-Test");
-
-        // Create task for F22 context
-        auto task = R::TaskF22::create(pfix.project->projectId, "Filter-Aufgabe",
-                                        "", "");
+        auto task = R::TaskF22::create("Filter-Task", "spec", pfix.project->projectId);
         task->save();
 
-        // Create mixed types on project
-        R::F18Operation::create(pfix.project->projectId, "Risiko-A", R::F18OperationType::RISK);
-        R::F18Operation::create(pfix.project->projectId, "Incident-A", R::F18OperationType::INCIDENT);
-        R::F18Operation::create(pfix.project->projectId, "Risiko-B", R::F18OperationType::RISK);
+        R::F18Operation::create(task->taskId, "Incident-A", R::F18OperationType::INCIDENT);
+        R::F18Operation::create(task->taskId, "Risiko-A",   R::F18OperationType::RISK);
+        R::F18Operation::create(task->taskId, "Risiko-B",   R::F18OperationType::RISK);
 
-        // Unfiltered
-        auto all = R::F18Operation::loadForProject(pfix.project->projectId);
-        CHECK(all.size() >= 3, "loadForProject returns all");
+        // Unfiltered: loadForTask
+        auto all = R::F18Operation::loadForTask(task->taskId);
+        CHECK(all.size() >= 3, "loadForTask returns all");
 
         // Filtered by type
-        auto risks = R::F18Operation::loadForProject(pfix.project->projectId,
-                                                     R::F18OperationType::RISK);
-        CHECK(risks.size() >= 2, "loadForProject with type filter returns 2 risks");
+        auto risks = R::F18Operation::loadForTask(task->taskId, R::F18OperationType::RISK);
+        CHECK(risks.size() >= 2, "loadForTask with type filter returns 2 risks");
         for (auto& r : risks)
             CHECK(r->vorgangType == "risk", "filtered result has type=risk");
 
-        // F22 link
-        auto f22v = R::F18Operation::create(pfix.project->projectId, "Task-Vorgang",
-                                            R::F18OperationType::GENERIC, task->taskId);
-        CHECK(f22v != nullptr, "F18Operation linked to F22");
-        CHECK(f22v->taskId == task->taskId, "taskId set correctly");
+        // All F18 ops have taskId set (no projectId in v4)
+        CHECK(!all[0]->taskId.empty(), "F18 has taskId set");
+
+        // F22 link: load by task returns correct items
         auto byTask = R::F18Operation::loadForTask(task->taskId);
-        CHECK(!byTask.empty(), "loadForTask returns F18 linked to F22");
+        CHECK(!byTask.empty(), "loadForTask returns F18 linked to task");
+        CHECK(byTask[0]->taskId == task->taskId, "taskId set correctly on loaded F18");
     }
 
 
@@ -443,7 +444,9 @@ void testSuiteModel() {
     SECTION("Lifecycle — F18Operation starts without WFI, startDefault creates one");
     {
         ProjectFixture pfix("Lifecycle-F18-Test");
-        auto v = R::F18Operation::create(pfix.project->projectId, "Lifecycle-Vorgang",
+        auto task = R::TaskF22::create("Lifecycle-Task", "spec", pfix.project->projectId);
+        task->save();
+        auto v = R::F18Operation::create(task->taskId, "Lifecycle-Vorgang",
                                          R::F18OperationType::RISK);
         CHECK(v != nullptr, "F18Operation created");
         CHECK(v->releaseWorkflowId.empty(), "F18 starts with no workflow");

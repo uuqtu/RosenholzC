@@ -103,6 +103,11 @@ public:
     // ------------------------------
     static bool rebuildAll(const std::string& mfsRoot);
 
+    // Schlüssel-file maintenance
+    // Called after each write to keep the index files current.
+    static void rebuildTypeSchluessel(const std::string& mfsRoot,
+                                       const std::string& typeCode);
+
 private:
     static bool ownerOnlyWrite(const std::string& path, const std::string& content);
 };

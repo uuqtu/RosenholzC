@@ -9,7 +9,6 @@
 #include "Utils.h"
 #include "../core/Repository.h"
 #ifndef _WIN32
-#include <sys/stat.h>
 #endif
 #include "../core/RegNumber.h"
 #include "../core/FileOps.h"

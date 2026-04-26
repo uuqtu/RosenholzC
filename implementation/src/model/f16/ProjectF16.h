@@ -197,6 +197,7 @@ public:
     /// Write MFS-style plaintext file (owner-only readable)
     bool writeMFSFile(const std::string& mfsRoot) const;
 
+    std::string mfsSchluesselText() const;
 private:
     void fromRow(const Row& r);
 };

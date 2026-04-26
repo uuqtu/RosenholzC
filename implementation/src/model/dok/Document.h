@@ -303,6 +303,7 @@ public:
     bool openFile(const std::string& mode = "read",
                   const std::string& pathOverride = "") const;
 
+    std::string mfsSchluesselText() const;
 private:
     void fromRow(const Row& r);
 

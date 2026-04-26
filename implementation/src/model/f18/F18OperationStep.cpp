@@ -60,9 +60,6 @@ void F18OperationStep::fromRow(const Row& r) {
 // ── save ─────────────────────────────────────────────────────
 bool F18OperationStep::save() const {
     auto* d = db(); if (!d) return false;
-    auto t = [](const std::string& s) { return BindParam::text(s); };
-    auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
-    auto i = [](int v) { return BindParam::int64(v); };
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f18_operation_steps
@@ -81,17 +78,17 @@ bool F18OperationStep::save() const {
                ?,?,?, ?,?,?,?,
                ?,?,?)
     )SQL", {
-        t(stepId), t(vorgangId), n(tplStepId), t(title), n(description), t(stepType),
-        i(sequenceOrder), n(predecessorStepIds),
-        i(isInitialize?1:0), i(isFinal?1:0), i(isFree?1:0),
-        n(assignedTo), n(requiredRole), n(dueDate), n(startedDate), n(completedDate),
-        i(slaHours), i(slaBreached?1:0),
-        t(status), i(autoApprove?1:0), i(requiresComment?1:0), i(requiresDocument?1:0),
-        n(decision), n(decisionBy), n(decisionDate), n(comment),
-        t(trackingStatus), n(focusDate), n(inWorkSince),
-        t(priority.empty()?"medium":priority), n(assignedToGroup), n(progressNote),
-        i(percentComplete),
-        t(notes.empty()?"{}":notes), t(createdAt), t(updatedAt)
+        BindParam::text(stepId), BindParam::text(vorgangId), BindParam::nullOrText(tplStepId), BindParam::text(title), BindParam::nullOrText(description), BindParam::text(stepType),
+        BindParam::int64(sequenceOrder), BindParam::nullOrText(predecessorStepIds),
+        BindParam::int64(isInitialize?1:0), BindParam::int64(isFinal?1:0), BindParam::int64(isFree?1:0),
+        BindParam::nullOrText(assignedTo), BindParam::nullOrText(requiredRole), BindParam::nullOrText(dueDate), BindParam::nullOrText(startedDate), BindParam::nullOrText(completedDate),
+        BindParam::int64(slaHours), BindParam::int64(slaBreached?1:0),
+        BindParam::text(status), BindParam::int64(autoApprove?1:0), BindParam::int64(requiresComment?1:0), BindParam::int64(requiresDocument?1:0),
+        BindParam::nullOrText(decision), BindParam::nullOrText(decisionBy), BindParam::nullOrText(decisionDate), BindParam::nullOrText(comment),
+        BindParam::text(trackingStatus), BindParam::nullOrText(focusDate), BindParam::nullOrText(inWorkSince),
+        BindParam::text(priority.empty()?"medium":priority), BindParam::nullOrText(assignedToGroup), BindParam::nullOrText(progressNote),
+        BindParam::int64(percentComplete),
+        BindParam::text(notes.empty()?"{}":notes), BindParam::text(createdAt), BindParam::text(updatedAt)
     });
 }
 

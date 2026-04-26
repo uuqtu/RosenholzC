@@ -5,8 +5,8 @@
 // Each fixture creates self-contained test data and can
 // optionally clean up after itself. Tests are fully independent.
 // ============================================================
-#include "../src/model/Person.h"
-#include "../src/model/Team.h"
+#include "../src/model/person/Person.h"
+#include "../src/model/team/Team.h"
 #include "../src/model/f16/ProjectF16.h"
 #include "../src/model/f22/TaskF22.h"
 #include "../src/model/dok/Document.h"

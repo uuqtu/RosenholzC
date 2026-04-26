@@ -63,8 +63,7 @@ public:
     // ── Identity ──────────────────────────────────────────────
     std::string vorgangId;              // XV/F18/nnnn/yyyy
     std::string vorgangType;            // see F18OperationType::*
-    std::string projectId;              // → F16 (0..1)
-    std::string taskId;                 // → F22 (0..1)
+    std::string taskId;                 // → F22 (required)
     std::string parentVorgangId;        // → F18 ChangeRequest (CO only)
 
     // ── Common fields (all types) ─────────────────────────────
@@ -186,7 +185,7 @@ public:
     // create
     //
     // Parameters:
-    //   projectId  : owning F16 (may be empty if taskId set)
+    //   taskId  : owning F22 (required)
     //   title      : display name
     //   type       : one of F18OperationType::*
     //   taskId     : owning F22 (optional)
@@ -194,10 +193,9 @@ public:
     // Returns: saved F18Operation with generated vorgangId
     // ------------------------------
     static std::shared_ptr<F18Operation> create(
-        const std::string& projectId,
+        const std::string& taskId,
         const std::string& title,
-        const std::string& type       = F18OperationType::GENERIC,
-        const std::string& taskId     = "");
+        const std::string& type = F18OperationType::GENERIC);
 
     static std::shared_ptr<F18Operation> loadById(const std::string& id);
 
@@ -206,9 +204,6 @@ public:
     // Load all F18 Workflows for a given parent entity.
     // Optional type filter.
     // ------------------------------
-    static std::vector<std::shared_ptr<F18Operation>> loadForProject(
-        const std::string& projectId,
-        const std::string& type = "");
 
     static std::vector<std::shared_ptr<F18Operation>> loadForTask(
         const std::string& taskId,
@@ -254,6 +249,7 @@ public:
                  const std::string& text,
                  const std::string& noteType = "general");
 
+    std::string mfsSchluesselText() const;
 private:
     void fromRow(const Row& r);
     static Database* db();

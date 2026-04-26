@@ -2,6 +2,10 @@
 // DocumentObject.cpp
 // ============================================================
 #include "DocumentObject.h"
+#ifdef _WIN32
+#  include <windows.h>
+#  include <shellapi.h>
+#endif
 #include <set>
 #include "../Utils.h"
 #include "../../core/FileOps.h"
@@ -22,6 +26,7 @@ Database* DocumentObject::db() {
     return DatabasePool::instance().get("dok");
 }
 
+// ── CRUD + internal helpers ─────────────────────────────────────────────────
 std::string DocumentObject::sanitiseForFilename(const std::string& s) {
     return FileOps::sanitizeFilename(s);
 }
@@ -70,6 +75,7 @@ OperationResult DocumentObject::remove() const {
     return ok ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
+// ── Display ─────────────────────────────────────────────────────────────────
 std::string DocumentObject::summary() const {
     std::ostringstream ss;
     ss << std::left << std::setw(7) << objectId
@@ -115,6 +121,7 @@ std::vector<std::shared_ptr<DocumentObject>> DocumentObject::loadForRevision(
 // 5-char alphanumeric (uppercase), unique per document.
 // Uses a counter stored in the DB: max seq +1.
 // Encoded as base-36: 0-9 A-Z
+// ── Private helpers (filename, objectId generation) ─────────────────────────
 std::string DocumentObject::nextObjectId(const std::string& docId) {
     auto* d = db();
     if (!d) return "XXXXX";
@@ -168,6 +175,7 @@ std::string DocumentObject::buildMfsFilename(
 }
 
 // ── Factory ──────────────────────────────────────────────────
+// ── Factory ─────────────────────────────────────────────────────────────────
 std::shared_ptr<DocumentObject> DocumentObject::importFile(
     const std::string& docId,
     uint32_t            revNum,
@@ -238,6 +246,7 @@ std::shared_ptr<DocumentObject> DocumentObject::importFile(
 }
 
 // ── Key file ─────────────────────────────────────────────────
+// ── MFS key-file ─────────────────────────────────────────────────────────────
 OperationResult DocumentObject::writeKeyFile(
     const std::string& docId,
     uint32_t            revNum,
@@ -294,6 +303,7 @@ OperationResult DocumentObject::writeKeyFile(
 }
 
 // ── LMDB commit ──────────────────────────────────────────────
+// ── LMDB archive ─────────────────────────────────────────────────────────────
 OperationResult DocumentObject::commitToLMDB() {
     if (mfsPath.empty() || !FileOps::fileExists(mfsPath)) {
         LOG_ERROR("[DocObject] commitToLMDB: MFS file not found: " + mfsPath);
@@ -345,6 +355,7 @@ std::string DocumentObject::extractFromLMDB(const std::string& destDir) {
 
 
 // ── Object-level checkout ──────────────────────────────────────
+// ── Checkout / Checkin / Revert / Open ──────────────────────────────────────
 std::string DocumentObject::checkoutObject(const std::string& destDir) {
     if (checkedOut) {
         LOG_WARN("[DocObject] checkoutObject: already checked out: " + objectId);
@@ -439,8 +450,14 @@ OperationResult DocumentObject::revertObject(uint32_t parentRev) {
 std::string DocumentObject::openObject(bool inWork, bool& wasCheckedOut) {
     wasCheckedOut = false;
     auto openPath = [](const std::string& p) {
-        std::string cmd = "xdg-open \"" + p + "\" 2>/dev/null &";
-        std::system(cmd.c_str());
+#ifdef _WIN32
+        // Windows: use ShellExecute to open file with default application
+        ShellExecuteA(nullptr, "open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(__APPLE__)
+        std::system(("open \"" + p + "\" &").c_str());
+#else
+        std::system(("xdg-open \"" + p + "\" 2>/dev/null &").c_str());
+#endif
     };
 
     // If already checked out — open directly from checkout location
@@ -484,6 +501,7 @@ std::string DocumentObject::openObject(bool inWork, bool& wasCheckedOut) {
 }
 
 // ── MFS scan for unregistered files ──────────────────────────
+// ── MFS folder scanner ───────────────────────────────────────────────────────
 std::vector<std::string> DocumentObject::scanForUnregisteredFiles(
     const std::string& docId, uint32_t rev)
 {

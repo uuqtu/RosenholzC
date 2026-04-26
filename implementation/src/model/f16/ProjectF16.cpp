@@ -4,6 +4,8 @@
 
 #include "../../mfs/MFSWriter.h"
 #include "ProjectF16.h"
+#include "../dok/Document.h"
+#include "../f22/TaskF22.h"
 #include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "../../core/Database.h"
@@ -38,8 +40,9 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
     LOG_INFO("Creating ProjectF16: " + title_);
 
     auto p = std::make_shared<ProjectF16>();
+    // Generate one reg-number; use it as both the unique ID and the human-visible number.
     p->projectId   = genId("F16");
-    p->regNumber   = RegNumberGenerator::next(RegDept::PROJECT);
+    p->regNumber   = RegNumber::fromString(p->projectId);
     p->title       = title_;
     p->projectType = projectType_;
     p->sizeClass   = sizeClass_;
@@ -99,27 +102,27 @@ OperationResult ProjectF16::save() const {
         )
     )", {
         BindParam::text(projectId),
-        textOrNull(workflowInstanceId),
-        textOrNull(workflowStatus),
-        textOrNull(workflowCurrentState),
-        textOrNull(releaseWorkflowId),
+        BindParam::nullOrText(workflowInstanceId),
+        BindParam::nullOrText(workflowStatus),
+        BindParam::nullOrText(workflowCurrentState),
+        BindParam::nullOrText(releaseWorkflowId),
         BindParam::text(regNumber.toString()),
         BindParam::text(regNumber.dept),
         BindParam::int64(regNumber.sequence),
         BindParam::int64(regNumber.year),
         BindParam::text(title),
-        textOrNull(codename),
+        BindParam::nullOrText(codename),
         BindParam::text(projectType),
         BindParam::text(sizeClass),
-        textOrNull(ownerTeamId),
-        textOrNull(leadId),
-        textOrNull(sponsorId),
+        BindParam::nullOrText(ownerTeamId),
+        BindParam::nullOrText(leadId),
+        BindParam::nullOrText(sponsorId),
         BindParam::text(status),
-        textOrNull(phase),
-        textOrNull(startDatePlanned),
-        textOrNull(startDateActual),
-        textOrNull(endDatePlanned),
-        textOrNull(endDateActual),
+        BindParam::nullOrText(phase),
+        BindParam::nullOrText(startDatePlanned),
+        BindParam::nullOrText(startDateActual),
+        BindParam::nullOrText(endDatePlanned),
+        BindParam::nullOrText(endDateActual),
         BindParam::int64(durationPlannedDays),
         BindParam::int64(durationActualDays),
         BindParam::int64(scheduleVarianceDays),
@@ -136,22 +139,22 @@ OperationResult ProjectF16::save() const {
         BindParam::real(eac),
         BindParam::real(etc),
         BindParam::real(vac),
-        textOrNull(scopeStatement),
-        textOrNull(scopeVersion),
-        textOrNull(scopeLastChanged),
-        textOrNull(scopeChangeReason),
+        BindParam::nullOrText(scopeStatement),
+        BindParam::nullOrText(scopeVersion),
+        BindParam::nullOrText(scopeLastChanged),
+        BindParam::nullOrText(scopeChangeReason),
         BindParam::int64(scopeChangeCount),
-        textOrNull(priority),
-        textOrNull(complexity),
-        textOrNull(strategicAlignment),
-        textOrNull(qualityGateId),
-        textOrNull(communicationPlanId),
+        BindParam::nullOrText(priority),
+        BindParam::nullOrText(complexity),
+        BindParam::nullOrText(strategicAlignment),
+        BindParam::nullOrText(qualityGateId),
+        BindParam::nullOrText(communicationPlanId),
         BindParam::text(currency),
-        textOrNull(externalRef),
-        textOrNull(methodology),
-        textOrNull(classification),
-        textOrNull(links),
-        textOrNull(milestones),
+        BindParam::nullOrText(externalRef),
+        BindParam::nullOrText(methodology),
+        BindParam::nullOrText(classification),
+        BindParam::nullOrText(links),
+        BindParam::nullOrText(milestones),
         BindParam::text(notes),
         BindParam::text(createdAt),
         BindParam::text(nowIso())
@@ -367,12 +370,12 @@ std::string ProjectF16::convertToTask(const std::string& parentProjectId) {
         BindParam::text(taskReg.toString()),
         BindParam::text(parentProjectId),
         BindParam::text(title + " [converted from F16/" + projectId + "]"),
-        textOrNull(scopeStatement),
+        BindParam::nullOrText(scopeStatement),
         BindParam::text(status),
-        textOrNull(priority),
+        BindParam::nullOrText(priority),
         BindParam::real(budgetPlanned),
-        textOrNull(startDatePlanned),
-        textOrNull(endDatePlanned),
+        BindParam::nullOrText(startDatePlanned),
+        BindParam::nullOrText(endDatePlanned),
         BindParam::text(regNumber.toString()),
         BindParam::text(notes),
         BindParam::text(nowIso())
@@ -449,19 +452,35 @@ bool ProjectF16::isWorkflowComplete() const {
 
 void ProjectF16::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
+    // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
     auto wf = Rosenholz::F77_Engine::startDefault("f16", projectId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
-    status         = "in_work";
-    auto* db = DatabasePool::instance().get("f16");
-    if (db) db->exec(
-        "UPDATE projects SET release_workflow_id=?, status='in_work', updated_at=? "
-            "WHERE project_id=?;",
-            {BindParam::text(releaseWorkflowId),
-             BindParam::text(nowIso()),
-             BindParam::text(projectId)});
-    LOG_INFO("[F77] Main WFI ensured for F16: " + projectId +
-             " wfi=" + releaseWorkflowId);
+    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for f16/" + projectId);
+}
+
+
+
+std::string ProjectF16::mfsSchluesselText() const {
+    std::ostringstream s;
+    s << "  ID      : " << projectId << "\n"
+      << "  Titel   : " << title << "\n"
+      << "  Status  : " << status << "\n"
+      << "  Typ     : " << projectType << "\n";
+    auto tasks = Rosenholz::TaskF22::loadForProject(projectId);
+    if (!tasks.empty()) {
+        s << "  F22     :";
+        for (auto& t : tasks) s << " " << t->taskId;
+        s << "\n";
+    }
+    auto docs = Rosenholz::Document::loadForProject(projectId);
+    if (!docs.empty()) {
+        s << "  DOK     :";
+        for (auto& d : docs) s << " " << d->documentId;
+        s << "\n";
+    }
+    s << "\n";
+    return s.str();
 }
 
 } // namespace Rosenholz

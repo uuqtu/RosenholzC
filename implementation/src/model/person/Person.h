@@ -6,8 +6,8 @@
 // dayRate supports EV cost calculations
 // ============================================================
 #pragma once
-#include "../core/OperationResult.h"
-#include "Utils.h"
+#include "../../core/OperationResult.h"
+#include "../Utils.h"
 // ============================================================
 // Person.h  —  Person entity (Personenkartei)
 //
@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include "../core/RegNumber.h"
-#include "../core/Database.h"
+#include "../../core/RegNumber.h"
+#include "../../core/Database.h"
 #include <nlohmann/json.hpp>
 
 namespace Rosenholz {

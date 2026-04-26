@@ -2,6 +2,8 @@
 // ArchiveStore.cpp  —  LMDB file-content store implementation
 // ============================================================
 #include "ArchiveStore.h"
+#include <openssl/evp.h>
+#include <iomanip>
 #include "../core/Logger.h"
 #include "../core/FileOps.h"
 
@@ -13,22 +15,39 @@
 #include <cstdio>
 #include <stdexcept>
 
+
+// Portable SHA-256 via OpenSSL EVP (replaces popen("sha256sum") on Linux).
+// Requires: OpenSSL — available on both Linux and Windows.
+static std::string computeSHA256(const std::string& filePath) {
+    std::ifstream in(filePath, std::ios::binary);
+    if (!in) return "";
+
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) return "";
+
+    if (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) != 1) {
+        EVP_MD_CTX_free(ctx); return "";
+    }
+
+    char buf[65536];
+    while (in.read(buf, sizeof(buf)) || in.gcount() > 0)
+        EVP_DigestUpdate(ctx, buf, static_cast<size_t>(in.gcount()));
+
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int  hashLen = 0;
+    EVP_DigestFinal_ex(ctx, hash, &hashLen);
+    EVP_MD_CTX_free(ctx);
+
+    std::ostringstream oss;
+    for (unsigned int i = 0; i < hashLen; ++i)
+        oss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    return oss.str();
+}
 namespace Rosenholz {
 namespace Archive {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-static std::string computeSHA256(const std::string& path) {
-    // Use sha256sum — consistent with Document::importLocalFile
-    FILE* pipe = popen(("sha256sum \"" + path + "\" 2>/dev/null").c_str(), "r");
-    if (!pipe) return "";
-    char buf[256] = {};
-    if (!fgets(buf, sizeof(buf), pipe)) { pclose(pipe); return ""; }
-    pclose(pipe);
-    std::string line(buf);
-    auto sp = line.find(' ');
-    return sp != std::string::npos ? line.substr(0, sp) : "";
-}
 
 static void lmdbCheck(int rc, const char* op) {
     if (rc != MDB_SUCCESS)

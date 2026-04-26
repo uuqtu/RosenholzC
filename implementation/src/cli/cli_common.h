@@ -71,10 +71,7 @@ std::shared_ptr<Rosenholz::TaskF22> createTaskWizardGuided();
 
 // ── F18 operation commands (cli_f18.cpp) ──────────────────────
 void cmdF18(const std::vector<std::string>& args);
-void printF18Operation(const Rosenholz::F18Operation& v);
-void f18Menu(std::shared_ptr<Rosenholz::F18Operation> v);
-void f18BrowserMenu(const std::string& projectId = "",
-                    const std::string& taskId    = "",
+void f18BrowserMenu(const std::string& taskId     = "",
                     const std::string& typeFilter = "");
 std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& projectId,
@@ -82,7 +79,6 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& type   = "");
 
 // Guided wizard: asks user to pick F16 (and optionally F22), then creates F18.
-std::shared_ptr<Rosenholz::F18Operation> createF18WizardGuided();
 
 // ── Document commands (cli_dok.cpp) ───────────────────────────
 void cmdDok(const std::vector<std::string>& args);
@@ -137,4 +133,10 @@ void cmdLog(const std::string& level);
 void cmdSearch(const std::string& query);
 void globalSearch(const std::string& query);
 
+    // ── F18 functions (defined in cli_f18.cpp) ──────────────
+    void f18Menu(std::shared_ptr<Rosenholz::F18Operation> v);
+    void printF18Operation(const Rosenholz::F18Operation& v);
+    std::shared_ptr<Rosenholz::F18Operation> createF18WizardGuided();
 } // namespace CLI
+
+

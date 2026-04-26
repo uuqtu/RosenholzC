@@ -144,6 +144,7 @@ public:
     // ── MFS output ────────────────────────────────────────
     bool writeMFSFile(const std::string& mfsRoot) const;
 
+    std::string mfsSchluesselText() const;
 private:
     void fromRow(const Row& r);
 };

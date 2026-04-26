@@ -200,8 +200,9 @@ bool DocumentRevision::isTransitionAllowed(RevState from,
     return false;
 }
 
-bool DocumentRevision::transitionState(const std::string& targetState) {
-    if (!isTransitionAllowed(revState, revStateFromString(targetState), false)) {
+bool DocumentRevision::transitionState(RevState target) {
+    const std::string targetState = revStateToString(target); // for logging/SQL
+    if (!isTransitionAllowed(revState, target, false)) {
         LOG_WARN("[DocRevision] Transition not allowed: " +
                  std::string(revStateToString(revState)) + " → " +
                  targetState + " for " + documentId +
@@ -221,7 +222,7 @@ bool DocumentRevision::transitionState(const std::string& targetState) {
         }
     }
 
-    revState  = revStateFromString(targetState);
+    revState  = target;
     updatedAt = nowIso();
 
     if (!save()) {
@@ -255,43 +256,19 @@ bool DocumentRevision::recomputeSuperseded() {
     // Determine which revision should be current (superseded=false)
     DocumentRevision* chosen = nullptr;
 
-    // Priority 1: latest released revision (most common active state)
-    for (auto it = all.rbegin(); it != all.rend(); ++it) {
-        if ((*it)->revState == RevState::RELEASED) {
-            chosen = it->get(); break;
-        }
-    }
-
-    // Priority 2: latest locked (locked can be current if no released exists)
-    if (!chosen) {
+    // Priority order: released > locked > pre_released > in_work > (closed fallback)
+    // Single loop per priority; adding a new state = adding one entry here.
+    static const RevState priority[] = {
+        RevState::RELEASED, RevState::LOCKED,
+        RevState::PRE_RELEASED, RevState::IN_WORK
+    };
+    for (RevState target : priority) {
         for (auto it = all.rbegin(); it != all.rend(); ++it) {
-            if ((*it)->revState == RevState::LOCKED) {
-                chosen = it->get(); break;
-            }
+            if ((*it)->revState == target) { chosen = it->get(); break; }
         }
+        if (chosen) break;
     }
-
-    // Priority 3: latest pre_released
-    if (!chosen) {
-        for (auto it = all.rbegin(); it != all.rend(); ++it) {
-            if ((*it)->revState == RevState::PRE_RELEASED) {
-                chosen = it->get(); break;
-            }
-        }
-    }
-
-    // Priority 4: latest in_work
-    if (!chosen) {
-        for (auto it = all.rbegin(); it != all.rend(); ++it) {
-            if ((*it)->revState == RevState::IN_WORK) {
-                chosen = it->get(); break;
-            }
-        }
-    }
-
-    // Fallback: all revisions are closed — the latest one is still "current"
-    // (closed = invalid, but we need exactly one superseded=false)
-    if (!chosen) chosen = all.back().get();
+    if (!chosen) chosen = all.back().get();  // all closed: last one is "current"
 
     // Atomically update all superseded flags
     bool ok = true;

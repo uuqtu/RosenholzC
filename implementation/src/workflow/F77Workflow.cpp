@@ -421,10 +421,21 @@ Database* F77_Engine::db() { return wfDB(); }
 // Maps an entity type string to its database pool, table name, and ID column.
 // Centralises the entityType switch that was duplicated in 18 places.
 struct EntityCtx {
-    Database*   db;
-    const char* table;
-    const char* idCol;
-    bool        valid() const { return db != nullptr; }
+    Database*   db        { nullptr };
+    std::string table;
+    std::string idCol;
+    bool valid() const { return db != nullptr; }
+
+    // Read release_workflow_id for an entity — avoids loading the full model object.
+    std::string getWorkflowId(const std::string& entityId) const {
+        if (!db) return {};
+        auto rows = db->query(
+            "SELECT release_workflow_id FROM " + table + " WHERE " + idCol + "=?;",
+            { BindParam::text(entityId) });
+        if (rows.empty()) return {};
+        auto it = rows[0].find("release_workflow_id");
+        return (it != rows[0].end() && !it->second.empty()) ? it->second : std::string{};
+    }
 };
 
 static EntityCtx entityContext(const std::string& entityType) {
@@ -441,6 +452,7 @@ static EntityCtx entityContext(const std::string& entityType) {
 }
 
 
+
 static void storeWorkflowId(const std::string& entityType,
                               const std::string& entityId,
                               const std::string& workflowId) {
@@ -452,6 +464,15 @@ static void storeWorkflowId(const std::string& entityType,
 }
 
 // ── Public Engine methods: attach / detach workflow ID on entity ──────────
+void F77_Engine::cancelWorkflow(F77_Workflow& wf) {
+    wf.status = "cancelled";
+    wf.update();
+    detachWorkflow(wf.entityType, wf.entityId);
+    LOG_INFO("[F77] Workflow cancelled: " + wf.workflowId +
+             " for " + wf.entityType + "/" + wf.entityId);
+}
+
+
 void F77_Engine::attachWorkflow(const std::string& entityType,
                                  const std::string& entityId,
                                  const std::string& workflowId) {
@@ -474,20 +495,9 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
 {
     // Enforce: exactly one active workflow per entity at a time.
     {
-        std::string existingId;
-        if (entityType == "f16") {
-            auto p = ProjectF16::loadById(entityId);
-            if (p) existingId = p->releaseWorkflowId;
-        } else if (entityType == "f22") {
-            auto t = TaskF22::loadById(entityId);
-            if (t) existingId = t->releaseWorkflowId;
-        } else if (entityType == "f18") {
-            auto v = F18Operation::loadById(entityId);
-            if (v) existingId = v->releaseWorkflowId;
-        } else if (entityType == "dok") {
-            auto d = Document::loadById(entityId);
-            if (d) existingId = d->releaseWorkflowId;
-        }
+        // EntityCtx reads releaseWorkflowId via SQL — no need to load full objects
+        const auto ectx = entityContext(entityType);
+        std::string existingId = ectx.valid() ? ectx.getWorkflowId(entityId) : std::string{};
         if (!existingId.empty()) {
             auto existing = F77_Workflow::loadById(existingId);
             if (existing && existing->status == "active") {
@@ -509,6 +519,20 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
     // Build map: tpl_step_id → runtime step_id for predecessor resolution
     std::map<std::string,std::string> tplToRuntime;
     tpl->loadSteps();
+
+    // For F22: create ONE F18Operation for the whole workflow.
+    // Each mid-step becomes an F18OperationStep inside it.
+    std::shared_ptr<F18Operation> wfOp;
+    if (entityType == "f22") {
+        wfOp = F18Operation::create(entityId,
+                   "Workflow-Aufgaben [" + wf->workflowId + "]",
+                   F18OperationType::F77_STEP);
+        if (wfOp) {
+            wfOp->releaseWorkflowId = wf->workflowId;
+            wfOp->save();
+            wfOp->loadSteps();
+        }
+    }
 
     for(auto& ts : tpl->steps) {
         F77_WorkflowStep rs;
@@ -545,15 +569,10 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
             rs.predecessors = F77_WorkflowStep::predecessorsFromString(resolved);
         }
 
-        // Spawn F18_Operation for mid-steps (not Init/End)
-        if(!ts.isInitialize && !ts.isFinal) {
-            std::string projId;
-            if(entityType=="f16") projId=entityId;
-            else if(entityType=="f22") { auto t=TaskF22::loadById(entityId); if(t) projId=t->projectId; }
-            else if(entityType=="f18") { auto op=F18Operation::loadById(entityId); if(op) projId=op->projectId; }
-            if(projId.empty()) projId=entityId;  // fallback: use entity id as project
-            auto op = F18Operation::create(projId, ts.title, F18OperationType::F77_STEP, "");
-            if(op) { rs.f18OperationId=op->vorgangId; }
+        // Link mid-steps to the single workflow F18 (F22 only).
+        if(!ts.isInitialize && !ts.isFinal && !ts.isSystem && entityType == "f22" && wfOp) {
+            rs.f18OperationId = wfOp->vorgangId;
+            wfOp->addStep(ts.title, "review", "", true);
         }
 
         rs.save();
@@ -609,7 +628,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     std::string projId;
     if(entityType=="f16") projId=entityId;
     else if(entityType=="f22"){ auto t=TaskF22::loadById(entityId); if(t) projId=t->projectId; }
-    else if(entityType=="f18"){ auto op=F18Operation::loadById(entityId); if(op) projId=op->projectId; }
+    else if(entityType=="f18"){ auto op=F18Operation::loadById(entityId); if(op) projId=op->taskId; }
 
     // Init step (auto-approved)
     F77_WorkflowStep init;
@@ -619,15 +638,27 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     init.completedDate=nowIso(); init.createdAt=nowIso(); init.updatedAt=nowIso();
     init.save(); wf->steps.push_back(init);
 
-    // Mid step — backed by F18_Operation
+    // Mid step — for F22: backed by F18_Operation containing the workflow tasks
+    // The F18 is named after the workflow ID so it is easily identifiable.
     F77_WorkflowStep mid;
     mid.stepId=genId("F77S"); mid.workflowId=wf->workflowId;
     mid.title="Freigabe vorbereiten"; mid.sequenceOrder=1;
     mid.executionMode="sequential"; mid.predecessors={init.stepId};
     mid.status="pending"; mid.createdAt=nowIso(); mid.updatedAt=nowIso();
-    if(projId.empty()) projId=entityId;
-    auto midOp = F18Operation::create(projId,"Freigabe vorbereiten",F18OperationType::F77_STEP,"");
-    if(midOp) mid.f18OperationId=midOp->vorgangId;
+    if (entityType == "f22") {
+        // Create ONE F18 for all workflow tasks, named after the workflow ID.
+        auto midOp = F18Operation::create(entityId,
+                         "Workflow-Aufgaben [" + wf->workflowId + "]",
+                         F18OperationType::F77_STEP);
+        if (midOp) {
+            midOp->releaseWorkflowId = wf->workflowId;
+            midOp->save();
+            midOp->loadSteps(); // initialises Init + End bookend steps
+            // Add one F18OperationStep for the mid workflow step
+            midOp->addStep("Freigabe vorbereiten", "review", "", true);
+            mid.f18OperationId = midOp->vorgangId;
+        }
+    }
     mid.save(); wf->steps.push_back(mid);
 
     // End step
@@ -690,6 +721,49 @@ static void pruneMFSRevisions(const std::string& docId) {
 }
 
 
+// Execute a system step (isSystem=true). Currently only one action exists:
+// SystemAction::COMMIT_DB_OBJECTS — commits all uncommitted DocumentObjects to LMDB.
+// Adding a new system action = adding a case to the switch below.
+static void executeSystemStep(F77_WorkflowStep& step,
+                               F77_Workflow& wf, bool& changed) {
+    // ── 3b: SystemAction enum replaces magic string comparison ──────────────
+    // step.systemAction determines what this step does.
+    // COMMIT_DB_OBJECTS is the only action currently; the enum makes it
+    // extensible without touching tick().
+    if (step.systemAction != SystemAction::COMMIT_DB_OBJECTS) return;
+    if (wf.entityType != "dok") return;
+
+    auto curRev = Rosenholz::DocumentRevision::currentRevision(wf.entityId);
+    if (!curRev) return;
+
+    auto objs = Rosenholz::DocumentObject::loadForRevision(wf.entityId, curRev->rev);
+    bool allOk = true;
+    for (auto& obj : objs) {
+        if (!obj->committed) {
+            auto res = obj->commitToLMDB();
+            if (!Rosenholz::opOk(res)) {
+                allOk = false;
+                LOG_ERROR("[F77] COMMIT_DB_OBJECTS: failed for " + obj->objectId +
+                          " — " + Rosenholz::opResultMessage(res));
+            }
+        }
+    }
+
+    if (!allOk) {
+        step.status = "pending"; step.completedDate = ""; step.save(); changed = false;
+        LOG_ERROR("[F77] COMMIT_DB_OBJECTS step FAILED — reverted to pending. "
+                  "Fix MFS files and re-run tick.");
+        return;
+    }
+
+    if (Rosenholz::Config::instance().storage().saveSpace)
+        pruneMFSRevisions(wf.entityId);
+
+    LOG_INFO("[F77] COMMIT_DB_OBJECTS: all committed for " +
+             wf.entityId + " rev " + std::to_string(curRev->rev));
+}
+
+
 bool F77_Engine::tick(F77_Workflow& wf) {
     if(wf.status!="active") return false;
     wf.loadSteps();
@@ -704,42 +778,8 @@ bool F77_Engine::tick(F77_Workflow& wf) {
             s.status="approved"; s.completedDate=nowIso(); s.save(); changed=true;
             LOG_INFO("[F77] Auto-approved step '"+s.title+"'");
 
-            // System step "Create DB Objects": commit ALL uncommitted objects.
-            // Step is only marked approved if every commit succeeds.
-            if(s.isSystem && s.title == "Create DB Objects" && wf.entityType == "dok") {
-                auto curRev = Rosenholz::DocumentRevision::currentRevision(wf.entityId);
-                if(curRev) {
-                    auto inWorkObjs = Rosenholz::DocumentObject::loadForRevision(
-                        wf.entityId, curRev->rev);
-                    bool allOk = true;
-                    for(auto& obj : inWorkObjs) {
-                        if(!obj->committed) {
-                            auto res = obj->commitToLMDB();
-                            if(!Rosenholz::opOk(res)) {
-                                allOk = false;
-                                LOG_ERROR("[F77] Create DB Objects: commit failed for "
-                                    + obj->objectId + " — "
-                                    + Rosenholz::opResultMessage(res));
-                            }
-                        }
-                    }
-                    if(!allOk) {
-                        // Revert step to pending — not approved
-                        s.status = "pending";
-                        s.completedDate = "";
-                        s.save();
-                        changed = false;
-                        LOG_ERROR("[F77] Create DB Objects step FAILED — step reverted to pending. "
-                                  "Fix object files in MFS and re-run tick.");
-                    } else {
-                        if(Rosenholz::Config::instance().storage().saveSpace) {
-                            pruneMFSRevisions(wf.entityId);
-                        }
-                        LOG_INFO("[F77] Create DB Objects: all objects committed for "
-                                 + wf.entityId + " rev " + std::to_string(curRev->rev));
-                    }
-                }
-            }
+            // Delegate system step execution — each action is self-contained.
+            if(s.isSystem) executeSystemStep(s, wf, changed);
         }
 
         // Spawn wait-condition F18_Operation if needed
@@ -847,15 +887,15 @@ bool F77_Engine::fireStep(F77_Workflow& wf, const std::string& stepId,
 
 void F77_Engine::spawnWaitConditionF18(F77_WorkflowStep& step, const std::string& entityId) {
     std::string projId;
-    // Try to find projectId from entityId
+    // F18 resolves to its owning task (taskId)
     auto op = F18Operation::loadById(entityId);
-    if(op) projId = op->projectId;
+    if(op) projId = op->taskId;
     if(projId.empty()) projId = entityId; // fallback
 
     if(projId.empty()) projId=entityId;
     std::string title = step.waitConditionF18Type.empty() ? "Wartebedingung" : step.waitConditionF18Type + " — Wartebedingung";
     if(step.waitConditionF18Type.empty()) { LOG_WARN("[F77] No wait condition type set"); return; }
-    auto waitOp = F18Operation::create(projId, title, step.waitConditionF18Type, "");
+    auto waitOp = F18Operation::create(entityId, title, step.waitConditionF18Type);
     if(waitOp) {
         step.waitF18OperationId = waitOp->vorgangId;
         step.save();
@@ -883,21 +923,14 @@ bool F77_Engine::applyTargetState(const F77_Workflow& wf) {
             LOG_INFO("[F77] DOK revision transitioned: "+wf.entityId+" → "+wf.targetState);
         }
     } else {
-        // F16/F22/F18: set status = targetState in the entity DB
-        auto* pdb  = DatabasePool::instance().get("f16");
-        auto* t22db= DatabasePool::instance().get("f22");
-        auto* f18db= DatabasePool::instance().get("f18");
-        auto ts = wf.targetState;
-        auto id = wf.entityId;
-        auto upd = [&](Database* d, const std::string& tbl, const std::string& col){
-            if(!d) return;
-            d->exec("UPDATE "+tbl+" SET status=?, updated_at=? WHERE "+col+"=?;",
-                    {BindParam::text(ts),BindParam::text(nowIso()),BindParam::text(id)});
-        };
-        if(wf.entityType=="f16") upd(pdb,  "projects","project_id");
-        else if(wf.entityType=="f22") upd(t22db,"tasks","task_id");
-        else if(wf.entityType=="f18") upd(f18db,"f18_operations","vorgang_id");
-        LOG_INFO("[F77] Entity status set to '"+ts+"': "+wf.entityType+"/"+id);
+        // F16/F22/F18: set status via EntityCtx (single dispatch — no scattered if/else)
+        auto actx = entityContext(wf.entityType);
+        if (actx.valid())
+            actx.db->exec(
+                "UPDATE " + actx.table + " SET status=?, updated_at=? WHERE " + actx.idCol + "=?;",
+                {BindParam::text(wf.targetState), BindParam::text(nowIso()),
+                 BindParam::text(wf.entityId)});
+        LOG_INFO("[F77] Entity status → '" + wf.targetState + "': " + wf.entityType + "/" + wf.entityId);
     }
     return true;
 }
@@ -979,8 +1012,9 @@ void F77_Engine::seedDefaultTemplates() {
         // Step 2: Create DB Objects (system step — auto-approved, immutable)
         auto createDb = t->addTemplateStep("Create DB Objects", "sequential", false, false);
         createDb.predecessorTplStepIds = init.tplStepId;
-        createDb.autoApprove = true;
-        createDb.isSystem    = true;   // marks this as the commit step
+        createDb.autoApprove   = true;
+        createDb.isSystem      = true;
+        createDb.systemAction  = SystemAction::COMMIT_DB_OBJECTS;
         createDb.save();
 
         // Step 3: User-defined mid step

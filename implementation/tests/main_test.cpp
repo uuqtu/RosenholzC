@@ -4,6 +4,7 @@
 // ============================================================
 #include "TestFramework.h"
 #include "../src/core/Config.h"
+#include "../src/core/FileOps.h"
 using namespace Rosenholz;
 #include "../src/app/AppController.h"
 #include "../src/core/Migration.h"
@@ -26,7 +27,7 @@ int main(int argc, char* argv[]) {
     const std::string basePath = "/tmp/rosenholz_test_run";
     auto resetDB = [&]() {
         DatabasePool::instance().closeAll();
-        std::system(("rm -rf " + basePath).c_str());
+        FileOps::deleteDir(basePath);
         Config::instance().setBasePath(basePath);
         auto& cfg = Config::instance();
         if (!DatabasePool::instance().initAll(cfg.basePath(),
@@ -39,7 +40,7 @@ int main(int argc, char* argv[]) {
     };
 
     // Initial setup: wipe and set test dir, then init
-    std::system(("rm -rf " + basePath).c_str());
+    FileOps::deleteDir(basePath);
 
     auto& app = AppController::instance();
     if (!app.init("settings.json", "", AppMode::CLI)) {

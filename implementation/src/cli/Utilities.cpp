@@ -829,7 +829,6 @@ void printF18Operation(const Rosenholz::F18Operation& v) {
 //   type      : pre-selected vorgangType (optional, prompted if empty)
 // ------------------------------
 std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
-    const std::string& projectId,
     const std::string& taskId,
     const std::string& type)
 {
@@ -867,7 +866,7 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     std::string owner  = readOpt("Verantwortlich (Person-ID, leer=offen): ");
     std::string prio   = readOpt("Priorität (low/medium/high/critical, leer=medium): ");
 
-    auto v = Rosenholz::F18Operation::create(projectId, title, chosenType, taskId);
+    auto v = Rosenholz::F18Operation::create(taskId, title, chosenType);
     if (!v) {
         std::cout << "  >> FEHLER: F18 Workflow konnte nicht angelegt werden.\n";
         return nullptr;

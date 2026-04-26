@@ -41,7 +41,7 @@ void cmdStatus() {
     };
     std::cout << "\n  Rosenholz PM  —  System-Status\n";
     std::cout << "  " << std::string(42,'-') << "\n";
-    std::cout << "  Basispfad : " << cfg.basePath() << "\n\n";
+    std::cout << "  Basispfad : " << cfg.basePath() << "\n";
 
     if (auto* db = DatabasePool::instance().get("f16"))
         row("F16 Projekte:", db->rowCount("projects"), "Projekte");
@@ -109,8 +109,9 @@ void cmdMfs(const std::vector<std::string>& args) {
         bool ok = MFSWriter::writeProject(*p, root);
         for (auto& t : TaskF22::loadForProject(p->projectId))
             ok &= MFSWriter::writeTask(*t, root);
-        for (auto& v : F18Operation::loadForProject(p->projectId))
-            ok &= MFSWriter::writeF18(*v, root);
+        for (auto& t2 : TaskF22::loadForProject(p->projectId))
+            for (auto& v : F18Operation::loadForTask(t2->taskId))
+                ok &= MFSWriter::writeF18(*v, root);
         for (auto& d : Document::loadForProject(p->projectId))
             ok &= MFSWriter::writeDocument(*d, root);
         printOk(ok ? "  >> F16 " + id + " geschrieben." : "  >> Fehler.");
@@ -211,7 +212,7 @@ void globalSearch(const std::string& query) {
             hits.push_back({"F77", w->workflowId, w->templateName, w->status});
 
     if (hits.empty()) {
-        std::cout << "  (keine Treffer für \"" << query << "\")\n\n";
+        std::cout << "  (keine Treffer für \"" << query << "\")\n";
         return;
     }
 
@@ -287,7 +288,7 @@ void cmdIndexDokFolders() {
             if (!rev) continue;
 
             std::cout << "\n  Dokument : " << doc->documentId << "  "" << doc->title << ""\n"
-                      << "  Revision : " << revNum << "  [" << rev->revStateStr() << "]\n"
+                      << "  Revision : " << revNum << "  [" << rev->revState << "]\n"
                       << "  Datei    : " << filePath << "\n";
             totalFound++;
 

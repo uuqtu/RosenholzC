@@ -22,6 +22,7 @@
 // ============================================================
 
 #include <string>
+#include <ostream>
 #include <vector>
 #include <cstdint>
 #include <memory>
@@ -57,6 +58,13 @@ inline RevState revStateFromString(const std::string& s) {
     if (s == "closed")       return RevState::CLOSED;
     return RevState::IN_WORK; // default and for "in_work"
 }
+
+// Stream operator — write RevState directly to ostream without calling revStateStr()
+// Enables: std::cout << rev->revState instead of << rev->revState
+inline std::ostream& operator<<(std::ostream& os, RevState s) {
+    return os << revStateToString(s);
+}
+
 
 // Keep DocRevState aliases for backward compatibility during migration
 // These will be removed once all callers use RevState directly.
@@ -147,7 +155,13 @@ public:
     //
     // Returns false if transition is not allowed or DB write fails.
     // ------------------------------
-    bool transitionState(const std::string& targetState);
+    // Primary: type-safe transition. Returns false if not allowed or DB fails.
+    bool transitionState(RevState target);
+    // String overload: converts via revStateFromString, then delegates.
+    // Kept for SQL-origin callers (workflow engine, tests).
+    bool transitionState(const std::string& target) {
+        return transitionState(revStateFromString(target));
+    }
 
     // ------------------------------
     // isTransitionAllowed
