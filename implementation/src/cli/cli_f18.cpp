@@ -29,8 +29,8 @@ namespace CLI {
 // Guided wizard: select F22 task first, then create F18.
 // F18 belongs exclusively to F22 — no direct F16 attachment.
 std::shared_ptr<F18Operation> createF18WizardGuided() {
-    hdr("F18 WORKFLOW ANLEGEN — AUFGABE WÄHLEN");
-    std::string taskId = readLine("F22 Aufgaben-ID (XV/F22/...): ");
+    hdr("F18 ANLEGEN — F22 WÄHLEN");
+    std::string taskId = readLine("F22-ID (XV/F22/...): ");
     if (taskId.empty()) return nullptr;
     auto task = Rosenholz::TaskF22::loadById(taskId);
     if (!task) { printErr("F22 nicht gefunden: " + taskId); return nullptr; }
@@ -65,7 +65,7 @@ void cmdF18(const std::vector<std::string>& args) {
                       << std::setw(18) << ("[" + v->vorgangType + "]")
                       << std::setw(12) << v->status
                       << v->title.substr(0, 30) << "\n";
-        std::cout << "  " << all.size() << " Operation(en)\n";
+        std::cout << "  " << all.size() << " F18\n";
         return;
     }
 
@@ -108,7 +108,7 @@ void cmdF18(const std::vector<std::string>& args) {
         if (op) printOk("  >> F18 angelegt: " + op->vorgangId
                         + "  [" + op->vorgangType + "]  " + op->title);
     } else {
-        printErr("F18 Vorgänge sind F22-Aufgaben zugeordnet. Bitte F22-ID eingeben.");
+        printErr("F18 sind F22 zugeordnet. Bitte F22-ID eingeben.");
     }
 }
 
@@ -294,16 +294,16 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& type)
 {
     using namespace Rosenholz;
-    hdr("NEUEN F18 VORGANG ANLEGEN");
+    hdr("F18 ANLEGEN");
 
     // Step 1: Title
-    std::string title = readLine("Titel des Vorgangs: ");
+    std::string title = readLine("F18-Titel: ");
     if (title.empty()) return nullptr;
 
     // Step 2: Type (ask after title, not upfront)
     std::string chosenType = type;
     if (chosenType.empty()) {
-        hdr("TYP WÄHLEN");
+        hdr("F18-TYP WÄHLEN");
         std::cout
             << "    1.  Incident              (Vorfall)\n"
             << "    2.  Risk                 (Risiko)\n"
@@ -337,7 +337,7 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     else                v->priority  = "medium";
     v->update();
 
-    std::cout << "  >> F18 Vorgang angelegt: " << v->vorgangId << "\n";
+    std::cout << "  >> F18 angelegt: " << v->vorgangId << "\n";
     std::cout << "  >> Typ: " << v->vorgangType << "  Status: " << v->status << "\n";
     return v;
 }
@@ -491,11 +491,11 @@ static bool f18MenuOpt7(std::shared_ptr<F18Operation> v) {
 
 static bool f18MenuOpt8(std::shared_ptr<F18Operation> v) {
     // Starte Workflow...
-    hdr("WORKFLOW — " + v->vorgangId.substr(0,22));
+    hdr("F77 — " + v->vorgangId.substr(0,22));
     std::cout << "  Status: " << v->status << "\n";
     if (v->releaseWorkflowId.empty()) {
-std::cout << "  Kein Workflow aktiv.\n";
-std::cout << "  1. Workflow starten...    0. Zurück\n";
+std::cout << "  Kein F77 aktiv.\n";
+std::cout << "  1. F77 starten...    0. Zurück\n";
 int wfc = readInt("Wahl",0,1);
 if (wfc==1) {
     std::string wid = startWfInstanceWizard("f18", v->vorgangId);
@@ -511,7 +511,7 @@ std::cout << "  WFI    : " << v->releaseWorkflowId.substr(0,36) << "\n";
 std::cout << "  Status : " << wfStatus << "\n";
 std::cout << (blockers>0 ? "  ! " + std::to_string(blockers)
     + " Schritte blockieren\n" : "  ✓ Freigabe moeglich\n");
-std::cout << "  1.Workflow öffnen  0.Zurück\n";
+std::cout << "  1.F77 öffnen  0.Zurück\n";
 int mch = readInt("Wahl",0,1);
 if (mch==1) instanceMenu(v->releaseWorkflowId);
     }
@@ -541,9 +541,8 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
         // Show release status in header
         bool v_released = (v->status == "released");
         if (v_released) std::cout << "  ⚠ RELEASED — nur Lesezugriff\n";
-        std::cout << "  1.Bearbeiten     2.Schritt hinzufügen  3.Schritt öffnen\n"
-                     "  4.Notiz          5.Communications       6.Dokumente\n"
-                     "  7.Notes anfügen  8.Starte Workflow...   0.Zurück\n";
+        std::cout << "  1.Bearbeiten | 2.Schritt+ | 3.Schritt öffnen\n"
+                     "  4.Notiz | 5.Komm. | 6.Dokumente | 7.Notes | 8.F77 | 0.Zurück\n";
         int ch = readInt("Wahl", 0, 8);
         if (ch == 0) break;
         if (ch >= 1 && ch <= 8 && f18MenuTable[ch])
@@ -562,10 +561,10 @@ void f18BrowserMenu(const std::string& taskId,
             items = F18Operation::loadRecent(50);
 
         std::string ctxLabel = typeFilter.empty() ? "alle Typen" : typeFilter;
-        hdr("F18 VORGÄNGE (" + std::to_string(items.size()) + ") — " + ctxLabel);
+        hdr("F18 (" + std::to_string(items.size()) + ") — " + ctxLabel);
 
         if (items.empty()) {
-            std::cout << "  (keine F18-Vorgänge)\n";
+            std::cout << "  (keine F18)\n";
         } else {
             int n=1;
             for (auto& v : items)

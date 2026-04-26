@@ -44,16 +44,16 @@ void cmdStatus() {
     std::cout << "  Basispfad : " << cfg.basePath() << "\n";
 
     if (auto* db = DatabasePool::instance().get("f16"))
-        row("F16 Projekte:", db->rowCount("projects"), "Projekte");
+        row("F16-Karten:", db->rowCount("projects"), "F16-Karten");
     if (auto* db = DatabasePool::instance().get("f22"))
-        row("F22 Aufgaben:", db->rowCount("tasks"), "Aufgaben");
+        row("F22-Vorgänge:", db->rowCount("tasks"), "F22-Vorgänge");
     if (auto* db = DatabasePool::instance().get("f18")) {
-        row("F18 Ops:",       db->rowCount("f18_operations"),     "Operationen");
-        row("F18 Schritte:",  db->rowCount("f18_operation_steps"),"Schritte");
+        row("F18 Operationen:",       db->rowCount("f18_operations"),     "Operationen");
+        row("F18 Schritte (F18OperationStep):",  db->rowCount("f18_operation_steps"),"Schritte");
         row("Comms:",         db->rowCount("communications"),     "Communications");
     }
     if (auto* db = DatabasePool::instance().get("f77")) {
-        row("F77 Workflows:", db->rowCount("f77_workflows"),          "laufend");
+        row("F77-Hinweise:", db->rowCount("f77_workflows"),          "laufend");
         row("F77 Templates:", db->rowCount("f77_workflow_templates"), "Vorlagen");
     }
     if (auto* db = DatabasePool::instance().get("dok"))

@@ -182,7 +182,7 @@ void printTask(const TaskF22& t) {
     std::cout << "  ID:" << t.taskId
               << "  " << t.status << "/" << t.priority
               << "  " << t.percentComplete << "%\n";
-    std::cout << "  Projekt:" << t.projectId.substr(0,26);
+    std::cout << "  F16:" << t.projectId.substr(0,26);
     if (!t.assigneeId.empty()) std::cout << "  Person:" << t.assigneeId.substr(0,26);
     std::cout << "\n";
     if (!t.startDatePlanned.empty() || !t.dueDatePlanned.empty())
@@ -197,8 +197,8 @@ void printDocument(const Document& d) {
     std::cout << "  " << d.docType << "/" << d.format
               << "  Rev:" << (curRev ? std::to_string(curRev->rev) + "[" + curRev->revStateStr() + "]" : "—")
               << "  v" << d.version << "\n";
-    std::cout << "  Projekt:" << (d.projectId.empty()?"—":d.projectId.substr(0,26));
-    if (!d.taskId.empty()) std::cout << "  Task:" << d.taskId.substr(0,26);
+    std::cout << "  F16:" << (d.projectId.empty()?"—":d.projectId.substr(0,26));
+    if (!d.taskId.empty()) std::cout << "  F22:" << d.taskId.substr(0,26);
     std::cout << "\n";
     if (!d.releaseWorkflowId.empty())
         std::cout << "  WFI:" << d.releaseWorkflowId.substr(0,36) << "\n";
@@ -227,10 +227,10 @@ void listDocuments(const std::vector<std::shared_ptr<Document>>& docs,
 
 void listProjects() {
     auto all = ProjectF16::loadAll();
-    if (all.empty()) { std::cout << "  (keine Projekte)\n"; return; }
+    if (all.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
 
     std::cout << "  " << std::left
-              << std::setw(28) << "PROJEKT-ID"
+              << std::setw(28) << "F16-ID"
               << std::setw(32) << "TITEL"
               << std::setw(14) << "STATUS"
               << std::setw(12) << "PHASE"
@@ -253,15 +253,15 @@ void listProjects() {
                   << std::setw(8)  << prio
                   << cpibuf << "\n";
     }
-    std::cout << "  " << all.size() << " Projekt(e)\n";
+    std::cout << "  " << all.size() << " F16-Karte(n)\n";
 }
 
 void listTasks(const std::string& projectId) {
     auto tasks = TaskF22::loadForProject(projectId);
-    if (tasks.empty()) { std::cout << "  (keine Aufgaben)\n"; return; }
+    if (tasks.empty()) { std::cout << "  (keine F22-Vorgänge)\n"; return; }
 
     std::cout << "  " << std::left
-              << std::setw(28) << "AUFGABE-ID"
+              << std::setw(28) << "F22-ID"
               << std::setw(30) << "TITEL"
               << std::setw(14) << "STATUS"
               << std::setw(6)  << "%"
@@ -281,7 +281,7 @@ void listTasks(const std::string& projectId) {
                   << std::setw(10) << t->priority
                   << ass << "\n";
     }
-    std::cout << "  " << tasks.size() << " Aufgabe(n)\n";
+    std::cout << "  " << tasks.size() << " F22\n";
 }
 
 

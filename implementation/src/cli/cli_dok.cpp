@@ -35,11 +35,11 @@ using namespace Rosenholz;
 // and finally calls createDocumentWizard with the chosen IDs.
 
 std::shared_ptr<Document> createDocumentWizardGuided() {
-    hdr("DOKUMENT ANLEGEN — ÜBERGEORDNETE ENTITÄT WÄHLEN");
+    hdr("DOK ANLEGEN — ENTITÄT WÄHLEN");
     std::cout << "  Wo soll das Dokument abgelegt werden?\n"
-              << "  1.  Projekt (F16)\n"
-              << "  2.  Aufgabe (F22)\n"
-              << "  3.  F18-Operation (F18)\n"
+              << "  1.  F16 (Projektkartei)\n"
+              << "  2.  F22 (Vorgangskartei)\n"
+              << "  3.  F18 (Vorgang)\n"
               << "  0.  Abbrechen\n";
     int choice = readInt("Typ", 0, 3);
     if (choice == 0) return nullptr;
@@ -48,15 +48,15 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
         // Pick from all projects
         auto projects = ProjectF16::loadAll();
         if (projects.empty()) {
-            std::cout << "  (keine Projekte vorhanden)\n";
+            std::cout << "  (keine F16-Karten vorhanden)\n";
             return nullptr;
         }
-        hdr("PROJEKT WÄHLEN");
+        hdr("F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
                       << projects[i]->title.substr(0, 36) << "\n";
-        int pick = readInt("Projektnummer", 1, (int)projects.size());
+        int pick = readInt("F16-Nr", 1, (int)projects.size());
         return createDocumentWizard(projects[pick - 1]->projectId, "");
     }
 
@@ -64,28 +64,28 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
         // First pick the project, then the task
         auto projects = ProjectF16::loadAll();
         if (projects.empty()) {
-            std::cout << "  (keine Projekte vorhanden)\n";
+            std::cout << "  (keine F16-Karten vorhanden)\n";
             return nullptr;
         }
-        hdr("PROJEKT WÄHLEN");
+        hdr("F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
                       << projects[i]->title.substr(0, 36) << "\n";
-        int ppick = readInt("Projektnummer", 1, (int)projects.size());
+        int ppick = readInt("F16-Nr", 1, (int)projects.size());
         auto& proj = projects[ppick - 1];
 
         auto tasks = TaskF22::loadForProject(proj->projectId);
         if (tasks.empty()) {
-            std::cout << "  (keine Aufgaben in diesem Projekt — lege unter Projekt ab)\n";
+            std::cout << "  (keine F22-Vorgänge in diesem Projekt — lege unter Projekt ab)\n";
             return createDocumentWizard(proj->projectId, "");
         }
-        hdr("AUFGABE WÄHLEN");
+        hdr("F22 WÄHLEN");
         for (int i = 0; i < (int)tasks.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << tasks[i]->regNumber.toString()
                       << tasks[i]->title.substr(0, 36) << "\n";
-        int tpick = readInt("Aufgabennummer", 1, (int)tasks.size());
+        int tpick = readInt("F22-Nr", 1, (int)tasks.size());
         return createDocumentWizard(proj->projectId, tasks[tpick - 1]->taskId);
     }
 
@@ -96,13 +96,13 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
             std::cout << "  (keine F18-Operationen vorhanden)\n";
             return nullptr;
         }
-        hdr("F18-OPERATION WÄHLEN");
+        hdr("F18 WÄHLEN");
         for (int i = 0; i < (int)ops.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << ops[i]->vorgangId.substr(0, 24)
                       << "  [" << std::setw(14) << ops[i]->vorgangType << "]  "
                       << ops[i]->title.substr(0, 30) << "\n";
-        int opick = readInt("Operations-Nummer", 1, (int)ops.size());
+        int opick = readInt("F18-Nr", 1, (int)ops.size());
         auto& op = ops[opick - 1];
         auto doc = createDocumentWizard(op->taskId, "");
         if (doc) {
@@ -159,13 +159,13 @@ void cmdDok(const std::vector<std::string>& args) {
     // -f16  —  guided creation under F16 (skips entity-type question)
     if (args[0] == "-f16") {
         auto projects = ProjectF16::loadAll();
-        if (projects.empty()) { std::cout << "  (keine Projekte)\n"; return; }
-        hdr("DOKUMENT ANLEGEN — PROJEKT WÄHLEN");
+        if (projects.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
+        hdr("DOK ANLEGEN — F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
                       << projects[i]->title.substr(0, 36) << "\n";
-        int pick = readInt("Projektnummer", 1, (int)projects.size());
+        int pick = readInt("F16-Nr", 1, (int)projects.size());
         auto doc = createDocumentWizard(projects[pick - 1]->projectId, "");
         if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
         return;
@@ -174,27 +174,27 @@ void cmdDok(const std::vector<std::string>& args) {
     // -f22  —  guided creation under F22
     if (args[0] == "-f22") {
         auto projects = ProjectF16::loadAll();
-        if (projects.empty()) { std::cout << "  (keine Projekte)\n"; return; }
-        hdr("DOKUMENT ANLEGEN — PROJEKT WÄHLEN");
+        if (projects.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
+        hdr("DOK ANLEGEN — F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
                       << projects[i]->title.substr(0, 36) << "\n";
-        int ppick = readInt("Projektnummer", 1, (int)projects.size());
+        int ppick = readInt("F16-Nr", 1, (int)projects.size());
         auto& proj = projects[ppick - 1];
         auto tasks = TaskF22::loadForProject(proj->projectId);
         if (tasks.empty()) {
-            std::cout << "  (keine Aufgaben — lege unter Projekt ab)\n";
+            std::cout << "  (keine F22-Vorgänge — lege unter Projekt ab)\n";
             auto doc = createDocumentWizard(proj->projectId, "");
             if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
             return;
         }
-        hdr("AUFGABE WÄHLEN");
+        hdr("F22 WÄHLEN");
         for (int i = 0; i < (int)tasks.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << tasks[i]->regNumber.toString()
                       << tasks[i]->title.substr(0, 36) << "\n";
-        int tpick = readInt("Aufgabennummer", 1, (int)tasks.size());
+        int tpick = readInt("F22-Nr", 1, (int)tasks.size());
         auto doc = createDocumentWizard(proj->projectId, tasks[tpick - 1]->taskId);
         if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
         return;
@@ -204,13 +204,13 @@ void cmdDok(const std::vector<std::string>& args) {
     if (args[0] == "-f18") {
         auto ops = F18Operation::loadRecent(40);
         if (ops.empty()) { std::cout << "  (keine F18-Operationen)\n"; return; }
-        hdr("DOKUMENT ANLEGEN — F18 WÄHLEN");
+        hdr("DOK ANLEGEN — F18 WÄHLEN");
         for (int i = 0; i < (int)ops.size(); ++i)
             std::cout << "  " << std::setw(4)  << (i + 1)
                       << "  " << std::setw(26) << ops[i]->vorgangId.substr(0, 24)
                       << "  [" << std::setw(14) << ops[i]->vorgangType << "]  "
                       << ops[i]->title.substr(0, 28) << "\n";
-        int pick = readInt("Operations-Nummer", 1, (int)ops.size());
+        int pick = readInt("F18-Nr", 1, (int)ops.size());
         auto& op = ops[pick - 1];
         auto doc = createDocumentWizard(op->taskId, "");
         if (doc) {
@@ -273,13 +273,14 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         "evidence","plan","minutes","archive","other"};
     std::string docType = dtypes[dt-1];
 
-    // ── Optionale Felder ─────────────────────────────────────────
-    std::string fmt = readOpt("Dateiformat (pdf/docx/xlsx/txt/png/..., leer=pdf): ");
+    // ── Optionale URL (für spätere Aktualisierung via Option 11) ─────────
+    std::string url = readOpt("URL (optional — für späteren Download): ");
 
     // ── Dokument-Datensatz speichern (keine Datei — Objekte später hinzufügen) ──
     auto doc = Document::create(title, docType, projectId);
     doc->taskId      = taskId;
-    doc->format      = fmt.empty() ? "pdf" : fmt;
+    doc->format      = "pdf";  // default; overridden when a file is attached
+    doc->fileUrl     = url;
     doc->dateCreated = nowIso();
 
     if (!opOk(doc->save())) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
@@ -424,23 +425,23 @@ static bool dokHandleNewRevision(DocMenuCtx& ctx) {
 static bool dokHandleWorkflow(DocMenuCtx& ctx) {
 
     // Workflow starten / anzeigen
-    hdr("WORKFLOW / FREIGABE — " + ctx.doc->documentId.substr(0, 26));
+    hdr("F77 / FREIGABE — " + ctx.doc->documentId.substr(0, 26));
     if (ctx.doc->releaseWorkflowId.empty()) {
-        std::cout << "  Kein aktiver Workflow.\n";
-        if (readInt("  1.Workflow starten  0.Zurueck", 0, 1) == 1) {
+        std::cout << "  Kein aktiver F77.\n";
+        if (readInt("  1.F77 starten  0.Zurueck", 0, 1) == 1) {
             std::string wid = startWfInstanceWizard("dok", ctx.doc->documentId);
             if (!wid.empty()) instanceMenu(wid);
         }
     } else {
         auto wf = F77_Workflow::loadById(ctx.doc->releaseWorkflowId);
-        std::cout << "  Workflow-ID : " << ctx.doc->releaseWorkflowId.substr(0, 36) << "\n"
+        std::cout << "  F77-ID : " << ctx.doc->releaseWorkflowId.substr(0, 36) << "\n"
                   << "  Status      : " << (wf ? wf->status : "unbekannt") << "\n";
         if (wf && wf->status == "active") {
             if (readInt("  1.Oeffnen  0.Zurueck", 0, 1) == 1)
                 instanceMenu(ctx.doc->releaseWorkflowId);
         } else {
-            std::cout << "  (Workflow abgeschlossen/abgebrochen)\n";
-            if (readInt("  1.Neuen Workflow starten  0.Zurueck", 0, 1) == 1) {
+            std::cout << "  (F77 abgeschlossen/abgebrochen)\n";
+            if (readInt("  1.Neuen F77 starten  0.Zurueck", 0, 1) == 1) {
                 std::string wid = startWfInstanceWizard("dok", ctx.doc->documentId);
                 if (!wid.empty()) instanceMenu(wid);
             }
@@ -984,7 +985,7 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
     ctx.curObjs   = DocumentObject::loadForRevision(ctx.doc->documentId, ctx.curRevNum);
     std::cout << "  >> Zeige Rev " << sel << "  [" << selRev->revState << "]"
               << "  " << ctx.curObjs.size() << " Objekt(e)\n";
-    std::cout << "  Hinweis: Zustandsübergänge nur via F77-Workflow möglich.\n";
+    std::cout << "  Hinweis: Zustandsübergänge nur via F77 möglich.\n";
     return true;
 }
 
@@ -1009,19 +1010,17 @@ void documentMenu(std::shared_ptr<Document> doc) {
                       << "  |  " << curObjs.size() << " Objekt(e)\n";
 
         // ── Menü ────────────────────────────────────────────────
-        std::cout << "  1.Felder  2.Revision  3.Workflow  4.Objekte\n";
+        // ── Kompaktes Menü mit | Trennung ────────────────────────
+        std::cout << "  1.Felder | 2.Revision | 3.F77 | 4.Objekte\n";
         if (inWork) {
-            std::cout << "    5. Objekt hinzufügen (Datei importieren)\n";
-            if (!curObjs.empty())
-                std::cout << "    6. Objekt entfernen\n";
+            std::cout << "  5.Datei+ | 7.Öffnen";
+            if (!curObjs.empty()) std::cout << " | 6.Datei-";
+            std::cout << "\n";
+            std::cout << "  8.Checkout | 9.Checkin | 10.Revert\n";
+        } else {
+            std::cout << "  7.Öffnen\n";
         }
-        std::cout << "  7.Öffnen\n";
-        if (inWork) {
-            std::cout << "    8. Checkout — Objekt zum Bearbeiten holen\n"
-                      << "    9. Checkin — Objekt zurückgeben\n"
-                      << "   10. Änderungen verwerfen (Revert)\n";
-        }
-        std::cout << "  11.URL  12.Verlauf  13.MFS  14.Löschen  15.Drucken  16.RevWechsel  0.Zurück\n";
+        std::cout << "  11.URL aktualisieren | 12.Verlauf | 13.MFS | 14.Löschen | 15.Drucken | 16.RevWechsel | 0.Zurück\n";
         hr();
 
         int ch = readInt("Wahl", 0, 16);

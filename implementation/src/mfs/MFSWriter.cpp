@@ -38,8 +38,8 @@
 #include "../model/dok/Document.h"
 #include "../model/dok/DocumentObject.h"
 #include "../model/f18/F18Operation.h"
-#include "../model/Person.h"
-#include "../model/Team.h"
+#include "../model/person/Person.h"
+#include "../model/team/Team.h"
 #include "../workflow/F77Workflow.h"
 #include "../model/Utils.h"
 

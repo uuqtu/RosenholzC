@@ -1,0 +1,88 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-94a11704b3aa32cfbe2a.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "Rosenholz",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "generate_schemas::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-generate_schemas-Debug-da86b89e2c5d0e85a6f6.json",
+					"name" : "generate_schemas",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "rosenholz_cli::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-rosenholz_cli-Debug-ee1484173b921c2cd0d3.json",
+					"name" : "rosenholz_cli",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "rosenholz_lib::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-rosenholz_lib-Debug-3a6cae1028c1ef0db1a7.json",
+					"name" : "rosenholz_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "rosenholz_test::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-rosenholz_test-Debug-e8c99800e998b36ac3c2.json",
+					"name" : "rosenholz_test",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug",
+		"source" : "/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 8
+	}
+}

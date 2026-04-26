@@ -1,0 +1,32 @@
+{
+    "backup": {
+        "backupPath": "",
+        "enabled": false,
+        "intervalHours": 24,
+        "maxCopies": 7
+    },
+    "basePath": "/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug/rosenholz_data",
+    "db": {
+        "cacheSize": -64000,
+        "walMode": true
+    },
+    "github": {
+        "branch": "main",
+        "enabled": false,
+        "repoUrl": "",
+        "token": ""
+    },
+    "logFile": "rosenholz.log",
+    "logLevel": "INFO",
+    "mfs": {
+        "enabled": true,
+        "rootFolder": "mfs"
+    },
+    "projectName": "Unnamed",
+    "registratur": {
+        "aktenfuehrendeStelle": "Rosenholz-Referat",
+        "archivSignatur": "BStU-MfS",
+        "diensteinheitKuerzel": "XV",
+        "geschaeftszeichen": "GZ"
+    }
+}

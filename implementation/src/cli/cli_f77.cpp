@@ -148,7 +148,7 @@ void instanceMenu(const std::string& workflowId) {
         auto wf = F77_Workflow::loadById(workflowId);
         if (!wf) { std::cout << "  Workflow nicht gefunden: " << workflowId << "\n"; return; }
 
-        hdr("F77 WORKFLOW  " + wf->templateName);
+        hdr("F77  " + wf->templateName);
         auto row = [](const std::string& k, const std::string& v) {
             std::cout << "  | " << std::left << std::setw(18) << k
                       << std::setw(34) << v << "|\n";
@@ -162,7 +162,7 @@ void instanceMenu(const std::string& workflowId) {
         row("Abgeschl.",   fdate(wf->completedDate));
         std::cout << "  +" << std::string(52, '-') << "+\n";
 
-        std::cout << "  Workflow-Kette:";
+        std::cout << "  F77-Kette:";
         drawF77Chain(wf->steps, false);
 
         bool adminMode = Config::instance().admin().enabled;
@@ -171,11 +171,11 @@ void instanceMenu(const std::string& workflowId) {
         if (adminMode)
             std::cout << "  [ADMIN] 1.Schritt manuell ausfuehren  2.Schritt validieren\n"
                          "         3.Schritt hinzufuegen  4.Engine-Tick\n"
-                         "  5.Workflow abbrechen  0.Zurueck\n";
+                         "  5.F77 abbrechen  0.Zurueck\n";
         else
             std::cout << "  1.Schritt hinzufuegen  2.Schritt validieren\n"
                          "  3.Engine-Tick (automatisch)\n"
-                         "  4.Workflow abbrechen   0.Zurueck\n";
+                         "  4.F77 abbrechen   0.Zurueck\n";
         int ch = readInt("Wahl", 0, adminMode ? 5 : 4);
         if (ch == 0) break;
 
@@ -236,7 +236,7 @@ void instanceMenu(const std::string& workflowId) {
             // ── Optionalen Schritt hinzufügen ─────────────────────────────────
             // Only allowed while workflow is active and End step not yet reached
             if (wf->status != "active") {
-                std::cout << "  >> Nur bei aktivem Workflow moeglich.\n"; continue;
+                std::cout << "  >> Nur bei aktivem F77 möglich.\n"; continue;
             }
             // Check End step not yet done
             bool endDone = false;
@@ -245,7 +245,7 @@ void instanceMenu(const std::string& workflowId) {
                 std::cout << "  >> End-Schritt bereits abgeschlossen.\n"; continue;
             }
             std::cout << "  Neuen optionalen Schritt hinzufuegen.\n"
-                      << "  Jeder Schritt spawnt eine F18-Operation (Typ: measure)\n"
+                      << "  Jeder Schritt erzeugt eine F18 (Typ: measure)\n"
                       << "  die manuell als erledigt markiert werden muss.\n";
             std::string title = readLine("Schritt-Titel (leer=Abbrechen): ");
             if (title.empty()) continue;
@@ -256,7 +256,7 @@ void instanceMenu(const std::string& workflowId) {
                                              ? wf->workflowId : wf->entityId);
             if (f18) {
                 if (!desc.empty()) f18->description = desc;
-                f18->notes = "Automatisch aus F77-Workflow: " + wf->workflowId;
+                f18->notes = "Automatisch aus F77: " + wf->workflowId;
                 f18->save();
 
                 // Add the step to the running workflow instance (before End step)
@@ -283,7 +283,7 @@ void instanceMenu(const std::string& workflowId) {
                           << "  >> F18-Operation: " << f18->vorgangId << "\n"
                           << "  >> Schritt wird automatisch abgehakt, sobald F18 abgeschlossen.\n";
             } else {
-                std::cout << "  >> Fehler beim Anlegen der F18-Operation.\n";
+                std::cout << "  >> Fehler beim Anlegen der F18.\n";
             }
         }
 
@@ -294,10 +294,10 @@ void instanceMenu(const std::string& workflowId) {
 
         else if (action == 5) {
             // Workflow abbrechen
-            std::string confirm = readOpt("Workflow wirklich abbrechen? (ja/nein): ");
+            std::string confirm = readOpt("F77 wirklich abbrechen? (ja/nein): ");
             if (confirm == "ja") {
                 F77_Engine::cancelWorkflow(*wf);
-                std::cout << "  >> Workflow abgebrochen. Entitaet kann neuen Workflow starten.\n";
+                std::cout << "  >> F77 abgebrochen. Entität kann neuen F77 starten.\n";
                 break;
             }
         }
@@ -308,7 +308,7 @@ void instanceMenu(const std::string& workflowId) {
 std::string startWfInstanceWizard(const std::string& entityType,
                                    const std::string& entityId)
 {
-    hdr("NEUEN F77-WORKFLOW STARTEN");
+    hdr("F77 STARTEN");
     std::string effType = entityType.empty()
         ? readLine("Entitaetstyp (f16/f22/f18/dok): ") : entityType;
     std::string effId = entityId.empty()
@@ -351,14 +351,14 @@ std::string startWfInstanceWizard(const std::string& entityType,
     if (!wf) { std::cout << "  >> FEHLER beim Starten.\n"; return ""; }
 
     F77_Engine::attachWorkflow(effType, effId, wf->workflowId);
-    std::cout << "  >> F77-Workflow gestartet: " << wf->workflowId << "\n";
+    std::cout << "  >> F77 gestartet: " << wf->workflowId << "\n";
 
     // ── Optional: zusätzliche Schritte hinzufügen ─────────────────────────────
     // Ask if the user wants to insert manual steps (spawning F18 operations)
     // BEFORE the automatic DB-write and End steps run.
     std::cout << "\n  Optional: Weitere Schritte hinzufuegen?\n"
-              << "  (Jeder Schritt erzeugt eine F18-Operation, die manuell\n"
-              << "   abzuschliessen ist. Der Workflow wartet auf jeden Schritt.)\n";
+              << "  (Jeder Schritt erzeugt eine F18, die manuell\n"
+              << "   abgeschlossen werden muss. F77 wartet auf jeden Schritt.)\n";
     while (yesno("  Weiteren Schritt hinzufuegen?")) {
         std::string title = readLine("  Schritt-Titel: ");
         if (title.empty()) break;
@@ -367,7 +367,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
         auto f18 = F18Operation::create(title, "measure", effId);
         if (f18) {
             if (!desc.empty()) f18->description = desc;
-            f18->notes = "F77-Workflow Pflichtschritt: " + wf->workflowId;
+            f18->notes = "F77 Pflichtschritt: " + wf->workflowId;
             f18->save();
 
             F77_WorkflowStep step;
@@ -458,7 +458,7 @@ static void templateMenu(const std::string& templateId) {
             std::string waitS = readOpt("Wartebedingung F18-Typ (leer=keine, z.B. measure): ");
             step.waitConditionF18Type = waitS;
             if (!waitS.empty())
-                step.waitConditionTitle = readOpt("Titel fuer Warte-F18-Operation: ");
+                step.waitConditionTitle = readOpt("Titel fuer Warte-F18: ");
             step.save();
             std::cout << "  >> Schritt hinzugefuegt: " << step.tplStepId << "\n";
         }
@@ -474,7 +474,7 @@ static void templateMenu(const std::string& templateId) {
 // ── Main workflow browser ─────────────────────────────────────
 void workflowMenu() {
     while (true) {
-        hdr("F77 WORKFLOW-VERWALTUNG");
+        hdr("F77 VERWALTUNG");
         std::cout << "  VORLAGEN (deklarativ, nur Admin)\n"
                      "    1. Alle Vorlagen anzeigen\n"
                      "    2. Neue Vorlage erstellen\n"
@@ -482,13 +482,13 @@ void workflowMenu() {
                      "  LAUFENDE WORKFLOWS\n"
                      "    4. Alle aktiven F77-Workflows\n"
                      "    5. Workflow per ID oeffnen\n"
-                     "    6. Neuen Workflow starten\n"
+                     "    6. Neuen F77 starten\n"
                      "    0. Zurueck\n";
         int ch = readInt("Wahl", 0, 6); if (ch == 0) break;
 
         else if (ch == 1) {
             auto templates = F77_WorkflowTemplate::loadAll();
-            hdr("F77-VORLAGEN (" + std::to_string(templates.size()) + ")");
+            hdr("F77 VORLAGEN (" + std::to_string(templates.size()) + ")");
             if (templates.empty()) std::cout << "  (keine)\n";
             int n = 1;
             for (auto& t : templates)
@@ -533,12 +533,12 @@ void workflowMenu() {
         }
 
         else if (ch == 4) {
-            hdr("AKTIVE F77-WORKFLOWS");
+            hdr("AKTIVE F77");
             listWfInstances("", "");
         }
 
         else if (ch == 5) {
-            std::string id = readLine("Workflow-ID: ");
+            std::string id = readLine("F77-ID: ");
             instanceMenu(id);
         }
 

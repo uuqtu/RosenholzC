@@ -70,7 +70,7 @@ void cmdF16(const std::vector<std::string>& args) {
         std::string st = args.size() > 1 ? args[1] : readLine("Status: ");
         auto list = ProjectF16::loadByStatus(st);
         if (list.empty()) {
-            std::cout << "  (keine Projekte mit status=" << st << ")\n";
+            std::cout << "  (keine F16 mit status=" << st << ")\n";
             return;
         }
         for (auto& p : list)
@@ -83,7 +83,7 @@ void cmdF16(const std::vector<std::string>& args) {
     // -n  —  guided creation (same as direct wizard; kept for symmetry)
     if (args[0] == "-n" || args[0] == "--neu") {
         auto p = createProjectWizard();
-        if (p) printOk("  >> Projekt angelegt: " + p->regNumber.toString() + "  " + p->title);
+        if (p) printOk("  >> F16 angelegt: " + p->regNumber.toString() + "  " + p->title);
         return;
     }
 
@@ -97,7 +97,7 @@ void cmdF16(const std::vector<std::string>& args) {
 
     // Anything else → direct creation wizard
     auto p = createProjectWizard();
-    if (p) printOk("  >> Projekt angelegt: " + p->regNumber.toString() + "  " + p->title);
+    if (p) printOk("  >> F16 angelegt: " + p->regNumber.toString() + "  " + p->title);
 }
 
 
@@ -108,7 +108,7 @@ void cmdF16(const std::vector<std::string>& args) {
 
 static void editMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
     using namespace Rosenholz;
-    hdr("PROJEKT BEARBEITEN — " + p->regNumber.toString());
+    hdr("F16 BEARBEITEN — " + p->regNumber.toString());
 
     // Title and core fields
     std::string title = readOpt("Titel (leer = behalten): ");
@@ -181,13 +181,13 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
     using namespace Rosenholz;
     while (true) {
         if (auto fresh = ProjectF16::loadById(p->projectId)) *p = *fresh;
-        hdr("WORKFLOW — " + p->projectId);
+        hdr("F77 — " + p->projectId);
         std::cout << "  Status       : " << p->status << "\n";
 
         if (p->releaseWorkflowId.empty()) {
             // No workflow yet — offer to start one (always asks targetState via wizard)
-            std::cout << "  Kein Workflow aktiv.\n";
-            std::cout << "  1. Workflow starten...    0. Zurück\n";
+            std::cout << "  Kein F77 aktiv.\n";
+            std::cout << "  1. F77 starten...    0. Zurück\n";
             int ch = readInt("Wahl", 0, 1);
             if (ch == 0) return;
             std::string wid = startWfInstanceWizard("f16", p->projectId);
@@ -198,7 +198,7 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
         // Workflow exists
         auto wf = F77_Workflow::loadById(p->releaseWorkflowId);
         std::string wfStatus = wf ? wf->status : "unbekannt";
-        std::cout << "  Workflow-ID  : " << p->releaseWorkflowId.substr(0, 36) << "\n";
+        std::cout << "  F77-ID  : " << p->releaseWorkflowId.substr(0, 36) << "\n";
         std::cout << "  WF-Status    : " << wfStatus << "\n";
 
         if (wfStatus == "active") {
@@ -208,20 +208,20 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
                 std::cout << "  ! " << blockers << " Schritte blockieren Freigabe\n";
             else
                 std::cout << "  ✓ Freigabe moeglich\n";
-            std::cout << "  1. Workflow öffnen    0. Zurück\n";
+            std::cout << "  1. F77 öffnen    0. Zurück\n";
             int ch = readInt("Wahl", 0, 1);
             if (ch == 1) instanceMenu(p->releaseWorkflowId);
         } else if (wfStatus == "completed" || wfStatus == "cancelled") {
             // Completed or cancelled: allow starting a new one
             std::cout << "  (abgeschlossen oder abgebrochen)\n";
-            std::cout << "  1. Neuen Workflow starten...    0. Zurück\n";
+            std::cout << "  1. Neuen F77 starten...    0. Zurück\n";
             int ch = readInt("Wahl", 0, 1);
             if (ch == 1) {
                 std::string wid = startWfInstanceWizard("f16", p->projectId);
                 if (!wid.empty()) instanceMenu(wid);
             }
         } else {
-            std::cout << "  1. Workflow öffnen    0. Zurück\n";
+            std::cout << "  1. F77 öffnen    0. Zurück\n";
             int ch = readInt("Wahl", 0, 1);
             if (ch == 1) instanceMenu(p->releaseWorkflowId);
         }
@@ -237,9 +237,9 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
 // Saves to DB and writes MFS file if MFS is enabled.
 
 std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
-    hdr("CREATE NEW PROJECT (F16)");
+    hdr("F16 ANLEGEN (Projektkartei)");
     std::string title = readLine("Title: ");
-    std::cout << "  Project type:\n"
+    std::cout << "  F16-Typ:\n"
               << "    1. OV  (Operativer Vorgang — active investigation)\n"
               << "    2. IM  (IM-Vorgang — contributor engagement)\n"
               << "    3. OPK (Operative Personenkontrolle — due diligence)\n"
@@ -284,7 +284,7 @@ std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
         if (cfg.mfs().enabled) p->writeMFSFile(cfg.mfsPath());
         return p;
     } else {
-        std::cout << "\n  >> ERROR: Project could not be saved.\n";
+        std::cout << "\n  >> FEHLER: F16 konnte nicht gespeichert werden.\n";
         return nullptr;
     }
 }
@@ -318,10 +318,10 @@ static bool prjMenuOpt2(std::shared_ptr<ProjectF16> p) {
 }
 
 static bool prjMenuOpt3(std::shared_ptr<ProjectF16> p) {
-    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Aufgaben.\n"; return true; }
+    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuer F22-Vorgangn.\n"; return true; }
     auto task = createTaskWizard(p->projectId);
     if (task) {
-std::cout << "  Aufgabe jetzt öffnen? (j/n): ";
+std::cout << "  F22 jetzt öffnen? (j/n): ";
 std::string yn; std::getline(std::cin, yn);
 if (yn=="j"||yn=="J") taskMenu(task);
     }
@@ -415,8 +415,8 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
             std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
 
         std::cout
-            << "  1.Bearbeiten  2.Aufgaben  3.Aufgabe+  4.Dokumente  5.Dok+\n"
-            << "  6.Komm.       7.Meilestein  8.Workflow  0.Zurück\n";
+            << "  1.Bearbeiten  2.F22  3.F22+  4.Dokumente  5.Dok+\n"
+            << "  6.Komm.       7.Meilenstein  8.F77  0.Zurück\n";
         hr();
 
         int ch = readInt("Wahl", 0, 8);

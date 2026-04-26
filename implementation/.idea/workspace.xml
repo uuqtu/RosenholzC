@@ -31,68 +31,17 @@
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/REQUIREMENTS.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/documents.sql" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/dok.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/dok.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/f18.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/f18.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/projects.sql" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/reporting.sql" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/tracking.sql" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/workflow.sql" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/PersonMenu.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/ReportingMenu.cpp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/Utilities.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/Utilities.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_comm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_comm.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_de.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_de.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_dok.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_dok.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f16.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f18.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f22.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f77.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f77.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_per.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_per.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_sys.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_sys.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_utils.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_utils.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/main_cli.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Config.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Config.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/FileOps.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/FileOps.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/FileOps.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/FileOps.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Migration.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Migration.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/RegNumber.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/RegNumber.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/IncidentF18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/IncidentF18.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Person.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Person.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Person.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Person.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/ProjectF16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/ProjectF16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/TaskF22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/TaskF22.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Team.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Team.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Utils.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Utils.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/dok/Document.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/dok/Document.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/dok/Document.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/dok/Document.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/dok/DocumentObject.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/dok/DocumentObject.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/ProjectF16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/ProjectF16.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/Communication.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/Communication.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Operation.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18OperationStep.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18OperationStep.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f22/TaskF22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f22/TaskF22.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f22/TaskF22.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f22/TaskF22.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/repository/ArchiveStore.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/repository/ArchiveStore.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/repository/DocumentRevision.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/repository/DocumentRevision.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/repository/DocumentRevision.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/repository/DocumentRevision.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/TestFixtures.h" beforeDir="false" afterPath="$PROJECT_DIR$/tests/TestFixtures.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/main_test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/main_test.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_core.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_core.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_model.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_model.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_workflow.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -150,9 +99,9 @@
   }
 }</component>
   <component name="RunManager" selected="CMake Application.rosenholz_cli">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="generate_schemas" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="generate_schemas" CONFIG_NAME="Debug">
@@ -209,7 +158,8 @@
       <workItem from="1777154889836" duration="1369000" />
       <workItem from="1777192601701" duration="1586000" />
       <workItem from="1777209041126" duration="2062000" />
-      <workItem from="1777211391191" duration="1062000" />
+      <workItem from="1777211391191" duration="1722000" />
+      <workItem from="1777213159086" duration="1507000" />
     </task>
     <servers />
   </component>

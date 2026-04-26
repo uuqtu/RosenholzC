@@ -30,7 +30,7 @@ using namespace Rosenholz;
 
 static void editMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
     using namespace Rosenholz;
-    hdr("AUFGABE BEARBEITEN — " + t->regNumber.toString());
+    hdr("F22 BEARBEITEN — " + t->regNumber.toString());
 
     std::string title = readOpt("Titel (leer = behalten): ");
     if (!title.empty()) t->title = title;
@@ -74,12 +74,12 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
     using namespace Rosenholz;
     while (true) {
         if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
-        hdr("WORKFLOW — " + t->taskId);
+        hdr("F77 — " + t->taskId);
         std::cout << "  Status       : " << t->status << "\n";
 
         if (t->releaseWorkflowId.empty()) {
-            std::cout << "  Kein Workflow aktiv.\n";
-            std::cout << "  1. Workflow starten...    0. Zurück\n";
+            std::cout << "  Kein F77 aktiv.\n";
+            std::cout << "  1. F77 starten...    0. Zurück\n";
             int ch = readInt("Wahl", 0, 1);
             if (ch == 0) return;
             std::string wid = startWfInstanceWizard("f22", t->taskId);
@@ -89,7 +89,7 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
 
         auto wf = F77_Workflow::loadById(t->releaseWorkflowId);
         std::string wfStatus = wf ? wf->status : "unbekannt";
-        std::cout << "  Workflow-ID  : " << t->releaseWorkflowId.substr(0, 36) << "\n";
+        std::cout << "  F77-ID  : " << t->releaseWorkflowId.substr(0, 36) << "\n";
         std::cout << "  WF-Status    : " << wfStatus << "\n";
 
         if (wfStatus == "active") {
@@ -99,7 +99,7 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
                 ? "  ! " + std::to_string(blockers) + " Schritte blockieren Freigabe\n"
                 : "  ✓ Freigabe moeglich\n");
         }
-        std::cout << "  1. Workflow öffnen    0. Zurück\n";
+        std::cout << "  1. F77 öffnen    0. Zurück\n";
         int ch = readInt("Wahl", 0, 1);
         if (ch == 0) return;
         if (ch == 1) instanceMenu(t->releaseWorkflowId);
@@ -115,7 +115,7 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
 // or via createTaskWizardGuided).
 
 std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
-    hdr("AUFGABE ANLEGEN (F22)");
+    hdr("F22 ANLEGEN (Vorgangskartei)");
     std::string title     = readLine("Titel: ");
     if (title.empty()) return nullptr;
     std::string desc      = readOpt("Beschreibung (optional): ");
@@ -137,13 +137,13 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
     t->effortPlannedHrs  = effort;
 
     if (opOk(t->save())) {
-        std::cout << "\n  >> Aufgabe angelegt: " << t->regNumber.toString()
+        std::cout << "\n  >> F22-Vorgang angelegt: " << t->regNumber.toString()
                   << " (" << t->taskId << ")\n";
         auto& cfg = Rosenholz::Config::instance();
         if (cfg.mfs().enabled) t->writeMFSFile(cfg.mfsPath());
         return t;
     } else {
-        std::cout << "\n  >> FEHLER: Aufgabe konnte nicht gespeichert werden.\n";
+        std::cout << "\n  >> FEHLER: F22 konnte nicht gespeichert werden.\n";
         return nullptr;
     }
 }
@@ -157,11 +157,11 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
 std::shared_ptr<TaskF22> createTaskWizardGuided() {
     auto projects = ProjectF16::loadAll();
     if (projects.empty()) {
-        std::cout << "  (keine Projekte vorhanden — bitte zuerst ein F16 anlegen)\n";
+        std::cout << "  (keine F16-Karten vorhanden — bitte zuerst ein F16 anlegen)\n";
         return nullptr;
     }
 
-    hdr("AUFGABE ANLEGEN — PROJEKT WÄHLEN");
+    hdr("F22 ANLEGEN — F16 WÄHLEN");
     std::cout << "  " << std::left
               << std::setw(4)  << "#"
               << std::setw(26) << "REG-NR"
@@ -173,7 +173,7 @@ std::shared_ptr<TaskF22> createTaskWizardGuided() {
                   << std::setw(26) << projects[i]->regNumber.toString()
                   << projects[i]->title.substr(0, 36) << "\n";
 
-    int pick = readInt("Projektnummer", 1, (int)projects.size());
+    int pick = readInt("F16-Nr", 1, (int)projects.size());
     return createTaskWizard(projects[pick - 1]->projectId);
 }
 
@@ -192,7 +192,7 @@ void cmdF22(const std::vector<std::string>& args) {
     // No arguments: list 20 most recent tasks
     if (args.empty()) {
         auto all = TaskF22::loadRecent(20);
-        if (all.empty()) { std::cout << "  (keine Aufgaben)\n"; return; }
+        if (all.empty()) { std::cout << "  (keine F22-Vorgänge)\n"; return; }
         std::cout << "  " << std::left
                   << std::setw(24) << "REG-NR"
                   << std::setw(32) << "TITEL"
@@ -202,14 +202,14 @@ void cmdF22(const std::vector<std::string>& args) {
             std::cout << "  " << std::setw(28) << t->taskId
                       << std::setw(32) << t->title.substr(0, 30)
                       << t->status << "\n";
-        std::cout << "  " << all.size() << " Aufgabe(n)\n";
+        std::cout << "  " << all.size() << " F22\n";
         return;
     }
 
     // -n  —  guided creation (list F16, pick one, then create task)
     if (args[0] == "-n" || args[0] == "--neu") {
         auto task = createTaskWizardGuided();
-        if (task) printOk("  >> Aufgabe angelegt: " + task->regNumber.toString()
+        if (task) printOk("  >> F22 angelegt: " + task->regNumber.toString()
                           + "  " + task->title);
         return;
     }
@@ -232,7 +232,7 @@ void cmdF22(const std::vector<std::string>& args) {
     if (args.size() > 1) {
         // Any additional argument signals creation
         auto t = createTaskWizard(project->projectId);
-        if (t) printOk("  >> Aufgabe angelegt: " + t->regNumber.toString()
+        if (t) printOk("  >> F22 angelegt: " + t->regNumber.toString()
                        + "  " + t->title);
     } else {
         // Just a project ID → list its tasks
@@ -319,8 +319,8 @@ void taskMenu(std::shared_ptr<TaskF22> t) {
             std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
 
         std::cout
-            << "  1.Bearbeiten  2.Dokumente  3.Dok+  4.F18-Anzeigen  5.F18+\n"
-            << "  6.Komm.       7.Workflow   0.Zurück\n";
+            << "  1.Bearbeiten | 2.Dokumente | 3.Dok+ | 4.F18 | 5.F18+\n"
+            << "  6.Komm. | 7.F77 | 0.Zurück\n";
         hr();
 
         int ch = readInt("Wahl", 0, 7);

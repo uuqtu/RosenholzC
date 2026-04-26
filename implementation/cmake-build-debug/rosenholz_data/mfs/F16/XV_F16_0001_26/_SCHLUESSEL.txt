@@ -1,0 +1,11 @@
+SCHLUESSEL — F16
+ID      : XV/F16/0001/26
+Titel   : F16
+Status  : in_work
+Typ     : OV
+Groesse : large
+Erstellt: 2026-04-26T16:22:14
+
+Verbundene F22-Aufgaben:
+
+Verbundene Dokumente:

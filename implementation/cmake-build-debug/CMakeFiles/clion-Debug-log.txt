@@ -1,0 +1,27 @@
+/nix/store/wiya2zqayp3yxsqwmanm1pb43alawdwa-clion-2025.3.1/clion/bin/cmake/linux/x64/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/nix/store/wiya2zqayp3yxsqwmanm1pb43alawdwa-clion-2025.3.1/clion/bin/ninja/linux/x64/ninja -G Ninja -S /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation -B /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug
+-- The CXX compiler identification is Clang 21.1.7
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /nix/store/c3mgva705alcgml9c4q0zg79gnv2l6x9-clang-wrapper-21.1.7/bin/clang++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Building for Unix/Linux
+-- Found OpenSSL: /nix/store/j1wa34bbz07lwhgqdzwnj2nr2w4pl7zr-openssl-3.6.1/lib/libcrypto.so (found version "3.6.1")
+-- OpenSSL: 3.6.1
+-- Checking for module 'sqlite3'
+--   Found sqlite3, version 3.50.4
+-- LMDB: /nix/store/frsrrai7ip92qrhx8ks7ansgbx00403y-lmdb-0.9.33/lib/liblmdb.so
+-- Found Python3: /run/current-system/sw/bin/python3 (found version "3.15.0") found components: Interpreter
+-- Will embed SQL: core.sql
+-- Will embed SQL: dok.sql
+-- Will embed SQL: f16.sql
+-- Will embed SQL: f18.sql
+-- Will embed SQL: f22.sql
+-- Will embed SQL: f77.sql
+-- Rosenholz PM v2.0.0
+-- SQLite3: sqlite3
+-- Build type: Debug
+-- SQL schemas embedded: /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/core.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/dok.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f16.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f18.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f22.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77.sql
+-- Configuring done (3.6s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug

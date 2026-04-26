@@ -11,6 +11,7 @@
 #include "../core/Logger.h"
 #include "../model/Utils.h"
 #include "../model/f16/ProjectF16.h"
+#include "../mfs/MFSWriter.h"
 #include "../model/f22/TaskF22.h"
 #include "../model/dok/Document.h"
 #include "../model/f18/F18Operation.h"
@@ -638,34 +639,38 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     init.completedDate=nowIso(); init.createdAt=nowIso(); init.updatedAt=nowIso();
     init.save(); wf->steps.push_back(init);
 
-    // Mid step — for F22: backed by F18_Operation containing the workflow tasks
-    // The F18 is named after the workflow ID so it is easily identifiable.
-    F77_WorkflowStep mid;
-    mid.stepId=genId("F77S"); mid.workflowId=wf->workflowId;
-    mid.title="Freigabe vorbereiten"; mid.sequenceOrder=1;
-    mid.executionMode="sequential"; mid.predecessors={init.stepId};
-    mid.status="pending"; mid.createdAt=nowIso(); mid.updatedAt=nowIso();
+    // For F22: create an F18 tracking operation (no mid step needed).
+    // For DOK:  DB schreiben step commits objects to LMDB.
+    // F16: straight Init → DB schreiben → End.
     if (entityType == "f22") {
-        // Create ONE F18 for all workflow tasks, named after the workflow ID.
-        auto midOp = F18Operation::create(entityId,
-                         "Workflow-Aufgaben [" + wf->workflowId + "]",
-                         F18OperationType::F77_STEP);
-        if (midOp) {
-            midOp->releaseWorkflowId = wf->workflowId;
-            midOp->save();
-            midOp->loadSteps(); // initialises Init + End bookend steps
-            // Add one F18OperationStep for the mid workflow step
-            midOp->addStep("Freigabe vorbereiten", "review", "", true);
-            mid.f18OperationId = midOp->vorgangId;
+        auto wfOp = F18Operation::create(entityId,
+                        "Workflow-Aufgaben [" + wf->workflowId + "]",
+                        F18OperationType::F77_STEP);
+        if (wfOp) {
+            wfOp->releaseWorkflowId = wf->workflowId;
+            wfOp->save();
+            wfOp->loadSteps();
         }
     }
-    mid.save(); wf->steps.push_back(mid);
 
-    // End step
+    // DB schreiben step — visible, auto-approved system step.
+    // Shows in the F77 chain so the user can see the commit happening.
+    F77_WorkflowStep dbStep;
+    dbStep.stepId        = genId("F77S"); dbStep.workflowId = wf->workflowId;
+    dbStep.title         = "DB schreiben";
+    dbStep.sequenceOrder = 1;
+    dbStep.executionMode = "sequential"; dbStep.predecessors = {init.stepId};
+    dbStep.autoApprove   = true; dbStep.isSystem = true;
+    dbStep.systemAction  = SystemAction::COMMIT_DB_OBJECTS;
+    dbStep.status        = "pending";
+    dbStep.createdAt     = nowIso(); dbStep.updatedAt = nowIso();
+    dbStep.save(); wf->steps.push_back(dbStep);
+
+    // End step — auto-approved once DB schreiben completes.
     F77_WorkflowStep end;
     end.stepId=genId("F77S"); end.workflowId=wf->workflowId;
     end.title="End"; end.sequenceOrder=9999; end.isFinal=true;
-    end.autoApprove=true; end.predecessors={mid.stepId};
+    end.autoApprove=true; end.predecessors={dbStep.stepId};
     end.status="pending"; end.executionMode="sequential";
     end.createdAt=nowIso(); end.updatedAt=nowIso();
     end.save(); wf->steps.push_back(end);
@@ -731,7 +736,22 @@ static void executeSystemStep(F77_WorkflowStep& step,
     // COMMIT_DB_OBJECTS is the only action currently; the enum makes it
     // extensible without touching tick().
     if (step.systemAction != SystemAction::COMMIT_DB_OBJECTS) return;
-    if (wf.entityType != "dok") return;
+
+    // For non-DOK entities: write MFS index files (tracking data).
+    if (wf.entityType != "dok") {
+        const std::string& mfsRoot = Rosenholz::Config::instance().mfsPath();
+        if (wf.entityType == "f16") {
+            auto p = Rosenholz::ProjectF16::loadById(wf.entityId);
+            if (p) { MFSWriter::writeProject(*p, mfsRoot); LOG_INFO("[F77] DB schreiben: MFS written for F16 " + wf.entityId); }
+        } else if (wf.entityType == "f22") {
+            auto t = Rosenholz::TaskF22::loadById(wf.entityId);
+            if (t) { MFSWriter::writeTask(*t, mfsRoot); LOG_INFO("[F77] DB schreiben: MFS written for F22 " + wf.entityId); }
+        } else if (wf.entityType == "f18") {
+            auto op = Rosenholz::F18Operation::loadById(wf.entityId);
+            if (op) { MFSWriter::writeF18(*op, mfsRoot); LOG_INFO("[F77] DB schreiben: MFS written for F18 " + wf.entityId); }
+        }
+        return;
+    }
 
     auto curRev = Rosenholz::DocumentRevision::currentRevision(wf.entityId);
     if (!curRev) return;

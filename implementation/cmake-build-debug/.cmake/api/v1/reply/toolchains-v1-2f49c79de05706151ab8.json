@@ -1,0 +1,110 @@
+{
+	"kind" : "toolchains",
+	"toolchains" : 
+	[
+		{
+			"compiler" : 
+			{
+				"id" : "Clang",
+				"implicit" : 
+				{
+					"includeDirectories" : 
+					[
+						"/nix/store/7ivwij84bkixylkapyypb5and5dlc73n-gnumake-4.4.1/include",
+						"/nix/store/qhnx0rx4qslkfr2y7j6xsp9ylalg0qby-compiler-rt-libc-21.1.7-dev/include",
+						"/nix/store/n9jcqw1isd4laq8n8swxk476fjkilz52-sqlite-3.50.4-dev/include",
+						"/nix/store/47cyjj3qqcwnibp21hc6za13ax3z7nrl-nlohmann_json-3.12.0/include",
+						"/nix/store/cs9ywqb3sv4lbb0zdwvh2xy4v71f8zg1-lmdb-0.9.33-dev/include",
+						"/nix/store/qk8l5pp8amakl3f40znb2k5akv1yqf54-openssl-3.6.1-dev/include",
+						"/nix/store/xsg07fsj14py6kmi776qzwzmazxv65hc-readline-8.3p1-dev/include",
+						"/nix/store/y07607nm6364qqhc1gkkyiy48r1l2ndw-ncurses-6.5-dev/include",
+						"/nix/store/4bclapd6zn9zdpkpfl9jms96n92b53yz-curl-8.18.0-dev/include",
+						"/nix/store/lkfg58bkmbbb1k4615ccpqdv3y0vk2qj-brotli-1.1.0-dev/include",
+						"/nix/store/lsh18fkpds98dk9liq7g5j63hghg51rx-krb5-1.22.1-dev/include",
+						"/nix/store/1zk230yx1bsnjaw6aa3h5l6yzyf2bk1z-nghttp2-1.67.1-dev/include",
+						"/nix/store/pv9ycxsw5fv06lx4f61drmfdkprr8qmk-nghttp3-1.12.0-dev/include",
+						"/nix/store/pynqffjhaiygd58g83n81n3hpfp1gyy8-ngtcp2-1.17.0-dev/include",
+						"/nix/store/8mvp1hq07326p8wbxm47p10rhjdf6rg9-libidn2-2.3.8-dev/include",
+						"/nix/store/as4vmar897662dyww80y3h66xgf0i6ik-libpsl-0.21.5-dev/include",
+						"/nix/store/jqkjkwrdj73h160fb29gfzsd0g59pvbr-libssh2-1.11.1-dev/include",
+						"/nix/store/1ir5yz7lcn4i464pqr9hpjkbs405vch5-zlib-1.3.2-dev/include",
+						"/nix/store/0514l81i9njkvdq51flsa7rc5vprybbb-zstd-1.5.7-dev/include",
+						"/nix/store/dzv209h7vsd59smjykpiahj4v8w9yzkq-wkhtmltopdf/include",
+						"/nix/store/5xwvdb1gdf1nrn7b41iji2pf9yb45xqm-gdb-16.3/include",
+						"/nix/store/6dpvjvc181g339ilzamppymcm4j64nng-valgrind-3.26.0-dev/include",
+						"/nix/store/svy8d2j03kqdyj41bbxdj9x84bbl5il6-jq-1.8.1-dev/include",
+						"/nix/store/k3qc3y1f6i8g2dgz5z0cf00dj4xc5rrv-gcc-14.3.0/include/c++/14.3.0",
+						"/nix/store/k3qc3y1f6i8g2dgz5z0cf00dj4xc5rrv-gcc-14.3.0/include/c++/14.3.0/x86_64-unknown-linux-gnu",
+						"/nix/store/c3mgva705alcgml9c4q0zg79gnv2l6x9-clang-wrapper-21.1.7/resource-root/include",
+						"/nix/store/radp574lyk1l05lccg0i4hj4z1p3ig0m-glibc-2.40-218-dev/include"
+					],
+					"linkDirectories" : 
+					[
+						"/nix/store/77mp6vj6q35gaq2k11ar77q45jnvxfh7-sqlite-3.50.4/lib",
+						"/nix/store/frsrrai7ip92qrhx8ks7ansgbx00403y-lmdb-0.9.33/lib",
+						"/nix/store/j1wa34bbz07lwhgqdzwnj2nr2w4pl7zr-openssl-3.6.1/lib",
+						"/nix/store/xp8g8298vbm4k9ipj14xf1r4rh899hr4-ncurses-6.5/lib",
+						"/nix/store/n9fnrm5771ppfnd7rxnvcp6y5viivixp-readline-8.3p1/lib",
+						"/nix/store/rsmb0b09rjzrjhng3wcqcx7bab9kjjik-brotli-1.1.0-lib/lib",
+						"/nix/store/a7k3idqxhcm56k37qxaza3kq37rk7gl8-krb5-1.22.1-lib/lib",
+						"/nix/store/5vjb85kwn4q9gq7f9cl5q3if1w1ij75i-nghttp2-1.67.1-lib/lib",
+						"/nix/store/bi7cpxd5mwk66220j4nzhvg0k0prj8i0-nghttp3-1.12.0/lib",
+						"/nix/store/yr0ynadyy8dnhvqs1ka90gglqhqkkrif-ngtcp2-1.17.0/lib",
+						"/nix/store/8ymbgi17j1s37kpr0wgn37bb1klbs3aa-libidn2-2.3.8/lib",
+						"/nix/store/gljldwi3jdbmrdg4186415pz2n42hhlg-libpsl-0.21.5/lib",
+						"/nix/store/f8pk7vnhs9kk45a32ng21m13bw96j621-libssh2-1.11.1/lib",
+						"/nix/store/3j0jwcygamiza2n1ga69sdk6skaz5k3k-zlib-1.3.2/lib",
+						"/nix/store/bnnzrqcdix96yliwz2l2a4vphhg30nzc-zstd-1.5.7/lib",
+						"/nix/store/824ww67sqwx0jg9ls3n01i9nrbsp2lx1-curl-8.18.0/lib",
+						"/nix/store/dzv209h7vsd59smjykpiahj4v8w9yzkq-wkhtmltopdf/lib",
+						"/nix/store/5xwvdb1gdf1nrn7b41iji2pf9yb45xqm-gdb-16.3/lib",
+						"/nix/store/s57vmfyl10adnfjjfm8xnq78jn1cixyq-jq-1.8.1/lib",
+						"/nix/store/km4g87jxsqxvcq344ncyb8h1i6f3cqxh-glibc-2.40-218/lib",
+						"/nix/store/k3qc3y1f6i8g2dgz5z0cf00dj4xc5rrv-gcc-14.3.0/lib/gcc/x86_64-unknown-linux-gnu/14.3.0",
+						"/nix/store/alrbhz7im0w0jdwcfdgcfk7pxhkl1fzj-gcc-14.3.0-lib/lib",
+						"/nix/store/k3qc3y1f6i8g2dgz5z0cf00dj4xc5rrv-gcc-14.3.0/lib",
+						"/nix/store/hjqsazy6dc8h1dfvkjjxf1g8rlm4skxc-gcc-14.3.0-libgcc/lib",
+						"/nix/store/1iynq895l0hwc4jcnrdzhf2jcmj0sysg-clang-21.1.7-lib/lib"
+					],
+					"linkFrameworkDirectories" : [],
+					"linkLibraries" : 
+					[
+						"stdc++",
+						"m",
+						"gcc_s",
+						"gcc",
+						"c",
+						"gcc_s",
+						"gcc"
+					]
+				},
+				"path" : "/nix/store/c3mgva705alcgml9c4q0zg79gnv2l6x9-clang-wrapper-21.1.7/bin/clang++",
+				"version" : "21.1.7"
+			},
+			"language" : "CXX",
+			"sourceFileExtensions" : 
+			[
+				"C",
+				"M",
+				"c++",
+				"cc",
+				"cpp",
+				"cxx",
+				"m",
+				"mm",
+				"mpp",
+				"CPP",
+				"ixx",
+				"cppm",
+				"ccm",
+				"cxxm",
+				"c++m"
+			]
+		}
+	],
+	"version" : 
+	{
+		"major" : 1,
+		"minor" : 0
+	}
+}

@@ -1,0 +1,27 @@
+VORGANGSAKTE
+=======================================================
+REGISTRIERNUMMER : XV/F16/0001/26
+TITEL            : F16
+VORGANGSART      : OV
+GROESSENKLASSE   : large
+STATUS           : in_work
+PHASE            : 
+CODENAME         : 
+MAIN-WORKFLOW    : 
+AKTENZEICHEN     : GZ-XV_F16_0001_26
+ANGELEGT         : 2026-04-26T16:22:14
+GEAENDERT        : 2026-04-26T16:22:14
+=======================================================
+
+NOTIZEN:
+{}
+
+
+VERWEISE (alle Unterakten dieser Vorgangsakte):
+  F22/   → Aufgabenkartei    [mfs/F22/<reg>/]
+  F18/   → Vorgangskartei    [mfs/F18/<id>/]
+  DOK/   → Schriftgut        [mfs/F16/<reg>/DOK/<id>/]
+
+KLARNAMENZUORDNUNG → owner_key.txt
+  Alle Registriernummern sind dort aufgeloest.
+  Diese Akte ist ohne owner_key.txt nicht vollstaendig.
