@@ -31,17 +31,20 @@
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/dok.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/dok.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_comm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_comm.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_dok.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_dok.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f16.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f18.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f22.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f77.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f77.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_sys.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_sys.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_utils.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_utils.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/main_cli.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Migration.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Migration.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/dok/DocumentObject.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/dok/DocumentObject.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -160,6 +163,8 @@
       <workItem from="1777209041126" duration="2062000" />
       <workItem from="1777211391191" duration="1722000" />
       <workItem from="1777213159086" duration="1507000" />
+      <workItem from="1777215663488" duration="1737000" />
+      <workItem from="1777237160955" duration="17000" />
     </task>
     <servers />
   </component>

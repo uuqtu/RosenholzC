@@ -149,105 +149,68 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
                      std::vector<Rosenholz::F18OperationStep>& allSteps) {
     using namespace Rosenholz;
     while (true) {
-        hdr("SCHRITT — " + step.stepId.substr(0, 22));
-        std::cout << "  Titel   : " << step.title << "\n";
-        std::cout << "  Typ     : " << step.stepType << "\n";
-        std::cout << "  Status  : " << step.status << "\n";
-        std::cout << "  Tracking: " << step.trackingStatus;
+        hdr("F18S — " + step.stepId.substr(0, 22));
+        std::cout << "  Titel   : " << step.title << "\n"
+                  << "  Typ     : " << step.stepType << "\n"
+                  << "  Status  : " << step.status << "\n";
         if (step.percentComplete > 0)
-            std::cout << "  " << step.percentComplete << "%";
-        std::cout << "\n";
+            std::cout << "  Fortsch.: " << step.percentComplete << "%\n";
         if (!step.assignedTo.empty())
             std::cout << "  Assigned: " << step.assignedTo << "\n";
 
-        std::cout << "\n  1.Ausführen  2.Tracking  3.Notiz  4.Communications  5.Dokumente  0.Zurück\n";
-        int ch = readInt("Wahl", 0, 5);
+        // Numbered KOM and DOK sub-lists
+        auto koms = Communication::loadForOwner(step.stepId, "f18step");
+        auto docs  = Document::loadForEntity("f18step", step.stepId);
+
+        std::cout << "  1.Ausführen | 2.Tracking | 3.Notiz\n"
+                  << "  KOM: 4.listen(" << koms.size() << ") | 5.<#> | 6.neu\n"
+                  << "  DOK: 7.listen(" << docs.size() << ") | 8.<#> | 9.neu\n"
+                  << "  0.Zurück\n";
+        int ch = readInt("Wahl", 0, 9);
         if (ch == 0) return;
 
         if (ch == 1) {
-            // Status transition for this step.
-            // Free steps can always transition; regular steps need
-            // all predecessors to be complete first.
-            if (!step.canStart(allSteps)) {
-                std::cout << "  >> Vorgänger noch nicht abgeschlossen.\n";
-                return;
-            }
-            hdr("STATUS SETZEN — " + step.stepId.substr(0, 22));
-            std::cout << "  Aktuell: " << step.status << "\n";
-            if (step.isFree)
-                std::cout << "  (freier Schritt — keine Abhängigkeiten)\n";
-            std::cout << "  1. in_progress   2. waiting\n"
-                         "  3. blocked       4. skipped\n"
-                         "  5. done          0. Abbrechen\n";
-            int dec = readInt("Neuer Status", 0, 5);
-            if (dec == 0) return;
-            static const char* newStates[] =
-                {"", "in_progress", "waiting", "blocked", "skipped", "done"};
-            std::string target = newStates[dec];
-            // Require comment when skipping or marking done
-            std::string comment;
-            if (step.requiresComment || dec == 4 || dec == 5) {
-                comment = readLine("Kommentar/Begründung: ");
-            }
-            std::string actor = readOpt("Bearbeiter (Person-ID, leer=System): ");
-            if (actor.empty()) actor = "system";
-            step.status     = target;
-            step.decisionBy = actor;
-            step.decisionDate = nowIso();
-            step.comment    = comment;
-            // Set timestamps for terminal and start states
-            if (target == "in_progress" && step.startedDate.empty())
-                step.startedDate = nowIso();
-            if (target == "done" || target == "skipped")
-                step.completedDate = nowIso();
-            step.computeTrackingStatus();
-            if (step.save())
-                std::cout << "  >> Status: " << step.status << "\n";
-            else
-                std::cout << "  >> Fehler beim Speichern.\n";
-            // Return to f18Menu after a terminal transition
-            if (target == "done" || target == "skipped") return;
-
+            std::cout << "  1.Abschliessen  2.Ablehnen  3.Überspringen\n";
+            int sc = readInt("Status",1,3);
+            if (sc==1) step.status="done";
+            else if (sc==2) step.status="rejected";
+            else step.status="skipped";
+            step.completedDate = nowIso(); step.save();
+            std::cout << "  >> Status: " << step.status << "\n";
         } else if (ch == 2) {
-            // Tracking update
-            std::cout << "  >> Schritt: " << step.status << "\n";
-            std::cout << "  1.Tracking-Status  2.Fortschritt%  3.Notiz  4.Priorität\n";
-            int sc = readInt("Sub-Wahl", 1, 4);
-            if (sc == 1) {
-                std::cout << "  1.planned 2.focused 3.due 4.in_work 5.archived\n";
-                int ts = readInt("Status", 1, 5);
-                static const char* tstates[] = {"planned","focused","due","in_work","archived"};
-                step.trackingStatus = tstates[ts - 1];
-            } else if (sc == 2) {
-                std::string ps = readOpt("Fortschritt % (0-100): ");
-                if (!ps.empty()) try { step.percentComplete = std::stoi(ps); } catch(...) {}
-            } else if (sc == 3) {
-                step.progressNote = readLine("Notiz: ");
-            } else if (sc == 4) {
-                std::cout << "  1.low 2.medium 3.high 4.critical\n";
-                int pr = readInt("Priorität", 1, 4);
-                static const char* prios[] = {"low","medium","high","critical"};
-                step.priority = prios[pr - 1];
-            }
-            if (step.save()) std::cout << "  >> Tracking aktualisiert.\n";
-
+            std::string ts = readOpt("Tracking-Status: ");
+            std::string pct = readOpt("Fortschritt % (0-100): ");
+            if (!ts.empty()) step.trackingStatus = ts;
+            if (!pct.empty()) try { step.percentComplete = std::stoi(pct); } catch(...) {}
+            step.save(); std::cout << "  >> Aktualisiert.\n";
         } else if (ch == 3) {
-            std::string note = readLine("Notiz: ");
-            std::string by   = readOpt("Von (Person-ID): ");
-            // Append note to the step's notes JSON field
-            if (!step.notes.empty() && step.notes != "{}") {
-                step.notes = step.notes.substr(0, step.notes.rfind('}'))
-                             + ",\"" + nowIso() + "\":\"" + note + "\"}";
-            } else {
-                step.notes = "{\"" + nowIso() + "\":\"" + note + "\"}";
-            }
-            std::cout << "  >> Notiz gespeichert.\n";
-
+            std::string n = readLine("Notiz: ");
+            if (!n.empty()) { step.notes = n; step.save(); }
         } else if (ch == 4) {
-            communicationMenu(step.stepId, "f18step");
-
+            listComms(step.stepId, "f18step");
         } else if (ch == 5) {
-            documentBrowserMenu("", step.stepId);
+            if (koms.empty()) { std::cout << "  (keine)\n"; continue; }
+            int pick = readInt("KOM #", 1, (int)koms.size());
+            commDetailMenu(koms[pick-1]);
+        } else if (ch == 6) {
+            communicationMenu(step.stepId, "f18step");
+        } else if (ch == 7) {
+            if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; continue; }
+            int n=1;
+            for (auto& d : docs)
+                std::cout << "  " << std::setw(3) << n++ << ". "
+                          << d->documentId.substr(0,24) << "  " << d->title.substr(0,30) << "\n";
+        } else if (ch == 8) {
+            if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; continue; }
+            int n=1;
+            for (auto& d : docs)
+                std::cout << "  " << std::setw(3) << n++ << ". "
+                          << d->documentId.substr(0,24) << "  " << d->title.substr(0,30) << "\n";
+            int pick = readInt("DOK #", 1, (int)docs.size());
+            documentMenu(docs[pick-1]);
+        } else if (ch == 9) {
+            auto doc = createDocumentWizard("", step.stepId);
+            if (doc) documentMenu(doc);
         }
     }
 }
@@ -348,188 +311,146 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
 
 
 // ── void f18Menu(std::shared_ptr<F18Operation> v) handlers ──────────────────────────────────────────────
-static bool f18MenuOpt1(std::shared_ptr<F18Operation> v) {
-    // Edit common + type-specific fields
-    std::cout << "  Titel (leer=behalten): ";
-    std::string t; std::getline(std::cin, t);
-    if (!t.empty()) v->title = t;
-    v->description = readOpt("Beschreibung: ");
-    std::cout << "  Priorität: 1.low 2.medium 3.high 4.critical\n";
-    int p = readInt("Priorität",1,4);
-    static const char* ps[]={"low","medium","high","critical"};
-    v->priority = ps[p-1];
+// ── F18 f18Menu handlers ────────────────────────────────────────────────
 
-    // Dispatch type-specific edit — each handler is a named function.
-    // Adding a new F18 type: add one entry to typeEditHandlers.
-    using TypeEditFn = std::function<bool(F18Operation&)>;
-    static const std::unordered_map<std::string, TypeEditFn> typeEditHandlers = {
-{"incident", [](F18Operation& v) {
-    v.severity   = readOpt("Schwere (low|medium|high|critical): ");
-    v.rootCause  = readOpt("Ursache: ");
-    v.resolution = readOpt("Lösung: ");
-    std::string ci = readOpt("Kostenauswirkung (€): ");
-    if (!ci.empty()) try { v.costImpact = std::stod(ci); } catch(...) {}
-    return true;  // call update()
-}},
-{"risk", [](F18Operation& v) {
-    auto readScore = [](const std::string& p) {
-        std::string s = readOpt(p);
-        if (!s.empty()) try { return std::stoi(s); } catch(...) {}
-        return 0;
-    };
-    if (int n = readScore("W-Score (1-5): "))       v.probabilityScore = n;
-    if (int n = readScore("A-Zeit (1-5): "))        v.impactScoreTime = n;
-    if (int n = readScore("A-Kosten (1-5): "))      v.impactScoreCost = n;
-    if (int n = readScore("A-Qual. (1-5): "))       v.impactScoreQuality = n;
-    if (int n = readScore("A-Scope (1-5): "))       v.impactScoreScope = n;
-    v.recalcRiskScore();
-    std::cout << "  >> Score: " << v.overallRiskScore
-              << " Level: " << v.riskLevel << "\n";
-    return false;  // recalcRiskScore calls update() already
-}},
-{"measure", [](F18Operation& v) {
-    v.measureCategory = readOpt("Kategorie: ");
-    v.effectiveness   = readOpt("Wirksamkeit: ");
-    v.actualDate      = readOpt("Ist-Datum: ");
-    return true;
-}},
-{"qualityGate", [](F18Operation& v) {
-    v.gateResult   = readOpt("Ergebnis (passed|failed|conditional|pending): ");
-    v.gateDecision = readOpt("Entscheidung (proceed|hold|stop): ");
-    v.findings     = readOpt("Befunde: ");
-    return true;
-}},
-{"changeRequest", [](F18Operation& v) {
-    v.justification       = readOpt("Begründung: ");
-    v.crDecisionDate      = readOpt("Entscheidungsdatum: ");
-    v.crDecisionRationale = readOpt("Entscheidungsbegründung: ");
-    return true;
-}},
-    };
-    bool needsUpdate = true;
-    auto it = typeEditHandlers.find(v->vorgangType);
-    if (it != typeEditHandlers.end()) needsUpdate = it->second(*v);
-    if (needsUpdate) { v->update(); std::cout << "  >> Gespeichert.\n"; }
-
-
+static bool f18_edit(std::shared_ptr<F18Operation> v) {
+    using namespace Rosenholz;
+    std::string title = readOpt("Titel (leer=behalten): ");
+    if (!title.empty()) v->title = title;
+    std::string pr = readOpt("Priorität (high/medium/low, leer=behalten): ");
+    if (!pr.empty()) v->priority = pr;
+    std::string own = readOpt("Verantwortliche Person-ID (leer=behalten): ");
+    if (!own.empty()) v->ownerId = own;
+    if (opOk(v->update())) std::cout << "  >> Gespeichert.\n";
     return true;
 }
 
-static bool f18MenuOpt2(std::shared_ptr<F18Operation> v) {
-    // Add step
+static bool f18_note(std::shared_ptr<F18Operation> v) {
+    std::string n = readLine("Notiz: ");
+    if (!n.empty()) {
+        v->notes = (v->notes.empty() || v->notes == "{}") ? n : v->notes + "\n" + n;
+        v->update(); std::cout << "  >> Notiz gespeichert.\n";
+    }
+    return true;
+}
+
+static bool f18_step_list(std::shared_ptr<F18Operation> v) {
+    v->loadSteps();
+    if (v->steps.empty()) { std::cout << "  (keine Schritte)\n"; return true; }
+    int n = 1;
+    for (auto& s : v->steps)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << "[" << std::left << std::setw(8) << s.status.substr(0,7) << "] "
+                  << std::setw(30) << s.title.substr(0,28)
+                  << "  " << s.stepType << "\n";
+    return true;
+}
+
+static bool f18_step_open(std::shared_ptr<F18Operation> v) {
+    v->loadSteps();
+    if (v->steps.empty()) { std::cout << "  (keine Schritte)\n"; return true; }
+    int n=1;
+    for (auto& s : v->steps)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << "[" << std::left << std::setw(8) << s.status.substr(0,7) << "] "
+                  << s.title.substr(0,34) << "\n";
+    int pick = readInt("F18S #", 1, (int)v->steps.size());
+    stepMenu(v->steps[pick-1], v->steps);
+    return true;
+}
+
+static bool f18_step_new(std::shared_ptr<F18Operation> v) {
     std::string title = readLine("Schritt-Titel: ");
-    std::cout << "  Typ: 1.task 2.approval 3.review 4.notification\n";
+    if (title.empty()) return true;
+    std::cout << "  Typ: 1.task  2.approval  3.review  4.notification\n";
     int st = readInt("Typ",1,4);
     static const char* sts[]={"task","approval","review","notification"};
     std::string ass = readOpt("Zugewiesen an (Person-ID, leer=offen): ");
-    bool isFreeStep = yesno("Freier Schritt (keine Voraussetzungen)?");
-    auto step = v->addStep(title, sts[st-1], ass, isFreeStep);
-    if (step)
-std::cout << "  >> Schritt: " << step->stepId << "\n";
-
-
+    bool req = yesno("  Pflichtschritt?");
+    v->addStep(title, sts[st-1], ass, req);
+    std::cout << "  >> Schritt hinzugefuegt.\n";
     return true;
 }
 
-static bool f18MenuOpt3(std::shared_ptr<F18Operation> v) {
-    // Open a step
-    if (v->steps.empty()) { std::cout << "  >> Keine Schritte.\n"; return true; }
-    for (int i=0; i<(int)v->steps.size(); ++i)
-std::cout << "  " << (i+1) << ". " << v->steps[i].title
-          << " [" << v->steps[i].status << "]\n";
-    int pick = readInt("Schritt #",1,(int)v->steps.size());
-    stepMenu(v->steps[pick-1], v->steps);
+static bool f18_kom_list(std::shared_ptr<F18Operation> v) {
+    listComms(v->vorgangId, "f18"); return true;
+}
 
-
+static bool f18_kom_open(std::shared_ptr<F18Operation> v) {
+    auto items = listComms(v->vorgangId, "f18");
+    if (items.empty()) return true;
+    int pick = readInt("KOM #", 1, (int)items.size());
+    commDetailMenu(items[pick-1]);
     return true;
 }
 
-static bool f18MenuOpt4(std::shared_ptr<F18Operation> v) {
-    std::string note = readLine("Notiz: ");
-    std::string by   = readOpt("Von (Person-ID): ");
-    v->addNote(by.empty()?"system":by, note);
-    std::cout << "  >> Notiz gespeichert.\n";
+static bool f18_kom_new(std::shared_ptr<F18Operation> v) {
+    communicationMenu(v->vorgangId, "f18"); return true;
+}
 
-
+static bool f18_dok_list(std::shared_ptr<F18Operation> v) {
+    auto docs = Document::loadForEntity("f18", v->vorgangId);
+    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    int n = 1;
+    for (auto& d : docs)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << "  " << d->title.substr(0,30) << "\n";
     return true;
 }
 
-static bool f18MenuOpt5(std::shared_ptr<F18Operation> v) {
-    communicationMenu(v->vorgangId, "project"); // F18 owns comms via vorgangId
-    // Note: use vorgangId as ownerId with type project to allow flexible lookup
-
-
+static bool f18_dok_open(std::shared_ptr<F18Operation> v) {
+    auto docs = Document::loadForEntity("f18", v->vorgangId);
+    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    int n=1;
+    for (auto& d : docs)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << "  " << d->title.substr(0,30) << "\n";
+    int pick = readInt("DOK #", 1, (int)docs.size());
+    documentMenu(docs[pick-1]);
     return true;
 }
 
-static bool f18MenuOpt6(std::shared_ptr<F18Operation> v) {
-    // Documents for this F18 Operation
-    documentBrowserMenu("", v->taskId);
-    // Also show docs attached via f18OperationId
-    auto f18docs = Rosenholz::Document::loadForEntity("f18", v->vorgangId);
-    if (!f18docs.empty()) {
-hdr("DOKUMENTE AN F18 " + v->vorgangId.substr(0,22));
-for (auto& d : f18docs)
-    std::cout << "  " << d->documentId.substr(0,26)
-              << "  " << d->title.substr(0,28) << "\n";
-    }
-
-
+static bool f18_dok_new(std::shared_ptr<F18Operation> v) {
+    auto doc = createDocumentWizard("", v->vorgangId);
+    if (doc) documentMenu(doc);
     return true;
 }
 
-static bool f18MenuOpt7(std::shared_ptr<F18Operation> v) {
-    std::cout << "  Status: 1.draft 2.active 3.completed 4.archived\n";
-    int s = readInt("Status",1,4);
-    static const char* ss[]={"draft","active","completed","archived"};
-    v->status = ss[s-1];
-    v->update();
-    std::cout << "  >> Status: " << v->status << "\n";
-
-    return true;
-}
-
-static bool f18MenuOpt8(std::shared_ptr<F18Operation> v) {
-    // Starte Workflow...
+static bool f18_f77(std::shared_ptr<F18Operation> v) {
     hdr("F77 — " + v->vorgangId.substr(0,22));
-    std::cout << "  Status: " << v->status << "\n";
     if (v->releaseWorkflowId.empty()) {
-std::cout << "  Kein F77 aktiv.\n";
-std::cout << "  1. F77 starten...    0. Zurück\n";
-int wfc = readInt("Wahl",0,1);
-if (wfc==1) {
-    std::string wid = startWfInstanceWizard("f18", v->vorgangId);
-    if (!wid.empty()) instanceMenu(wid);
-}
+        std::cout << "  Kein F77 aktiv.\n  1. F77 starten...    0. Zurück\n";
+        int wfc = readInt("Wahl",0,1);
+        if (wfc==1) {
+            std::string wid = startWfInstanceWizard("f18", v->vorgangId);
+            if (!wid.empty()) instanceMenu(wid);
+        }
     } else {
-auto wf = Rosenholz::F77_Workflow::loadById(v->releaseWorkflowId);
-std::string wfStatus = wf ? wf->status : "unbekannt";
-int blockers=0;
-Rosenholz::F77_Engine::canRelease(
-    "f18",v->vorgangId,v->releaseWorkflowId,blockers);
-std::cout << "  WFI    : " << v->releaseWorkflowId.substr(0,36) << "\n";
-std::cout << "  Status : " << wfStatus << "\n";
-std::cout << (blockers>0 ? "  ! " + std::to_string(blockers)
-    + " Schritte blockieren\n" : "  ✓ Freigabe moeglich\n");
-std::cout << "  1.F77 öffnen  0.Zurück\n";
-int mch = readInt("Wahl",0,1);
-if (mch==1) instanceMenu(v->releaseWorkflowId);
+        std::cout << "  F77-ID: " << v->releaseWorkflowId.substr(0,36) << "\n";
+        std::cout << "  1.F77 öffnen  0.Zurück\n";
+        int wfc = readInt("Wahl",0,1);
+        if (wfc==1) instanceMenu(v->releaseWorkflowId);
     }
-
     return true;
 }
 
 using f18MenuFn = bool(*)(std::shared_ptr<F18Operation> v);
-static const f18MenuFn f18MenuTable[9] = {
-    nullptr,
-    f18MenuOpt1,
-    f18MenuOpt2,
-    f18MenuOpt3,
-    f18MenuOpt4,
-    f18MenuOpt5,
-    f18MenuOpt6,
-    f18MenuOpt7,
-    f18MenuOpt8,
+static const f18MenuFn f18MenuTable[13] = {
+    nullptr,       // 0
+    f18_edit,      // 1 Bearbeiten
+    f18_note,      // 2 Notiz+
+    f18_step_list, // 3 F18S listen
+    f18_step_open, // 4 F18S <#>
+    f18_step_new,  // 5 F18S+
+    f18_kom_list,  // 6 KOM listen
+    f18_kom_open,  // 7 KOM <#>
+    f18_kom_new,   // 8 KOM+
+    f18_dok_list,  // 9 DOK listen
+    f18_dok_open,  // 10 DOK <#>
+    f18_dok_new,   // 11 DOK+
+    f18_f77,       // 12 F77
 };
 
 void f18Menu(std::shared_ptr<F18Operation> v) {
@@ -537,15 +458,17 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
         v->loadSteps();
         printF18Operation(*v);
         drawF18Chain(v->steps);
-
-        // Show release status in header
         bool v_released = (v->status == "released");
         if (v_released) std::cout << "  ⚠ RELEASED — nur Lesezugriff\n";
-        std::cout << "  1.Bearbeiten | 2.Schritt+ | 3.Schritt öffnen\n"
-                     "  4.Notiz | 5.Komm. | 6.Dokumente | 7.Notes | 8.F77 | 0.Zurück\n";
-        int ch = readInt("Wahl", 0, 8);
+        std::cout
+            << "  1.Bearbeiten | 2.Notiz+\n"
+            << "  F18S: 3.listen | 4.<#> | 5.neu\n"
+            << "  KOM:  6.listen | 7.<#> | 8.neu\n"
+            << "  DOK:  9.listen | 10.<#> | 11.neu\n"
+            << "  12.F77  0.Zurück\n";
+        int ch = readInt("Wahl", 0, 12);
         if (ch == 0) break;
-        if (ch >= 1 && ch <= 8 && f18MenuTable[ch])
+        if (ch >= 1 && ch <= 12 && f18MenuTable[ch])
             if (!f18MenuTable[ch](v)) break;
     }
 }

@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS document_objects (
     content_hash    TEXT,                   -- SHA-256 in LMDB (when committed)
     content_size    INTEGER DEFAULT 0,
     format          TEXT,                   -- file extension without dot
+    source_url      TEXT,                   -- original URL (for URL-based objects)
     committed       INTEGER NOT NULL DEFAULT 0,  -- 1 = in LMDB, 0 = MFS only
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now')),

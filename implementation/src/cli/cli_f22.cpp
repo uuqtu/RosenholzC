@@ -243,89 +243,133 @@ void cmdF22(const std::vector<std::string>& args) {
 
 
 // ── void taskMenu(std::shared_ptr<TaskF22> t) handlers ──────────────────────────────────────────────
-static bool tskMenuOpt1(std::shared_ptr<TaskF22> t) {
-    if (t->canEdit()) editMenu(t);
-    else std::cout << "  >> Released — kein Bearbeiten.\n";
+// ── F22 taskMenu handlers ───────────────────────────────────────────────
 
+static bool f22_edit(std::shared_ptr<TaskF22> t) {
+    editMenu(t); return true;
+}
 
+static bool f22_dok_list(std::shared_ptr<TaskF22> t) {
+    auto docs = Document::loadForEntity("f22", t->taskId);
+    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    int n = 1;
+    for (auto& d : docs)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << "  " << d->title.substr(0,30) << "  " << d->docType << "\n";
     return true;
 }
 
-
-static bool tskMenuOpt2(std::shared_ptr<TaskF22> t) {
-    documentBrowserMenu("", t->taskId);
-
-
+static bool f22_dok_open(std::shared_ptr<TaskF22> t) {
+    auto docs = Document::loadForEntity("f22", t->taskId);
+    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    int n=1;
+    for (auto& d : docs)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << "  " << d->title.substr(0,30) << "\n";
+    int pick = readInt("DOK #", 1, (int)docs.size());
+    documentMenu(docs[pick-1]);
     return true;
 }
 
-static bool tskMenuOpt2_NEW(std::shared_ptr<TaskF22> t) {
-    if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen Dokumente.\n"; return true; }
-    auto doc = createDocumentWizard(t->taskId);
+static bool f22_dok_new(std::shared_ptr<TaskF22> t) {
+    if (!t->canAddChildren()) {
+        std::cout << "  >> " << opResultMessage(OperationResult::ENTITY_RELEASED) << "\n";
+        return true;
+    }
+    auto doc = createDocumentWizard(t->taskId, "");
     if (doc) documentMenu(doc);
-
-
     return true;
 }
 
-static bool tskMenuOpt2_NEW_NEW(std::shared_ptr<TaskF22> t) {
-    f18BrowserMenu(t->taskId);
-
-
+static bool f22_f18_list(std::shared_ptr<TaskF22> t) {
+    auto items = F18Operation::loadForTask(t->taskId);
+    if (items.empty()) { std::cout << "  (keine F18-Vorgaenge)\n"; return true; }
+    int n = 1;
+    for (auto& v : items)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << "[" << std::left << std::setw(14) << v->vorgangType.substr(0,13) << "] "
+                  << std::setw(28) << v->title.substr(0,26)
+                  << "  " << v->status << "\n";
     return true;
 }
 
-static bool tskMenuOpt2_NEW_NEW_NEW(std::shared_ptr<TaskF22> t) {
-    if (!t->canAddChildren()) { std::cout << "  >> " << opResultMessage(t->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuen F18-Vorgaenge.\n"; return true; }
+static bool f22_f18_open(std::shared_ptr<TaskF22> t) {
+    auto items = F18Operation::loadForTask(t->taskId);
+    if (items.empty()) { std::cout << "  (keine F18-Vorgaenge)\n"; return true; }
+    int n=1;
+    for (auto& v : items)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << "[" << std::left << std::setw(14) << v->vorgangType.substr(0,13) << "] "
+                  << v->title.substr(0,30) << "\n";
+    int pick = readInt("F18 #", 1, (int)items.size());
+    f18Menu(items[pick-1]);
+    return true;
+}
+
+static bool f22_f18_new(std::shared_ptr<TaskF22> t) {
+    if (!t->canAddChildren()) {
+        std::cout << "  >> " << opResultMessage(OperationResult::ENTITY_RELEASED) << "\n";
+        return true;
+    }
+    // Pre-select this F22 as the parent, then launch guided wizard
     auto v = createF18Wizard(t->taskId);
     if (v) f18Menu(v);
-
-
     return true;
 }
 
-static bool tskMenuOpt2_NEW_NEW_NEW_NEW(std::shared_ptr<TaskF22> t) {
-    communicationMenu(t->taskId, "task");
+static bool f22_kom_list(std::shared_ptr<TaskF22> t) {
+    listComms(t->taskId, "f22"); return true;
+}
 
-
+static bool f22_kom_open(std::shared_ptr<TaskF22> t) {
+    auto items = listComms(t->taskId, "f22");
+    if (items.empty()) return true;
+    int pick = readInt("KOM #", 1, (int)items.size());
+    commDetailMenu(items[pick-1]);
     return true;
 }
 
-static bool tskMenuOpt2_NEW_NEW_NEW_NEW_NEW(std::shared_ptr<TaskF22> t) {
-    mainWorkflowMenu(t);
+static bool f22_kom_new(std::shared_ptr<TaskF22> t) {
+    communicationMenu(t->taskId, "f22"); return true;
+}
 
-    return true;
+static bool f22_f77(std::shared_ptr<TaskF22> t) {
+    mainWorkflowMenu(t); return true;
 }
 
 using tskMenuFn = bool(*)(std::shared_ptr<TaskF22> t);
-static const tskMenuFn tskMenuTable[9] = {
-    nullptr,
-    tskMenuOpt1,
-    tskMenuOpt2,
-    tskMenuOpt2,
-    tskMenuOpt2_NEW,
-    tskMenuOpt2_NEW_NEW,
-    tskMenuOpt2_NEW_NEW_NEW,
-    tskMenuOpt2_NEW_NEW_NEW_NEW,
-    tskMenuOpt2_NEW_NEW_NEW_NEW_NEW,
+static const tskMenuFn tskMenuTable[12] = {
+    nullptr,       // 0
+    f22_edit,      // 1
+    f22_dok_list,  // 2
+    f22_dok_open,  // 3
+    f22_dok_new,   // 4
+    f22_f18_list,  // 5
+    f22_f18_open,  // 6
+    f22_f18_new,   // 7
+    f22_kom_list,  // 8
+    f22_kom_open,  // 9
+    f22_kom_new,   // 10
+    f22_f77,       // 11
 };
 
 void taskMenu(std::shared_ptr<TaskF22> t) {
     while (true) {
         if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
         printTask(*t);
-
         if (t->isReleased())
             std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
-
         std::cout
-            << "  1.Bearbeiten | 2.Dokumente | 3.Dok+ | 4.F18 | 5.F18+\n"
-            << "  6.Komm. | 7.F77 | 0.Zurück\n";
-        hr();
-
-        int ch = readInt("Wahl", 0, 7);
+            << "  1.Bearbeiten\n"
+            << "  DOK: 2.listen | 3.<#> | 4.neu\n"
+            << "  F18: 5.listen | 6.<#> | 7.neu\n"
+            << "  KOM: 8.listen | 9.<#> | 10.neu\n"
+            << "  11.F77  0.Zurück\n";
+        int ch = readInt("Wahl", 0, 11);
         if (ch == 0) break;
-        if (ch >= 1 && ch <= 7 && tskMenuTable[ch])
+        if (ch >= 1 && ch <= 11 && tskMenuTable[ch])
             if (!tskMenuTable[ch](t)) break;
     }
 }

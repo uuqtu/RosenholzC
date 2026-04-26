@@ -79,6 +79,10 @@ std::vector<Migration> MigrationEngine::registry() {
             ALTER TABLE documents_v5 RENAME TO documents;
          )SQL"
         },
+        {"dok", 6,
+         "v6: source_url added to document_objects for URL-based objects",
+         "ALTER TABLE document_objects ADD COLUMN source_url TEXT;"
+        },
     }; // end registry
 }
 

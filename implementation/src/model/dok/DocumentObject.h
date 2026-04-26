@@ -35,6 +35,7 @@ public:
     std::string contentHash;    ///< SHA-256 in LMDB (set when committed=true)
     int64_t     contentSize {0};
     std::string format;         ///< file extension without dot
+    std::string sourceUrl;      ///< Original URL if object was downloaded; empty for local
     bool        committed   {false};
     std::string createdAt;
     std::string updatedAt;
@@ -69,6 +70,9 @@ public:
     // Commit file content to the LMDB archive (SHA-256 keyed).
     // Sets committed=true and contentHash on success.
     OperationResult commitToLMDB();
+    OperationResult updateFromUrl(const std::string& url = "");
+
+    static std::shared_ptr<DocumentObject> loadById(const std::string& objectId);
 
     // ── MFS key-file ──────────────────────────────────────────
     // Write/rewrite the _SCHLUESSEL.txt for a revision folder.

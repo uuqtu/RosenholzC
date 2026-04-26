@@ -124,6 +124,9 @@ void teamMenu();
 // ── Communication menu (cli_comm.cpp) ────────────────────────
 void communicationMenu(const std::string& ownerId,
                        const std::string& ownerType);
+void commDetailMenu(std::shared_ptr<Rosenholz::Communication> c);
+std::vector<std::shared_ptr<Rosenholz::Communication>>
+    listComms(const std::string& ownerId, const std::string& ownerType);
 
 // ── System commands (cli_sys.cpp) ─────────────────────────────
 void cmdStatus();

@@ -37,14 +37,13 @@ using namespace Rosenholz;
 std::shared_ptr<Document> createDocumentWizardGuided() {
     hdr("DOK ANLEGEN — ENTITÄT WÄHLEN");
     std::cout << "  Wo soll das Dokument abgelegt werden?\n"
-              << "  1.  F16 (Projektkartei)\n"
-              << "  2.  F22 (Vorgangskartei)\n"
-              << "  3.  F18 (Vorgang)\n"
+              << "  1.  F22 (Vorgangskartei)\n"
+              << "  2.  F18 (Vorgang)\n"
               << "  0.  Abbrechen\n";
-    int choice = readInt("Typ", 0, 3);
+    int choice = readInt("Typ", 0, 2);
     if (choice == 0) return nullptr;
 
-    if (choice == 1) {
+    if (choice == 99 /* F16 parent no longer supported */) {
         // Pick from all projects
         auto projects = ProjectF16::loadAll();
         if (projects.empty()) {
@@ -266,11 +265,12 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
     std::cout << "  Typ:\n"
               << "    1.Bericht        2.Spezifikation  3.Vertrag\n"
               << "    4.Schriftverkehr 5.Nachweis       6.Plan\n"
-              << "    7.Protokoll      8.Archiv         9.Sonstiges\n";
-    int dt = readInt("Typ", 1, 9);
+              << "    7.Protokoll      8.Archiv         9.Sonstiges\n"
+              << "    10.Analyse\n";
+    int dt = readInt("Typ", 1, 10);
     static const char* dtypes[] = {
         "report","specification","contract","correspondence",
-        "evidence","plan","minutes","archive","other"};
+        "evidence","plan","minutes","archive","other","analysis"};
     std::string docType = dtypes[dt-1];
 
     // ── URL nur wenn Dokument einen Link-Ursprung hat ────────────────────
@@ -1041,15 +1041,13 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
 
 void documentMenu(std::shared_ptr<Document> doc) {
     while (true) {
-        // Reload to pick up changes from sub-menus or workflows
         if (auto fresh = Document::loadById(doc->documentId)) *doc = *fresh;
 
-        auto cur         = DocumentRevision::currentRevision(doc->documentId);
-        bool inWork      = doc->isInWork();
-        bool immutable   = doc->isFrozen();
-        bool hasCheckout = !doc->checkedOutPath.empty();
+        auto cur       = DocumentRevision::currentRevision(doc->documentId);
+        bool inWork    = doc->isInWork();
+        bool immutable = doc->isFrozen();
         uint32_t curRevNum = cur ? cur->rev : 0;
-        auto curObjs     = curRevNum > 0
+        auto curObjs   = curRevNum > 0
             ? DocumentObject::loadForRevision(doc->documentId, curRevNum)
             : std::vector<std::shared_ptr<DocumentObject>>{};
 
@@ -1059,101 +1057,175 @@ void documentMenu(std::shared_ptr<Document> doc) {
                       << (immutable ? "  ⚠ unveraenderlich" : "  ✏ bearbeitbar")
                       << "  |  " << curObjs.size() << " Objekt(e)\n";
 
-        // ── Menü ────────────────────────────────────────────────
-        // ── Kompaktes Menü mit | Trennung ────────────────────────
-        std::cout << "  1.Felder | 2.Revision | 3.F77 | 4.Objekte\n";
+        // ── Menü ────────────────────────────────────────────────────────────
+        std::cout << "  DOK: 1.Bearbeiten | 2.Revision | 15.Verlauf | 16.MFS | 18.Drucken | 19.RevWechsel\n"
+                  << "  F77: 3.F77\n"
+                  << "  OBJ: 4.listen(" << curObjs.size() << ") | 5.<#>→Untermenü (öffnen/checkout/URL)\n";
         if (inWork) {
-            std::cout << "  5.Datei+ | 7.Öffnen";
-            if (!curObjs.empty()) std::cout << " | 6.Datei-";
-            std::cout << "\n";
-            std::cout << "  8.Checkout | 9.Checkin | 10.Revert\n";
-        } else {
-            std::cout << "  7.Öffnen\n";
+            std::cout << "  OBJ: 6.OBJ+ | 13.URL-Update <#> | 14.alle URL\n";
         }
-        std::cout << "  11.URL aktualisieren | 12.Verlauf | 13.MFS | 14.Löschen | 15.Drucken | 16.RevWechsel | 0.Zurück\n";
-        hr();
+        std::cout << "  [Admin] 17.Löschen\n"
+                  << "  0.Zurück\n";
 
-        int ch = readInt("Wahl", 0, 16);
+        int ch = readInt("Wahl", 0, 19);
         if (ch == 0) break;
 
-        DocMenuCtx ctx{ doc, cur, inWork, immutable, curRevNum, curObjs };
+        DocMenuCtx ctx{doc, cur, inWork, immutable, curRevNum, curObjs};
 
-        // Dispatch table — one line per option, each handler is a named function
-        using Handler = bool(*)(DocMenuCtx&);
-        static const Handler dispatch[17] = {
-            nullptr,                // 0 = break (handled above)
-            dokHandleEditFields,    // 1
-            dokHandleNewRevision,   // 2
-            dokHandleWorkflow,      // 3
-            dokHandleListObjects,   // 4
-            dokHandleAddObject,     // 5
-            dokHandleRemoveObject,  // 6
-            dokHandleOpenObject,    // 7
-            dokHandleCheckout,      // 8
-            dokHandleCheckin,       // 9
-            dokHandleRevert,        // 10
-            dokHandleUrlDownload,   // 11
-            dokHandleVersionHistory,// 12
-            dokHandleMfsWrite,      // 13
-            dokHandleDelete,        // 14
-            dokHandlePrint,         // 15
-            dokHandleRevisionSwitch,// 16
-        };
-        if (ch >= 1 && ch <= 16) {
-            bool keepGoing = dispatch[ch](ctx);
-            doc      = ctx.doc;
-            curRevNum = ctx.curRevNum;
-            curObjs  = ctx.curObjs;
-            if (!keepGoing) break;
+        // Route to handlers
+        switch (ch) {
+        case 1:  dokHandleEditFields(ctx);            break;
+        case 2:  dokHandleNewRevision(ctx);     break;
+        case 3:  dokHandleWorkflow(ctx);        break;
+        case 4:  // OBJ listen
+            if (curObjs.empty()) { std::cout << "  (keine Objekte)\n"; break; }
+            for (size_t i=0; i<curObjs.size(); ++i) {
+                auto& o = curObjs[i];
+                std::cout << "  " << std::setw(3) << (i+1) << ". "
+                          << std::left << std::setw(40) << o->displayName().substr(0,38)
+                          << "  " << (o->committed ? "[LMDB]" : "[MFS] ")
+                          << "  " << (o->contentSize/1024) << "KB";
+                if (!o->sourceUrl.empty()) std::cout << "  [URL]";
+                std::cout << "\n";
+            }
+            break;
+        case 5: { // OBJ <#> — per-object sub-menu
+            if (curObjs.empty()) { std::cout << "  (keine Objekte)\n"; break; }
+            // List objects and pick one:
+            for (size_t i=0; i<curObjs.size(); ++i) {
+                auto& o = curObjs[i];
+                std::string flags;
+                if (!o->checkoutPath.empty()) flags += " [CO]";
+                if (!o->sourceUrl.empty())    flags += " [URL]";
+                if (o->committed)             flags += " [LMDB]";
+                std::cout << "  " << std::setw(3) << (i+1) << ". "
+                          << std::left << std::setw(38) << o->displayName().substr(0,36)
+                          << flags << "\n";
+            }
+            int pick = readInt("OBJ #", 1, (int)curObjs.size());
+            auto& sel = curObjs[pick-1];
+            // Per-object sub-menu:
+            while (true) {
+                std::cout << "  -- " << sel->displayName().substr(0,40) << " --\n";
+                std::cout << "  1.Öffnen (lesen)";
+                if (inWork) {
+                    std::cout << " | 2.checkout | 3.checkin | 4.revert";
+                    if (!sel->sourceUrl.empty()) std::cout << " | 5.URL aktualisieren";
+                    std::cout << " | 6.entfernen";
+                }
+                std::cout << "  | 0.Zurück\n";
+                int oc = readInt("Wahl", 0, 6);
+                if (oc == 0) break;
+                if (oc == 1) {
+                    doc->openFile("read", sel->mfsPath);
+                } else if (oc == 2 && inWork) {
+                    std::string path = sel->checkoutPath.empty() ? sel->mfsPath : sel->checkoutPath;
+                    if (!path.empty()) { doc->openFile("edit", path); std::cout << "  >> Geöffnet zum Bearbeiten: " << path << "\n"; }
+                    else std::cout << "  >> Kein Pfad vorhanden.\n";
+                } else if (oc == 3 && inWork) {
+                    auto res = sel->checkinObject();
+                    std::cout << "  >> " << opResultMessage(res) << "\n";
+                    break;
+                } else if (oc == 4 && inWork) {
+                    auto res = sel->revertObject(curRevNum > 1 ? curRevNum-1 : 1);
+                    std::cout << "  >> " << opResultMessage(res) << "\n";
+                    break;
+                } else if (oc == 5 && inWork && !sel->sourceUrl.empty()) {
+                    std::cout << "  URL: " << sel->sourceUrl << "\n";
+                    std::string nu = readOpt("Neue URL (leer = behalten): ");
+                    auto res = sel->updateFromUrl(nu.empty() ? "" : nu);
+                    std::cout << "  >> " << opResultMessage(res) << "\n";
+                    break;
+                } else if (oc == 6 && inWork) {
+                    if (yesno("  Objekt wirklich entfernen?")) {
+                        sel->remove();
+                        std::cout << "  >> Entfernt.\n";
+                        break;
+                    }
+                }
+            }
+            break; }
+        case 6:  if (inWork) dokHandleAddObject(ctx); break;
+        case 7:  // OBJ- <#>
+            if (!inWork || curObjs.empty()) break;
+            { int pick = readInt("OBJ- #", 1, (int)curObjs.size());
+              curObjs[pick-1]->remove();
+              std::cout << "  >> Objekt entfernt.\n"; }
+            break;
+        case 8:  // checkout <#>
+            if (!inWork || curObjs.empty()) break;
+            { int pick = readInt("Checkout #", 1, (int)curObjs.size());
+              std::string path = curObjs[pick-1]->checkoutObject();
+              if (!path.empty()) std::cout << "  >> Ausgecheckt: " << path << "\n";
+              else std::cout << "  >> Checkout fehlgeschlagen.\n"; }
+            break;
+        case 9:  // checkin <#>
+            if (!inWork || curObjs.empty()) break;
+            { int pick = readInt("Checkin #", 1, (int)curObjs.size());
+              auto res = curObjs[pick-1]->checkinObject();
+              std::cout << "  >> " << opResultMessage(res) << "\n"; }
+            break;
+        case 10: // checking — list checked-out objects
+            if (!inWork) break;
+            { bool any = false;
+              for (auto& o : curObjs)
+                if (!o->checkoutPath.empty()) {
+                    std::cout << "  [CO] " << o->displayName() << "  → " << o->checkoutPath << "\n";
+                    any = true;
+                }
+              if (!any) std::cout << "  (keine ausgecheckt)\n"; }
+            break;
+        case 11: // revert <#>
+            if (!inWork || curObjs.empty()) break;
+            { int pick = readInt("Revert #", 1, (int)curObjs.size());
+              auto res = curObjs[pick-1]->revertObject(curRevNum > 1 ? curRevNum-1 : 1);
+              std::cout << "  >> " << opResultMessage(res) << "\n"; }
+            break;
+        case 12: // checkout-liste
+            if (!inWork) break;
+            dokHandleCheckout(ctx);
+            break;
+        case 13: // aktualisieren <#> — refresh one URL-based object
+            if (!inWork || curObjs.empty()) break;
+            { // Show only URL objects:
+              std::vector<int> urlIdx;
+              for (int i=0; i<(int)curObjs.size(); ++i)
+                if (!curObjs[i]->sourceUrl.empty()) urlIdx.push_back(i);
+              if (urlIdx.empty()) { std::cout << "  (kein URL-Objekt vorhanden)\n"; break; }
+              int n=1;
+              for (int i : urlIdx)
+                std::cout << "  " << std::setw(3) << n++ << ". "
+                          << curObjs[i]->displayName().substr(0,40)
+                          << "  " << curObjs[i]->sourceUrl.substr(0,40) << "\n";
+              int pick = readInt("OBJ #", 1, (int)urlIdx.size());
+              auto& obj = curObjs[urlIdx[pick-1]];
+              std::cout << "  Neue URL (leer = behalten: " << obj->sourceUrl << "): ";
+              std::string nu; std::getline(std::cin, nu);
+              auto res = obj->updateFromUrl(nu.empty() ? "" : nu);
+              std::cout << "  >> " << opResultMessage(res) << "\n"; }
+            break;
+        case 14: // alle URL-Objekte aktualisieren
+            if (!inWork) break;
+            { int updated = 0;
+              for (auto& o : curObjs)
+                if (!o->sourceUrl.empty()) {
+                    std::cout << "  Aktualisiere: " << o->displayName() << "\n";
+                    o->updateFromUrl("");
+                    ++updated;
+                }
+              std::cout << "  >> " << updated << " Objekt(e) aktualisiert.\n"; }
+            break;
+        case 15: dokHandleVersionHistory(ctx);         break;
+        case 16: dokHandleMfsWrite(ctx);        break;
+        case 17: if (Config::instance().admin().enabled) dokHandleDelete(ctx); break;
+        case 18: dokHandlePrint(ctx);           break;
+        case 19: dokHandleRevisionSwitch(ctx);       break;
         }
     }
-}
-
-
-// LoadRuleContext: rule + optional date for DATE_RELEASED
-struct LoadRuleCtx {
-    Rosenholz::DocLoadRule rule;
-    std::string targetDate;
-};
-
-static LoadRuleCtx askLoadRule() {
-    std::cout << "\n  Laderegelung:\n"
-              << "    1. Neueste freigegebene Revision  (Standard)\n"
-              << "    2. Neueste Arbeitsrevision         (in_work/pre_released/released/locked)\n"
-              << "    3. Datumsbasiert (freigegebene Revision zum Stichtag)\n";
-    int r = readInt("Laderegelung", 1, 3);
-    if (r == 2) return { Rosenholz::DocLoadRule::LATEST_WORKING, "" };
-    if (r == 3) {
-        std::string date = readLine("Stichtag (JJJJ-MM-TT): ");
-        return { Rosenholz::DocLoadRule::DATE_RELEASED, date };
-    }
-    return { Rosenholz::DocLoadRule::LATEST_RELEASED, "" };
 }
 
 
 void documentBrowserMenu(const std::string& taskId, const std::string& f18OpId) {
-    // Use the global default load rule from settings, allow override
-    Rosenholz::DocLoadRule globalRule;
-    std::string globalDate;
-    switch (Rosenholz::Config::instance().ui().defaultLoadRule) {
-        case 2:  globalRule = Rosenholz::DocLoadRule::LATEST_WORKING; break;
-        case 3:  globalRule = Rosenholz::DocLoadRule::DATE_RELEASED;
-                 globalDate = Rosenholz::Config::instance().ui().defaultLoadDate; break;
-        default: globalRule = Rosenholz::DocLoadRule::LATEST_RELEASED;
-    }
-    auto lrc = LoadRuleCtx{globalRule, globalDate};
-    // Allow one-time session override
-    if (readInt("  Laderegelung überschreiben? (0=Nein, 1=Ja)", 0, 1) == 1) {
-        lrc = askLoadRule();
-        // Optionally save as new default
-        if (yesno("  Als Standard speichern?")) {
-            auto& ui = Rosenholz::Config::instance().uiMut();
-            ui.defaultLoadRule = (lrc.rule == Rosenholz::DocLoadRule::LATEST_WORKING) ? 2
-                               : (lrc.rule == Rosenholz::DocLoadRule::DATE_RELEASED)  ? 3 : 1;
-            ui.defaultLoadDate = lrc.targetDate;
-            Rosenholz::Config::instance().save();
-        }
-    }
     while (true) {
         std::vector<std::shared_ptr<Document>> docs;
         if (!taskId.empty())

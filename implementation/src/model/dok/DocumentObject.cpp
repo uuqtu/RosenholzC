@@ -57,11 +57,11 @@ OperationResult DocumentObject::save() const {
     bool ok = d->exec(R"(
         INSERT OR REPLACE INTO document_objects
         (object_id,document_id,rev,original_name,mfs_filename,mfs_path,
-         content_hash,content_size,format,committed,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?);)",
+         content_hash,content_size,format,source_url,committed,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);)",
         {t_(objectId), t_(documentId), i_(rev), t_(originalName),
          t_(mfsFilename), t_(mfsPath), t_(contentHash), i_(contentSize),
-         t_(format), i_(committed ? 1 : 0), t_(createdAt), t_(nowIso())});
+         t_(format), t_(sourceUrl), i_(committed ? 1 : 0), t_(createdAt), t_(nowIso())});
     return ok ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
@@ -528,6 +528,41 @@ std::vector<std::string> DocumentObject::scanForUnregisteredFiles(
             result.push_back(f);
     }
     return result;
+}
+
+
+// ── DocumentObject::loadById ─────────────────────────────────────────────
+std::shared_ptr<DocumentObject> DocumentObject::loadById(const std::string& objectId) {
+    auto* db = DatabasePool::instance().get("dok");
+    if (!db) return nullptr;
+    auto rows = db->query("SELECT * FROM document_objects WHERE object_id=?;",
+                          {BindParam::text(objectId)});
+    if (rows.empty()) return nullptr;
+    auto obj = std::make_shared<DocumentObject>();
+    obj->fromRow(rows[0]);
+    return obj;
+}
+
+// ── DocumentObject::updateFromUrl ────────────────────────────────────────
+OperationResult DocumentObject::updateFromUrl(const std::string& url) {
+    std::string target = url.empty() ? sourceUrl : url;
+    if (target.empty()) return OperationResult::IO_ERROR;
+    if (!url.empty()) sourceUrl = url;
+
+    const std::string& base = Config::instance().basePath();
+    std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
+    FileOps::makeDirs(tmpDir);
+    std::string downloaded = FileOps::downloadUrl(target, tmpDir);
+    if (downloaded.empty()) return OperationResult::IO_ERROR;
+
+    if (!mfsPath.empty() && FileOps::fileExists(mfsPath))
+        FileOps::deleteFile(mfsPath);
+    if (FileOps::fileExists(downloaded)) {
+        if (!mfsPath.empty())
+            FileOps::copyFile(downloaded, mfsPath);
+        FileOps::deleteFile(downloaded);
+    }
+    return update();
 }
 
 } // namespace Rosenholz

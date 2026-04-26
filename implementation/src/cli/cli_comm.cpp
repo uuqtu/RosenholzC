@@ -18,7 +18,7 @@ using namespace Rosenholz;
 using namespace Rosenholz;
 
 // ── Communication detail menu ─────────────────────────────────
-static void commDetailMenu(std::shared_ptr<Communication> c) {
+void commDetailMenu(std::shared_ptr<Communication> c) {
     while (true) {
         hdr("COMMUNICATION — " + c->commId.substr(0,22));
         std::cout << "  Typ    : " << c->commType << "\n";

@@ -34,7 +34,7 @@ using namespace Rosenholz;
 
 static void printHelp() {
     std::cout <<
-"Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16  -f16         F16-Karten -f16 -n Neu   -f16 <id> Öffnen   -f16 -s <q> Suche\n""F22  -f22         F22-Vorgänge -f22 -n Neu   -f22 <id> Öffnen   -f22 <f16id> Liste\n""F18  -f18         Vorgänge   -f18 -n Neu   -f18 <id> Öffnen\n""DOK  -dok         Dokumente  -dok -n Neu   -dok <id> Öffnen   -dok <f16id> Liste\n""F77  -f77         F77-Hinweise -f77 -start <id> [Zielzustand]   -f77 -tpl Vorlagen\n""PER  -per         Personen   -per -n Neu   -per <id> Karte    -per -s <q> Suche\n""DE   -de          Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/DOK/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
+"Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""DOK: -dok Dokumente   | -dok -n Neu | -dok <id> Öffnen | -dok <f22id> Liste\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/DOK/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
 ;
 }
 

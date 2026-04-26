@@ -301,165 +301,153 @@ std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard() {
 // changes made by sub-menus.
 
 
-// ── void projectMenu(std::shared_ptr<ProjectF16> p) handlers ──────────────────────────────────────────────
-static bool prjMenuOpt1(std::shared_ptr<ProjectF16> p) {
-    if (p->canEdit()) editMenu(p);
-    else std::cout << "  >> Released — kein Bearbeiten moeglich.\n";
+// ── F16 projectMenu handlers ───────────────────────────────────────────────
 
+// Inline handler helpers (lambdas captured by ref would not work in fn-ptr table;
+// use free static functions instead)
 
+static bool f16_edit(std::shared_ptr<ProjectF16> p) {
+    editMenu(p); return true;
+}
+
+static bool f16_f22_list(std::shared_ptr<ProjectF16> p) {
+    auto tasks = TaskF22::loadForProject(p->projectId);
+    if (tasks.empty()) { std::cout << "  (keine F22-Vorgänge)\n"; return true; }
+    int n = 1;
+    for (auto& t : tasks)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << std::left << std::setw(26) << t->regNumber.toString()
+                  << "  " << std::setw(28) << t->title.substr(0,26)
+                  << "  " << t->status << "\n";
     return true;
 }
 
-// 2: Liste aller F22
-static bool prjMenuOpt2(std::shared_ptr<ProjectF16> p) {
-    listTasks(p->projectId);
+static bool f16_f22_open(std::shared_ptr<ProjectF16> p) {
+    auto tasks = TaskF22::loadForProject(p->projectId);
+    if (tasks.empty()) { std::cout << "  (keine F22-Vorgänge)\n"; return true; }
+    int pick = readInt("F22 #", 1, (int)tasks.size());
+    taskMenu(tasks[pick-1]);
     return true;
 }
 
-// 3: F22 nach ID öffnen
-static bool prjMenuOpt3_openById(std::shared_ptr<ProjectF16> p) {
-    std::string id = readLine("F22-ID: ");
-    if (id.empty()) return true;
-    auto t = Rosenholz::TaskF22::loadById(id);
-    if (!t || t->projectId != p->projectId) {
-        std::cout << "  >> F22 nicht gefunden oder nicht in diesem F16.\n";
+static bool f16_f22_new(std::shared_ptr<ProjectF16> p) {
+    if (!p->canAddChildren()) {
+        std::cout << "  >> " << opResultMessage(p->isWorkflowComplete()
+            ? OperationResult::ENTITY_WF_COMPLETE
+            : OperationResult::ENTITY_RELEASED) << "\n";
         return true;
     }
-    taskMenu(t);
-    return true;
-}
-
-static bool prjMenuOpt3(std::shared_ptr<ProjectF16> p) {
-    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — keine neuer F22-Vorgangn.\n"; return true; }
-    auto task = createTaskWizard(p->projectId);
-    if (task) {
-std::cout << "  F22 jetzt öffnen? (j/n): ";
-std::string yn; std::getline(std::cin, yn);
-if (yn=="j"||yn=="J") taskMenu(task);
+    auto t = createTaskWizard(p->projectId);
+    if (t) {
+        std::cout << "  F22 jetzt öffnen? (j/n): ";
+        std::string yn; std::getline(std::cin, yn);
+        if (yn=="j"||yn=="J") taskMenu(t);
     }
-
-
     return true;
 }
 
-static bool prjMenuOpt4(std::shared_ptr<ProjectF16> p) {
-    documentBrowserMenu();
-
-
+static bool f16_dok_list(std::shared_ptr<ProjectF16> p) {
+    // Collect DOK via all F22 tasks
+    auto tasks = TaskF22::loadForProject(p->projectId);
+    std::vector<std::shared_ptr<Document>> docs;
+    for (auto& t : tasks) {
+        auto td = Document::loadForEntity("f22", t->taskId);
+        docs.insert(docs.end(), td.begin(), td.end());
+    }
+    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    int n = 1;
+    for (auto& d : docs)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << "  " << std::setw(30) << d->title.substr(0,28)
+                  << "  " << d->docType << "\n";
     return true;
 }
 
-// 5: DOK alle
-static bool prjMenuOpt5(std::shared_ptr<ProjectF16> p) {
-    documentBrowserMenu();
+static bool f16_dok_open(std::shared_ptr<ProjectF16> p) {
+    auto tasks = TaskF22::loadForProject(p->projectId);
+    std::vector<std::shared_ptr<Document>> docs;
+    for (auto& t : tasks) {
+        auto td = Document::loadForEntity("f22", t->taskId);
+        docs.insert(docs.end(), td.begin(), td.end());
+    }
+    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    int n=1;
+    for (auto& d : docs)
+        std::cout << "  " << std::setw(3) << n++ << ". "
+                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << "  " << d->title.substr(0,30) << "\n";
+    int pick = readInt("DOK #", 1, (int)docs.size());
+    documentMenu(docs[pick-1]);
     return true;
 }
 
-// 6: DOK nach ID öffnen
-static bool prjMenuOpt5_openById(std::shared_ptr<ProjectF16> p) {
-    std::string id = readLine("DOK-ID: ");
-    if (id.empty()) return true;
-    auto d = Rosenholz::Document::loadById(id);
-    if (!d) {
-        std::cout << "  >> DOK nicht gefunden.\n";
+static bool f16_dok_new(std::shared_ptr<ProjectF16> p) {
+    if (!p->canAddChildren()) {
+        std::cout << "  >> " << opResultMessage(p->isWorkflowComplete()
+            ? OperationResult::ENTITY_WF_COMPLETE
+            : OperationResult::ENTITY_RELEASED) << " — kein neues DOK.\n";
         return true;
     }
-    // Verify the DOK is linked to a F22 under this F16:
-    if (!d->taskId.empty()) {
-        auto t = Rosenholz::TaskF22::loadById(d->taskId);
-        if (!t || t->projectId != p->projectId) {
-            std::cout << "  >> DOK gehört nicht zu diesem F16.\n";
-            return true;
-        }
-    }
-    documentMenu(d);
-    return true;
-}
-
-// 7: DOK neu
-static bool prjMenuOpt5_new(std::shared_ptr<ProjectF16> p) {
-    if (!p->canAddChildren()) { std::cout << "  >> " << opResultMessage(p->isWorkflowComplete() ? OperationResult::ENTITY_WF_COMPLETE : OperationResult::ENTITY_RELEASED) << " — kein neues DOK.\n"; return true; }
-    auto doc = createDocumentWizard();
+    auto doc = createDocumentWizardGuided();
     if (doc) documentMenu(doc);
     return true;
 }
 
-
-
-static bool prjMenuOpt6(std::shared_ptr<ProjectF16> p) {
-    communicationMenu(p->projectId, "project");
-
-
+static bool f16_kom_list(std::shared_ptr<ProjectF16> p) {
+    listComms(p->projectId, "f16");
     return true;
 }
 
-static bool prjMenuOpt7(std::shared_ptr<ProjectF16> p) {
-    hdr("MEILENSTEIN-NOTIZEN — " + p->projectId.substr(0,20));
-    if (!p->milestones.empty())
-std::cout << "  Aktuell:\n" << p->milestones << "\n";
-    else
-std::cout << "  (keine Notizen)\n";
-    std::cout << "  1.Neu schreiben  2.Anfügen  0.Zurück\n";
-    int ms = readInt("Wahl",0,2);
-    if (ms==1) {
-std::cout << "  Text (leere Zeile = fertig):\n";
-std::string all, line;
-while (std::getline(std::cin, line) && !line.empty())
-    all += line + "\n";
-p->milestones = all; p->update();
-std::cout << "  >> Gespeichert.\n";
-    } else if (ms==2) {
-std::string add = readLine("Anfügen: ");
-if (!add.empty()) {
-    if (!p->milestones.empty()) p->milestones += "\n";
-    p->milestones += add; p->update();
-    std::cout << "  >> Angefügt.\n";
-}
-    }
-
-
+static bool f16_kom_open(std::shared_ptr<ProjectF16> p) {
+    auto items = listComms(p->projectId, "f16");
+    if (items.empty()) return true;
+    int pick = readInt("KOM #", 1, (int)items.size());
+    commDetailMenu(items[pick-1]);
     return true;
 }
 
-static bool prjMenuOpt6_NEW(std::shared_ptr<ProjectF16> p) {
+static bool f16_kom_new(std::shared_ptr<ProjectF16> p) {
+    communicationMenu(p->projectId, "f16");
+    return true;
+}
+
+static bool f16_f77(std::shared_ptr<ProjectF16> p) {
     mainWorkflowMenu(p);
-
     return true;
 }
 
 using prjMenuFn = bool(*)(std::shared_ptr<ProjectF16> p);
-static const prjMenuFn prjMenuTable[11] = {
-    nullptr,           // 0
-    prjMenuOpt1,       // 1 Bearbeiten
-    prjMenuOpt2,       // 2 F22: Alle
-    prjMenuOpt3_openById, // 3 F22: Öffnen per ID
-    prjMenuOpt3,       // 4 F22: Neu
-    prjMenuOpt5,       // 5 DOK: Alle
-    prjMenuOpt5_openById, // 6 DOK: Öffnen per ID
-    prjMenuOpt5_new,   // 7 DOK: Neu
-    prjMenuOpt6,       // 8 Komm.
-    prjMenuOpt7,       // 9 Meilenstein
-    prjMenuOpt6_NEW,   // 10 F77
+static const prjMenuFn prjMenuTable[12] = {
+    nullptr,        // 0
+    f16_edit,       // 1 Bearbeiten
+    f16_f22_list,   // 2 F22 listen
+    f16_f22_open,   // 3 F22 <#>
+    f16_f22_new,    // 4 F22+
+    f16_dok_list,   // 5 DOK listen
+    f16_dok_open,   // 6 DOK <#>
+    f16_dok_new,    // 7 DOK+
+    f16_kom_list,   // 8 KOM listen
+    f16_kom_open,   // 9 KOM <#>
+    f16_kom_new,    // 10 KOM+
+    f16_f77,        // 11 F77
 };
 
 void projectMenu(std::shared_ptr<ProjectF16> p) {
     while (true) {
-        // Reload to show current state
         if (auto fresh = ProjectF16::loadById(p->projectId)) *p = *fresh;
         printProject(*p);
-
-        // Block editing if released
         if (p->isReleased())
             std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
-
         std::cout
-            << "  1.Bearbeiten  2.F22  3.F22+  4.Dokumente  5.Dok+\n"
-            << "  6.Komm.       7.Meilenstein  8.F77  0.Zurück\n";
-        hr();
-
-        int ch = readInt("Wahl", 0, 10);
+            << "  1.Bearbeiten\n"
+            << "  F22: 2.listen | 3.<#> | 4.neu\n"
+            << "  DOK: 5.listen | 6.<#> | 7.neu\n"
+            << "  KOM: 8.listen | 9.<#> | 10.neu\n"
+            << "  11.F77  0.Zurück\n";
+        int ch = readInt("Wahl", 0, 11);
         if (ch == 0) break;
-        if (ch >= 1 && ch <= 10 && prjMenuTable[ch])
+        if (ch >= 1 && ch <= 11 && prjMenuTable[ch])
             if (!prjMenuTable[ch](p)) break;
     }
 }

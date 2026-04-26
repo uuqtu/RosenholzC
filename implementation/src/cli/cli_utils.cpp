@@ -284,4 +284,23 @@ void listTasks(const std::string& projectId) {
 }
 
 
+// ── listComms: numbered list of Communications for owner entity ───────────
+// Returns the loaded list so the caller can pick by number.
+std::vector<std::shared_ptr<Rosenholz::Communication>>
+listComms(const std::string& ownerId, const std::string& ownerType) {
+    auto items = Rosenholz::Communication::loadForOwner(ownerId, ownerType);
+    if (items.empty()) {
+        std::cout << "  (keine Kommunikationseintraege)\n";
+    } else {
+        int n = 1;
+        for (auto& c : items)
+            std::cout << "  " << std::setw(3) << n++ << ".["
+                      << std::left << std::setw(8) << c->commType.substr(0,7) << "] "
+                      << std::setw(26) << c->title.substr(0,24)
+                      << "  " << fdate(c->scheduledDate)
+                      << "  " << c->status << "\n";
+    }
+    return items;
+}
+
 } // namespace CLI

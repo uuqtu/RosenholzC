@@ -169,11 +169,11 @@ void instanceMenu(const std::string& workflowId) {
         // In non-admin mode F77 runs fully automatic — users only add steps or cancel.
         // Admin mode additionally allows manual step firing for diagnostics.
         if (adminMode)
-            std::cout << "  [ADMIN] 1.Schritt manuell ausfuehren  2.Schritt validieren\n"
+            std::cout << "  [ADMIN] 1.Schritt manuell ausfuehren  2.Schritt simulieren\n"
                          "         3.Schritt hinzufuegen  4.Engine-Tick\n"
                          "  5.F77 abbrechen  0.Zurueck\n";
         else
-            std::cout << "  1.Schritt hinzufuegen  2.Schritt validieren\n"
+            std::cout << "  1.Schritt hinzufuegen  2.Schritt simulieren\n"
                          "  3.Engine-Tick (automatisch)\n"
                          "  4.F77 abbrechen   0.Zurueck\n";
         int ch = readInt("Wahl", 0, adminMode ? 5 : 4);
