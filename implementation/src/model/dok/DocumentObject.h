@@ -36,12 +36,16 @@ public:
     int64_t     contentSize {0};
     std::string format;         ///< file extension without dot
     std::string sourceUrl;      ///< Original URL if object was downloaded; empty for local
+    std::string displayName_;   ///< Human-readable label shown in Schlüssel and listings
+    std::string description;    ///< Optional descriptive text stored in Schlüssel
     bool        committed   {false};
     std::string createdAt;
     std::string updatedAt;
 
     // ── Display ───────────────────────────────────────────────
-    const std::string& displayName() const { return originalName; }
+    std::string displayName() const {
+        return displayName_.empty() ? originalName : displayName_;
+    }
     std::string summary() const;
 
     // ── CRUD ──────────────────────────────────────────────────
@@ -57,7 +61,9 @@ public:
         const std::string& documentId,
         uint32_t            rev,
         const std::string& srcPath,
-        OperationResult&   result);
+        OperationResult&   result,
+        const std::string& label       = "",
+        const std::string& description = "");
 
     // ── Queries ───────────────────────────────────────────────
     static std::vector<std::shared_ptr<DocumentObject>> loadForRevision(

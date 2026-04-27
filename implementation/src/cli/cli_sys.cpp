@@ -56,8 +56,8 @@ void cmdStatus() {
         row("F77-Hinweise:", db->rowCount("f77_workflows"),          "laufend");
         row("F77 Templates:", db->rowCount("f77_workflow_templates"), "Vorlagen");
     }
-    if (auto* db = DatabasePool::instance().get("dok"))
-        row("Dokumente:",     db->rowCount("documents"), "Dokumente");
+    if (auto* db = DatabasePool::instance().get("akt"))
+        row("Akten:",         db->rowCount("akten"),     "Akten");
     if (auto* db = DatabasePool::instance().get("core")) {
         row("Personen:",      db->rowCount("persons"),  "Personen");
         row("Teams:",         db->rowCount("teams"),    "Diensteinheiten");
@@ -203,7 +203,7 @@ void globalSearch(const std::string& query) {
     auto docs = Document::loadRecent(200);
     for (auto& d : docs)
         if (match(d->title) || match(d->documentId) || match(d->tags))
-            hits.push_back({"DOK", d->documentId, d->title, "v"+d->version});
+            hits.push_back({"AKT", d->documentId, d->title, "v"+d->version});
 
     // F77 Workflows (active)
     auto wfis = F77_Workflow::loadActive();
@@ -246,7 +246,7 @@ void globalSearch(const std::string& query) {
     } else if (h.typeCode == "F18") {
         auto v = Rosenholz::F18Operation::loadById(h.id);
         if (v) f18Menu(v);
-    } else if (h.typeCode == "DOK") {
+    } else if (h.typeCode == "AKT") {
         auto d = Document::loadById(h.id);
         if (d) documentMenu(d);
     } else if (h.typeCode == "WFI") {
@@ -272,7 +272,7 @@ void cmdIndexDokFolders() {
     // Load all documents
     auto docs = Document::loadRecent(500);
     if (docs.empty()) {
-        std::cout << "  (keine Dokumente vorhanden)\n";
+        std::cout << "  (keine Akten vorhanden)\n";
         return;
     }
 

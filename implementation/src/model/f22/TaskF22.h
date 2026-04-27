@@ -7,6 +7,7 @@
 //   cost tracking, and workflow attachment
 // ============================================================
 #pragma once
+#include <utility>
 
 #include "../Utils.h"
 #include "../../core/OperationResult.h"
@@ -120,6 +121,10 @@ public:
         const std::string& parentTaskId = "");
 
     static std::vector<std::shared_ptr<TaskF22>> loadRecent(int n = 20);
+
+    /// Scan this task's MFS folder for files not registered as Akte objects.
+    /// Returns (filePath, suggestedTitle) pairs.
+    std::vector<std::pair<std::string,std::string>> scanMfsForUnregistered() const;
     static std::shared_ptr<TaskF22> loadById(const std::string& taskId);
     static std::vector<std::shared_ptr<TaskF22>> loadForProject(const std::string& projectId);
     static std::vector<std::shared_ptr<TaskF22>> loadChildren(const std::string& parentTaskId);

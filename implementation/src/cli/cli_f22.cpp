@@ -10,6 +10,9 @@
 //   createTaskWizardGuided() — guided: pick F16 first, then create
 // ============================================================
 #include "cli_common.h"
+#include "../model/dok/Document.h"
+#include "../model/dok/DocumentObject.h"
+#include "../repository/DocumentRevision.h"
 #include "../core/OperationResult.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
@@ -214,9 +217,30 @@ void cmdF22(const std::vector<std::string>& args) {
         return;
     }
 
+    // -s <query>  —  search within F22
+    if (args[0] == "-s") {
+        std::string q;
+        for (size_t i=1; i<args.size(); ++i) { if(!q.empty()) q+=" "; q+=args[i]; }
+        if (q.empty()) { printErr("-s benoetigt einen Suchbegriff"); return; }
+        std::string lq=q; for(char& c:lq) c=(char)std::tolower((unsigned char)c);
+        auto all = TaskF22::loadRecent(9999);
+        bool found=false;
+        for (auto& t : all) {
+            std::string chk = t->title + " " + t->taskId;
+            for(char& c:chk) c=(char)std::tolower((unsigned char)c);
+            if (chk.find(lq)!=std::string::npos) {
+                std::cout << "  F22  " << std::left << std::setw(28) << t->taskId
+                          << " " << t->title << "  [" << t->status << "]\n";
+                found=true;
+            }
+        }
+        if(!found) std::cout << "  (keine F22 gefunden fuer: " << q << ")\n";
+        return;
+    }
+
     // All remaining paths require a valid ID
     if (!isId(args[0])) { printErr("Ungültiges Argument: " + args[0]
-                            + "  (erwartet ID oder -n)"); return; }
+                            + "  (erwartet ID, -n oder -s <q>)"); return; }
 
     // Try as task ID first
     auto task = TaskF22::loadById(args[0]);
@@ -251,7 +275,7 @@ static bool f22_edit(std::shared_ptr<TaskF22> t) {
 
 static bool f22_dok_list(std::shared_ptr<TaskF22> t) {
     auto docs = Document::loadForEntity("f22", t->taskId);
-    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n = 1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "
@@ -262,7 +286,7 @@ static bool f22_dok_list(std::shared_ptr<TaskF22> t) {
 
 static bool f22_dok_open(std::shared_ptr<TaskF22> t) {
     auto docs = Document::loadForEntity("f22", t->taskId);
-    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n=1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "
@@ -339,20 +363,116 @@ static bool f22_f77(std::shared_ptr<TaskF22> t) {
     mainWorkflowMenu(t); return true;
 }
 
+
+// 12: F22 Nacherfassen — scan MFS folder for unregistered files
+static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
+    using namespace Rosenholz;
+    hdr("F22 NACHERFASSEN — " + t->taskId);
+    std::cout << "  Scanne MFS-Ordner fuer nicht registrierte Dateien...\n";
+
+    auto unregistered = t->scanMfsForUnregistered();
+
+    if (unregistered.empty()) {
+        std::cout << "  >> Alle Dateien im MFS-Ordner sind bereits registriert.\n";
+        return true;
+    }
+
+    std::cout << "  " << unregistered.size() << " nicht registrierte Datei(en) gefunden:\n\n";
+    for (size_t i = 0; i < unregistered.size(); ++i) {
+        std::cout << "  " << std::setw(3) << (i+1) << ". "
+                  << FileOps::baseName(unregistered[i].first)
+                  << "  (Vorschlag: " << unregistered[i].second << ")\n";
+    }
+
+    // For each file, ask what to do:
+    auto docs = Document::loadForEntity("f22", t->taskId);
+
+    for (size_t i = 0; i < unregistered.size(); ++i) {
+        auto& [fpath, suggestedTitle] = unregistered[i];
+        std::cout << "\n  Datei " << (i+1) << "/" << unregistered.size()
+                  << ": " << FileOps::baseName(fpath) << "\n";
+        std::cout << "  1. Neuer Akte hinzufuegen (neue Akte anlegen)\n"
+                  << "  2. Vorhandener Akte hinzufuegen\n"
+                  << "  3. Ignorieren\n"
+                  << "  0. Abbrechen\n";
+        int choice = readInt("Wahl", 0, 3);
+        if (choice == 0) break;
+        if (choice == 3) continue;
+
+        std::shared_ptr<Document> targetDoc;
+
+        if (choice == 1) {
+            // Create new Akte:
+            std::string title = readOpt("  Titel (leer=" + suggestedTitle + "): ");
+            if (title.empty()) title = suggestedTitle;
+            targetDoc = Document::create(title, "other", t->taskId);
+            if (!opOk(targetDoc->save())) {
+                std::cout << "  >> Fehler beim Anlegen der Akte.\n";
+                continue;
+            }
+            std::cout << "  >> Akte angelegt: " << targetDoc->documentId << "\n";
+        } else {
+            // Pick existing Akte:
+            if (docs.empty()) {
+                std::cout << "  (keine Akten vorhanden — neue wird angelegt)\n";
+                std::string title = readOpt("  Titel (leer=" + suggestedTitle + "): ");
+                if (title.empty()) title = suggestedTitle;
+                targetDoc = Document::create(title, "other", t->taskId);
+                if (!opOk(targetDoc->save())) {
+                    std::cout << "  >> Fehler beim Anlegen der Akte.\n";
+                    continue;
+                }
+            } else {
+                for (size_t d = 0; d < docs.size(); ++d)
+                    std::cout << "  " << std::setw(3) << (d+1) << ". "
+                              << docs[d]->documentId << "  " << docs[d]->title << "\n";
+                int pick = readInt("Akte #", 1, (int)docs.size());
+                targetDoc = docs[pick-1];
+            }
+        }
+
+        // Ensure the Akte has an inWork revision:
+        auto cur = Rosenholz::DocumentRevision::currentRevision(targetDoc->documentId);
+        if (!cur) {
+            // Create revision 1:
+            auto newRev = Rosenholz::DocumentRevision::createRevision(targetDoc->documentId, 1);
+            if (!newRev) { std::cout << "  >> Revision konnte nicht angelegt werden.\n"; continue; }
+            cur = newRev;
+        }
+        if (cur->revState != Rosenholz::RevState::IN_WORK) {
+            std::cout << "  >> Akte ist nicht in_work — Datei kann nicht hinzugefuegt werden.\n";
+            continue;
+        }
+
+        // Import the file as an Akte object:
+        std::string label = readOpt("  Bezeichnung (leer=Dateiname): ");
+        std::string desc  = readOpt("  Beschreibung (optional): ");
+        OperationResult res = OperationResult::OPERATION_ACK;
+        auto obj = Rosenholz::DocumentObject::importFile(
+            targetDoc->documentId, cur->rev, fpath, res, label, desc);
+        if (opOk(res) && obj)
+            std::cout << "  >> Importiert: " << obj->displayName() << "\n";
+        else
+            std::cout << "  >> " << opResultMessage(res) << "\n";
+    }
+    return true;
+}
+
 using tskMenuFn = bool(*)(std::shared_ptr<TaskF22> t);
-static const tskMenuFn tskMenuTable[12] = {
-    nullptr,       // 0
-    f22_edit,      // 1
-    f22_dok_list,  // 2
-    f22_dok_open,  // 3
-    f22_dok_new,   // 4
-    f22_f18_list,  // 5
-    f22_f18_open,  // 6
-    f22_f18_new,   // 7
-    f22_kom_list,  // 8
-    f22_kom_open,  // 9
-    f22_kom_new,   // 10
-    f22_f77,       // 11
+static const tskMenuFn tskMenuTable[13] = {
+    nullptr,            // 0
+    f22_edit,           // 1
+    f22_dok_list,       // 2
+    f22_dok_open,       // 3
+    f22_dok_new,        // 4
+    f22_f18_list,       // 5
+    f22_f18_open,       // 6
+    f22_f18_new,        // 7
+    f22_kom_list,       // 8
+    f22_kom_open,       // 9
+    f22_kom_new,        // 10
+    f22_f77,            // 11
+    f22_nacherfassen,   // 12 Nicht registrierte Dateien erfassen
 };
 
 void taskMenu(std::shared_ptr<TaskF22> t) {
@@ -363,13 +483,14 @@ void taskMenu(std::shared_ptr<TaskF22> t) {
             std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
         std::cout
             << "  1.Bearbeiten\n"
-            << "  DOK: 2.listen | 3.<#> | 4.neu\n"
+            << "  AKT: 2.listen | 3.<#> | 4.neu\n"
             << "  F18: 5.listen | 6.<#> | 7.neu\n"
             << "  KOM: 8.listen | 9.<#> | 10.neu\n"
-            << "  11.F77  0.Zurück\n";
-        int ch = readInt("Wahl", 0, 11);
+            << "  11.F77  | 12.Nacherfassen\n"
+            << "  0.Zurück\n";
+        int ch = readInt("Wahl", 0, 12);
         if (ch == 0) break;
-        if (ch >= 1 && ch <= 11 && tskMenuTable[ch])
+        if (ch >= 1 && ch <= 12 && tskMenuTable[ch])
             if (!tskMenuTable[ch](t)) break;
     }
 }

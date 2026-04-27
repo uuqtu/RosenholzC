@@ -10,7 +10,7 @@
 namespace Rosenholz {
 
 Database* DocumentRevision::db() {
-    return DatabasePool::instance().get("dok");
+    return DatabasePool::instance().get("akt");
 }
 
 void DocumentRevision::fromRow(const Row& r) {
@@ -38,7 +38,7 @@ bool DocumentRevision::save() const {
     auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
 
     return d->exec(R"SQL(
-        INSERT OR REPLACE INTO document_revisions
+        INSERT OR REPLACE INTO akt_revisionen
         (document_id, rev, parent_rev, rev_state, superseded,
          content_hash, content_size, created_by, change_note, created_at, updated_at)
         VALUES(?,?,?,?,?, ?,?,?,?,?,?)
@@ -59,7 +59,7 @@ bool DocumentRevision::update() {
 bool DocumentRevision::remove() const {
     auto* d = db(); if (!d) return false;
     return d->exec(
-        "DELETE FROM document_revisions WHERE document_id=? AND rev=?;",
+        "DELETE FROM akt_revisionen WHERE document_id=? AND rev=?;",
         {BindParam::text(documentId), BindParam::int64(rev)});
 }
 
@@ -103,7 +103,7 @@ std::shared_ptr<DocumentRevision> DocumentRevision::loadByRev(
     auto* d = db();
     if (!d) return nullptr;
     auto rows = d->query(
-        "SELECT * FROM document_revisions WHERE document_id=? AND rev=?;",
+        "SELECT * FROM akt_revisionen WHERE document_id=? AND rev=?;",
         {BindParam::text(documentId), BindParam::int64(rev)});
     if (rows.empty()) return nullptr;
     auto r = std::make_shared<DocumentRevision>();
@@ -118,7 +118,7 @@ std::vector<std::shared_ptr<DocumentRevision>> DocumentRevision::loadAllRevision
     std::vector<std::shared_ptr<DocumentRevision>> result;
     if (!d) return result;
     auto rows = d->query(
-        "SELECT * FROM document_revisions WHERE document_id=? ORDER BY rev;",
+        "SELECT * FROM akt_revisionen WHERE document_id=? ORDER BY rev;",
         {BindParam::text(documentId)});
     for (auto& row : rows) {
         auto r = std::make_shared<DocumentRevision>();
@@ -134,7 +134,7 @@ std::shared_ptr<DocumentRevision> DocumentRevision::currentRevision(
     auto* d = db();
     if (!d) return nullptr;
     auto rows = d->query(
-        "SELECT * FROM document_revisions WHERE document_id=? AND superseded=0 LIMIT 1;",
+        "SELECT * FROM akt_revisionen WHERE document_id=? AND superseded=0 LIMIT 1;",
         {BindParam::text(documentId)});
     if (rows.empty()) return nullptr;
     auto r = std::make_shared<DocumentRevision>();
@@ -146,7 +146,7 @@ uint32_t DocumentRevision::latestRevNumber(const std::string& documentId) {
     auto* d = db();
     if (!d) return 0;
     auto rows = d->query(
-        "SELECT MAX(rev) AS maxrev FROM document_revisions WHERE document_id=?;",
+        "SELECT MAX(rev) AS maxrev FROM akt_revisionen WHERE document_id=?;",
         {BindParam::text(documentId)});
     if (rows.empty()) return 0;
     std::string v = rowGet(rows[0], "maxrev");
@@ -200,14 +200,31 @@ bool DocumentRevision::isTransitionAllowed(RevState from,
     return false;
 }
 
-bool DocumentRevision::transitionState(RevState target) {
-    const std::string targetState = revStateToString(target); // for logging/SQL
+bool DocumentRevision::transitionState(RevState target, bool f77Gated) {
+    const std::string targetState = revStateToString(target);
     if (!isTransitionAllowed(revState, target, false)) {
         LOG_WARN("[DocRevision] Transition not allowed: " +
                  std::string(revStateToString(revState)) + " → " +
                  targetState + " for " + documentId +
                  " rev=" + std::to_string(rev));
         return false;
+    }
+
+    // ── F77 guard: refuse terminal transitions if an active F77 exists ─────
+    if (!f77Gated && (target == RevState::RELEASED || target == RevState::CLOSED)) {
+        // Check whether an active F77 workflow owns this document's release.
+        auto* f77db = DatabasePool::instance().get("f77");
+        if (f77db) {
+            auto rows = f77db->query(
+                "SELECT workflow_id FROM f77_workflows"
+                " WHERE entity_type='akt' AND entity_id=? AND status='active' LIMIT 1;",
+                {BindParam::text(documentId)});
+            if (!rows.empty()) {
+                LOG_WARN("[DocRevision] Blocked: active F77 workflow must complete first for "
+                         + documentId);
+                return false;
+            }
+        }
     }
 
     // Additional locked→pre_released rule:

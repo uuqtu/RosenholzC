@@ -195,13 +195,13 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
         } else if (ch == 6) {
             communicationMenu(step.stepId, "f18step");
         } else if (ch == 7) {
-            if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; continue; }
+            if (docs.empty()) { std::cout << "  (keine Akten)\n"; continue; }
             int n=1;
             for (auto& d : docs)
                 std::cout << "  " << std::setw(3) << n++ << ". "
                           << d->documentId.substr(0,24) << "  " << d->title.substr(0,30) << "\n";
         } else if (ch == 8) {
-            if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; continue; }
+            if (docs.empty()) { std::cout << "  (keine Akten)\n"; continue; }
             int n=1;
             for (auto& d : docs)
                 std::cout << "  " << std::setw(3) << n++ << ". "
@@ -390,7 +390,7 @@ static bool f18_kom_new(std::shared_ptr<F18Operation> v) {
 
 static bool f18_dok_list(std::shared_ptr<F18Operation> v) {
     auto docs = Document::loadForEntity("f18", v->vorgangId);
-    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n = 1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "
@@ -401,7 +401,7 @@ static bool f18_dok_list(std::shared_ptr<F18Operation> v) {
 
 static bool f18_dok_open(std::shared_ptr<F18Operation> v) {
     auto docs = Document::loadForEntity("f18", v->vorgangId);
-    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n=1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "

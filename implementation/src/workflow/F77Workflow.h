@@ -113,8 +113,9 @@ private:
     static Database* db();
 };
 
-// ── F77_WorkflowStep ─────────────────────────────────────────
-struct F77_WorkflowStep {
+// ── F77_WorkflowOperation ──────────────────────────────────────
+// A single operation within a running F77_Workflow. (Was: F77_WorkflowStep)
+struct F77_WorkflowOperation {
     std::string stepId;
     std::string workflowId;
     std::string tplStepId;      // soft ref; snapshot source (template may have changed)
@@ -154,18 +155,21 @@ struct F77_WorkflowStep {
     void syncFromF18();
 
     /// Check if all predecessor steps are complete.
-    bool canStart(const std::vector<F77_WorkflowStep>& allSteps) const;
+    bool canStart(const std::vector<F77_WorkflowOperation>& allSteps) const;
 
     OperationResult save()   const;
     OperationResult remove() const;
     void fromRow(const Row& r);
 
-    static std::shared_ptr<F77_WorkflowStep> loadById(const std::string& id);
-    static std::vector<F77_WorkflowStep>     loadForWorkflow(const std::string& workflowId);
+    static std::shared_ptr<F77_WorkflowOperation> loadById(const std::string& id);
+    static std::vector<F77_WorkflowOperation>     loadForWorkflow(const std::string& workflowId);
 
 private:
     static Database* db();
 };
+
+/// Backward-compat alias so existing code using F77_WorkflowStep still compiles
+using F77_WorkflowStep = F77_WorkflowOperation;
 
 // ── F77_Workflow ──────────────────────────────────────────────
 struct F77_Workflow {
@@ -183,7 +187,7 @@ struct F77_Workflow {
     std::string createdAt;
     std::string updatedAt;
 
-    std::vector<F77_WorkflowStep> steps;
+    std::vector<F77_WorkflowOperation> steps;
 
     OperationResult save()   const;
     OperationResult update() const;
@@ -192,7 +196,7 @@ struct F77_Workflow {
     void fromRow(const Row& r);
 
     bool isComplete() const;
-    std::vector<F77_WorkflowStep*> readySteps();
+    std::vector<F77_WorkflowOperation*> readySteps();
 
     static std::shared_ptr<F77_Workflow> create(
         const std::string& entityType,

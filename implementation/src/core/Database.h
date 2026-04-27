@@ -125,7 +125,7 @@ public:
     bool initAll(const std::string& basePath, bool walMode, int cacheSize);
 
     /// Get a database by logical name ("core","f16","f77",
-    ///   "dok","tracking","reporting")
+    ///   "akt","tracking","reporting")
     Database* get(const std::string& name);
 
     /// Close all connections gracefully

@@ -81,7 +81,7 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
 // Guided wizard: asks user to pick F16 (and optionally F22), then creates F18.
 
 // ── Document commands (cli_dok.cpp) ───────────────────────────
-void cmdDok(const std::vector<std::string>& args);
+void cmdAkt(const std::vector<std::string>& args);
 void printDocument(const Rosenholz::Document& d);
 void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Document>>& docs,
                    const std::string& title = "DOKUMENTE");
@@ -119,6 +119,7 @@ std::shared_ptr<Rosenholz::Person> createPersonWizard();
 
 // ── Team / Diensteinheit commands (cli_de.cpp) ────────────────
 void cmdDe(const std::vector<std::string>& args);
+void cmdTasks(const std::vector<std::string>& args);
 void teamMenu();
 
 // ── Communication menu (cli_comm.cpp) ────────────────────────

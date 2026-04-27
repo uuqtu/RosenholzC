@@ -180,8 +180,8 @@ void testSuiteModel() {
         d->format  = "pdf";
         d->version = "1.0";
         CHECK(opOk(d->save()), "Document::save()");
-        CHECK(d->documentId.find("/DOK/") != std::string::npos,
-              "Document ID contains /DOK/");
+        CHECK(d->documentId.find("/AKT/") != std::string::npos,
+              "Document ID contains /AKT/");
 
         auto docs = R::Document::loadForEntity("f22", task->taskId);
         CHECK(!docs.empty(), "loadForEntity(f22) returns documents");
@@ -669,7 +669,7 @@ void testSuiteModel() {
             CHECK(!stagePath.empty(), "stagePath set");
 
             // Commit to LMDB (docId:rev=1)
-            std::string testDocId = "XV/DOK/9999/2026";
+            std::string testDocId = "XV/AKT/9999/2026";
             bool committed = store.commitContent(stagePath, ref, testDocId, 1);
             CHECK(committed, "commitContent succeeds");
 

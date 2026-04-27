@@ -269,7 +269,7 @@ void testSuiteWorkflow() {
         doc->title = "Testdokument v2";
         doc->update();
         Rosenholz::MFSWriter::writeDocument(*doc, cfg.mfsPath());
-        // Verify the document subfolder: F22/<taskReg>/DOK/<docId>/
+        // Verify the document subfolder: F22/<taskReg>/AKT/<docId>/
         {
             std::string taskReg  = Rosenholz::sanitiseRegNr(task->regNumber.toString());
             std::string docSane  = Rosenholz::sanitiseRegNr(doc->documentId);
@@ -277,7 +277,7 @@ void testSuiteWorkflow() {
                 Rosenholz::FileOps::joinPath(
                     Rosenholz::FileOps::joinPath(
                         Rosenholz::FileOps::joinPath(cfg.mfsPath(), "F22"), taskReg),
-                    "DOK"),
+                    "AKT"),
                 docSane);
             CHECK(Rosenholz::FileOps::dirExists(docDir),
                   "Only one file per document ID after rename+refile");
@@ -362,7 +362,7 @@ void testSuiteMigration() {
     SECTION("Migration — schema versions");
     {
         // v2 baseline: all schemas start at version 2
-        std::vector<std::string> allDbs = {"core","f16","f77","dok","f18"};
+        std::vector<std::string> allDbs = {"core","f16","f77","akt","f18"};
         for (auto& name : allDbs) {
             int ver = R::MigrationEngine::currentVersion(name);
             CHECK(ver >= 2, "schema version >= 2 for db: " + name);
@@ -377,7 +377,7 @@ void testSuiteMigration() {
 
     SECTION("Migration — all pool DBs accessible");
     {
-        std::vector<std::string> dbs = {"core","f16","f77","dok","f18"};
+        std::vector<std::string> dbs = {"core","f16","f77","akt","f18"};
         for (auto& name : dbs) {
             auto* db = R::DatabasePool::instance().get(name);
             CHECK(db != nullptr, "DB accessible: " + name);

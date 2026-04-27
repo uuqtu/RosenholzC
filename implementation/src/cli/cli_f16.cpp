@@ -354,7 +354,7 @@ static bool f16_dok_list(std::shared_ptr<ProjectF16> p) {
         auto td = Document::loadForEntity("f22", t->taskId);
         docs.insert(docs.end(), td.begin(), td.end());
     }
-    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n = 1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "
@@ -371,7 +371,7 @@ static bool f16_dok_open(std::shared_ptr<ProjectF16> p) {
         auto td = Document::loadForEntity("f22", t->taskId);
         docs.insert(docs.end(), td.begin(), td.end());
     }
-    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return true; }
+    if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n=1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "
@@ -442,7 +442,7 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
         std::cout
             << "  1.Bearbeiten\n"
             << "  F22: 2.listen | 3.<#> | 4.neu\n"
-            << "  DOK: 5.listen | 6.<#> | 7.neu\n"
+            << "  AKT: 5.listen | 6.<#> | 7.neu\n"
             << "  KOM: 8.listen | 9.<#> | 10.neu\n"
             << "  11.F77  0.Zurück\n";
         int ch = readInt("Wahl", 0, 11);

@@ -156,7 +156,10 @@ public:
     // Returns false if transition is not allowed or DB write fails.
     // ------------------------------
     // Primary: type-safe transition. Returns false if not allowed or DB fails.
-    bool transitionState(RevState target);
+    /// Transition to target state.
+    /// If f77Gated=false (default), will refuse transition to released/closed
+    /// if an active F77 workflow exists for this document — the F77 engine must do it.
+    bool transitionState(RevState target, bool f77Gated = false);
     // String overload: converts via revStateFromString, then delegates.
     // Kept for SQL-origin callers (workflow engine, tests).
     bool transitionState(const std::string& target) {

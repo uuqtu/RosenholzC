@@ -47,7 +47,7 @@ std::shared_ptr<Document> Document::create(
     const std::string& taskId_, const std::string& f18OpId_)
 {
     auto d = std::make_shared<Document>();
-    d->documentId  = genId("DOK"); d->title = title_;
+    d->documentId  = genId("AKT"); d->title = title_;
     d->docType     = type_;
     d->taskId      = taskId_;
     d->f18OperationId = f18OpId_;
@@ -75,17 +75,17 @@ std::vector<std::pair<uint32_t,std::string>> Document::indexMfsFolders() const {
 
 
 OperationResult Document::save() const {
-    auto* db = DatabasePool::instance().get("dok");
+    auto* db = DatabasePool::instance().get("akt");
     if (!db) { LOG_ERROR("Document::save — documents DB unavailable"); return OperationResult::IO_ERROR; }
     OperationResult ok = db->exec(R"(
-        INSERT OR REPLACE INTO documents
+        INSERT OR REPLACE INTO akten
         (document_id,release_workflow_id,
          task_id,f18_operation_id,f18_step_id,author_id,approved_by,
          doc_type,doc_category,title,version,
          date_created,date_modified,date_approved,date_expires,classification,
-         volume_number,page_count,language,format,file_path,file_size,file_hash,file_url,
+         volume_number,page_count,language,format,file_path,file_size,file_hash,
          external_ref,tags,summary,links,notes,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
         BindParam::text(documentId),
         BindParam::nullOrText(releaseWorkflowId),
@@ -99,7 +99,7 @@ OperationResult Document::save() const {
         BindParam::nullOrText(classification),
         BindParam::int64(volumeNumber), BindParam::int64(pageCount),
         BindParam::text(language), BindParam::nullOrText(format),
-        BindParam::nullOrText(filePath), BindParam::int64(fileSize), BindParam::nullOrText(fileHash), BindParam::nullOrText(fileUrl),
+        BindParam::nullOrText(filePath), BindParam::int64(fileSize), BindParam::nullOrText(fileHash),
         BindParam::nullOrText(externalRef),
         BindParam::nullOrText(tags), BindParam::nullOrText(summary),
         BindParam::nullOrText(links), BindParam::text(notes),
@@ -123,24 +123,24 @@ void Document::fromRow(const Row& r) {
     auto gi=[&](const std::string& k){ auto v=g(k); return v.empty()?0:std::stoi(v); };
     volumeNumber=gi("volume_number"); pageCount=gi("page_count");
     language=g("language"); format=g("format");
-    filePath=g("file_path"); fileUrl=g("file_url");
+    filePath=g("file_path");
     { auto sv=g("file_size"); fileSize=sv.empty()?0:std::stoll(sv); } fileHash=g("file_hash");
     externalRef=g("external_ref");
     tags=g("tags"); summary=g("summary"); links=g("links"); notes=g("notes");
     createdAt=g("created_at"); updatedAt=g("updated_at");
 }
 bool Document::load(const std::string& id) {
-    auto* db=DatabasePool::instance().get("dok");
+    auto* db=DatabasePool::instance().get("akt");
     if (!db) return false;
-    auto rows=db->query("SELECT * FROM documents WHERE document_id=?;",{BindParam::text(id)});
+    auto rows=db->query("SELECT * FROM akten WHERE document_id=?;",{BindParam::text(id)});
     if (rows.empty()) { LOG_WARN("Document not found: "+id); return false; }
     fromRow(rows[0]); return true;
 }
 OperationResult Document::remove() {
-    auto* db=DatabasePool::instance().get("dok");
+    auto* db=DatabasePool::instance().get("akt");
     if (!db) return OperationResult::IO_ERROR;
-    db->exec("DELETE FROM entity_documents WHERE document_id=?;",{BindParam::text(documentId)});
-    return db->exec("DELETE FROM documents WHERE document_id=?;",{BindParam::text(documentId)})
+    db->exec("DELETE FROM entity_akten WHERE document_id=?;",{BindParam::text(documentId)});
+    return db->exec("DELETE FROM akten WHERE document_id=?;",{BindParam::text(documentId)})
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 OperationResult Document::update() {
@@ -154,27 +154,27 @@ std::shared_ptr<Document> Document::loadById(const std::string& id) {
 }std::vector<std::shared_ptr<Document>> Document::loadForEntity(
     const std::string& et, const std::string& eid)
 {
-    auto* db=DatabasePool::instance().get("dok");
+    auto* db=DatabasePool::instance().get("akt");
     std::vector<std::shared_ptr<Document>> result;
     if (!db) return result;
 
     // Primary: documents with task_id / project_id set directly
     if (et == "f22") {
         auto rows = db->query(
-            "SELECT * FROM documents WHERE task_id=? ORDER BY date_created DESC;",
+            "SELECT * FROM akten WHERE task_id=? ORDER BY date_created DESC;",
             {BindParam::text(eid)});
         for (auto& r : rows) {
             auto d = std::make_shared<Document>(); d->fromRow(r); result.push_back(d);
         }
     }
 
-    // Also pick up polymorphically-attached documents via entity_documents
+    // Also pick up polymorphically-attached documents via entity_akten
     std::set<std::string> seen;
     for (auto& d : result) seen.insert(d->documentId);
 
     auto rows2 = db->query(R"(
-        SELECT d.* FROM documents d
-        JOIN entity_documents e ON d.document_id=e.document_id
+        SELECT d.* FROM akten d
+        JOIN entity_akten e ON d.document_id=e.document_id
         WHERE e.entity_type=? AND e.entity_id=? ORDER BY d.date_created DESC;
     )", {BindParam::text(et), BindParam::text(eid)});
     for (auto& r : rows2) {
@@ -215,7 +215,6 @@ std::shared_ptr<Document> Document::archiveFromUrl(
 
     // Build Document record
     auto d = create(FileOps::baseName(localPath), "archive", pid);
-    d->fileUrl      = url;
     d->filePath     = localPath;
     d->authorId     = aid;
     d->dateCreated  = nowIso();
@@ -266,17 +265,17 @@ std::string Document::archiveWebsite(const std::string& url, const std::string& 
 //   relationship         : attached|mandatory|reference
 //
 // Behavior:
-//   Inserts into entity_documents table in documents.db
+//   Inserts into entity_akten table in documents.db
 //   Idempotent: INSERT OR IGNORE prevents duplicates
 //
 // Returns:
 //   true on success
 // ------------------------------
 OperationResult Document::attachToEntity(const std::string& et, const std::string& eid, const std::string& rel) {
-    auto* db = DatabasePool::instance().get("dok");
+    auto* db = DatabasePool::instance().get("akt");
     if (!db) return OperationResult::DB_ERROR;
     return db->exec(
-        "INSERT OR IGNORE INTO entity_documents(entity_type,entity_id,document_id,relationship) VALUES(?,?,?,?);",
+        "INSERT OR IGNORE INTO entity_akten(entity_type,entity_id,document_id,relationship) VALUES(?,?,?,?);",
         {BindParam::text(et), BindParam::text(eid), BindParam::text(documentId), BindParam::text(rel)})
         ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
@@ -284,7 +283,7 @@ OperationResult Document::reassignAuthor(const std::string& id) { authorId=id; r
 OperationResult Document::reassignToTask(const std::string& id) { taskId=id; return update(); }
 nlohmann::json Document::toJson() const {
     return {{"documentId",documentId},{"title",title},{"docType",docType},
-            {"format",format},{"status",currentRevisionState()},{"fileUrl",fileUrl}};
+            {"format",format},{"status",currentRevisionState()}};
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -319,7 +318,7 @@ static std::string docMFSDir(const Document& d) {
     if (parent.empty()) return "";
     std::string sane = sanitiseRegNr(parent);
     // mfs/DOK/{parent_sane}/
-    return FileOps::joinPath(mfsRoot, "DOK", sane);
+    return FileOps::joinPath(mfsRoot, "AKT", sane);
 }
 
 // ── MFS canonical filename for a document version ────────────
@@ -371,41 +370,6 @@ OperationResult Document::importLocalFile(const std::string& srcPath) {
     return update();
 }
 
-OperationResult Document::refreshFromUrl() {
-    if (fileUrl.empty()) {
-        LOG_WARN("refreshFromUrl: no URL set");
-        return OperationResult::IO_ERROR;
-    }
-
-    // No snapshot before URL refresh — revise() is the sole entry point for revisions
-
-    const std::string& base = Config::instance().basePath();
-    std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
-    FileOps::makeDirs(tmpDir);
-
-    // Download
-    std::string downloaded = FileOps::downloadUrl(fileUrl, tmpDir);
-    if (downloaded.empty()) {
-        LOG_ERROR("refreshFromUrl: download failed: " + fileUrl);
-        return OperationResult::DB_ERROR;
-    }
-
-    // Bump version
-    std::string oldVer = version;
-    try {
-        size_t dot = version.rfind('.');
-        if (dot != std::string::npos) {
-            int minor = std::stoi(version.substr(dot+1)) + 1;
-            version = version.substr(0, dot+1) + std::to_string(minor);
-        }
-    } catch(...) { version += ".r"; }
-
-    // Import into MFS
-    auto ok = importLocalFile(downloaded);
-    FileOps::deleteFile(downloaded);
-    if (opOk(ok)) dateModified = nowIso();
-    return ok;
-}
 
 
 
@@ -551,9 +515,9 @@ bool Document::openFile(const std::string& mode, const std::string& pathOverride
 std::vector<std::shared_ptr<Document>> Document::loadRecent(int n,
     DocLoadRule /*rule*/, const std::string& /*targetDate*/) {
     std::vector<std::shared_ptr<Document>> result;
-    auto* db = DatabasePool::instance().get("dok");
+    auto* db = DatabasePool::instance().get("akt");
     if (!db) return result;
-    auto rows = db->query("SELECT * FROM documents ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
+    auto rows = db->query("SELECT * FROM akten ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
     for (auto& r : rows) {
         auto obj = std::make_shared<Document>();
         obj->fromRow(r);
@@ -606,7 +570,7 @@ bool Document::canEdit() const { return isInWork(); }
 void Document::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
     // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
-    auto wf = Rosenholz::F77_Engine::startDefault("dok", documentId);
+    auto wf = Rosenholz::F77_Engine::startDefault("akt", documentId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
     LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for dok/" + documentId);
@@ -632,9 +596,9 @@ std::shared_ptr<DocumentRevision> Document::revise(
             changeNote.empty() ? "Revision 1 — Initialzustand" : changeNote);
         if (rev) {
             // Sync document status
-            auto* db = DatabasePool::instance().get("dok");
+            auto* db = DatabasePool::instance().get("akt");
             if (db) db->exec(
-                "UPDATE documents SET updated_at=? WHERE document_id=?;",
+                "UPDATE akten SET updated_at=? WHERE document_id=?;",
                 {BindParam::text(nowIso()), BindParam::text(documentId)});
                 LOG_INFO("[Document] Revision 1 angelegt: " + documentId);
         }
@@ -663,9 +627,9 @@ std::shared_ptr<DocumentRevision> Document::revise(
         createdBy.empty() ? authorId : createdBy,
         changeNote.empty() ? "Neue Revision" : changeNote);
     if (newRev) {
-        auto* db = DatabasePool::instance().get("dok");
+        auto* db = DatabasePool::instance().get("akt");
         if (db) db->exec(
-            "UPDATE documents SET updated_at=? WHERE document_id=?;",
+            "UPDATE akten SET updated_at=? WHERE document_id=?;",
             {BindParam::text(nowIso()), BindParam::text(documentId)});
         LOG_INFO("[Document] Revision " + std::to_string(newRev->rev) +
                  " angelegt: " + documentId);
@@ -794,16 +758,42 @@ bool Document::checkin(const std::string& srcPath) {
 std::string Document::mfsSchluesselText() const {
     auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
     std::ostringstream s;
-    s << "  ID      : " << documentId << "\n"
-      << "  Titel   : " << title << "\n"
-      << "  Typ     : " << docType << "\n"
-      << "  Status  : " << (cur ? cur->revStateStr() : "?") << "\n";
-    if (!taskId.empty())        s << "  F22     : " << taskId << "\n";
-    if (!f18OperationId.empty()) s << "  F18     : " << f18OperationId << "\n";
+    // Compact reg-nr key (slash→underscore) and revision label
+    std::string saneId = documentId;
+    for (char& c : saneId) if (c == '/') c = '_';
+    uint32_t revNum = cur ? cur->rev : 0;
+    char revbuf[8]; std::snprintf(revbuf, sizeof(revbuf), "%03u", revNum);
+    std::string revLabel = saneId + "_r" + revbuf;
+
+    s << "  AKTEN-ID         : " << documentId << "  [" << (cur ? cur->revStateStr() : "?") << "]\n"
+      << "  TITEL            : " << title << "  [" << docType << "]\n";
+    if (!taskId.empty())         s << "  F22-VORGANG      : " << taskId << "\n";
+    if (!f18OperationId.empty()) s << "  F18-OPERATION    : " << f18OperationId << "\n";
+
     if (cur) {
-        auto objs = Rosenholz::DocumentObject::loadForRevision(documentId, cur->rev);
-        for (auto& o : objs)
-            s << "  OBJ     : " << o->objectId << "  " << o->displayName() << "\n";
+        auto objs = Rosenholz::DocumentObject::loadForRevision(documentId, revNum);
+        if (!objs.empty()) {
+            s << "\n"
+              << "  " << std::left
+              << std::setw(10) << "OBJ-ID"
+              << std::setw(44) << "BEZEICHNUNG / ORIGINAL"
+              << std::setw(52) << "MFS-DATEINAME"
+              << "STATUS\n"
+              << "  " << std::string(116, '-') << "\n";
+            for (auto& o : objs) {
+                std::string shortId = o->objectId;
+                auto col = shortId.rfind(':');
+                if (col != std::string::npos) shortId = shortId.substr(col+1);
+                std::string dispName = o->displayName().substr(0,42);
+                s << "  " << std::left
+                  << std::setw(10) << shortId
+                  << std::setw(44) << dispName
+                  << std::setw(52) << o->mfsFilename.substr(0,50)
+                  << (o->committed ? "LMDB" : "MFS") << "\n";
+                if (!o->description.empty())
+                    s << "             Beschr.: " << o->description.substr(0,72) << "\n";
+            }
+        }
     }
     s << "\n";
     return s.str();

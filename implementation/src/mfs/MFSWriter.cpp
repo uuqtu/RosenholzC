@@ -75,7 +75,7 @@ static std::string f77Dir(const std::string& mfsRoot, const std::string& wfiId) 
     return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F77"), sanitiseRegNr(wfiId));
 }
 static std::string docEntityDir(const std::string& entityDir, const std::string& docId) {
-    return FileOps::joinPath(FileOps::joinPath(entityDir,"DOK"), sanitiseRegNr(docId));
+    return FileOps::joinPath(FileOps::joinPath(entityDir,"AKT"), sanitiseRegNr(docId));
 }
 
 
@@ -121,7 +121,7 @@ bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
           << "VERWEISE (alle Unterakten dieser Vorgangsakte):\n"
           << "  F22/   → Aufgabenkartei    [mfs/F22/<reg>/]\n"
           << "  F18/   → Vorgangskartei    [mfs/F18/<id>/]\n"
-          << "  DOK/   → Schriftgut        [mfs/F16/<reg>/DOK/<id>/]\n"
+          << "  DOK/   → Akten        [mfs/F16/<reg>/DOK/<id>/]\n"
           << "\n"
           << "KLARNAMENZUORDNUNG → owner_key.txt\n"
           << "  Alle Registriernummern sind dort aufgeloest.\n"
@@ -132,23 +132,32 @@ bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
     // ── Entitäts-spezifischer Schlüssel ───────────────────────
     {
         std::ostringstream sk;
-        sk << "SCHLUESSEL — F16\n"
-           << "ID      : " << p.regNumber.toString() << "\n"
-           << "Titel   : " << p.title << "\n"
-           << "Status  : " << p.status << "\n"
-           << "Typ     : " << p.projectType << "\n"
-           << "Groesse : " << p.sizeClass << "\n"
-           << "Erstellt: " << p.createdAt << "\n\n"
-           << "Verbundene F22-Aufgaben:\n";
+        sk << "ROSENHOLZ PM — F16 SCHLÜSSELDATEI\n"
+           << "==================================\n"
+           << "REGISTRIERNUMMER : " << p.regNumber.toString() << "\n"
+           << "TITEL            : " << p.title << "\n"
+           << "STATUS           : " << p.status << "\n"
+           << "TYP              : " << p.projectType << "\n"
+           << "ANGELEGT         : " << p.createdAt << "\n\n"
+           << "Navigation: Unterordner F22/<reg>/_SCHLUESSEL.txt fuer Aufgabendetails\n"
+           << "           Unterordner DOK/<id>/_SCHLUESSEL.txt fuer Aktendetails\n\n"
+           << "Verbundene F22-Aufgaben:\n"
+           << "  " << std::left << std::setw(28) << "REG-NR"
+           << std::setw(34) << "TITEL" << "STATUS\n"
+           << "  " << std::string(70, '-') << "\n";
         auto tasks = TaskF22::loadForProject(p.regNumber.toString());
         for (auto& t : tasks)
-            sk << "  " << t->taskId << "  " << t->title << "\n";
-        sk << "\nVerbundene Dokumente (via F22-Vorgänge):\n";
+            sk << "  " << std::left << std::setw(28) << t->taskId
+               << std::setw(34) << t->title.substr(0,32) << t->status << "\n";
+        sk << "\nVerbundene Akten (via F22):\n"
+           << "  " << std::left << std::setw(28) << "AKTEN-ID"
+           << std::setw(34) << "TITEL" << "TYP\n"
+           << "  " << std::string(70, '-') << "\n";
         for (auto& t : tasks) {
             auto tDocs = Document::loadForEntity("f22", t->taskId);
             for (auto& d : tDocs)
-                sk << "  [F22:" << t->taskId.substr(0,16) << "] "
-                   << d->documentId << "  " << d->title << "\n";
+                sk << "  " << std::left << std::setw(28) << d->documentId
+                   << std::setw(34) << d->title.substr(0,32) << d->docType << "\n";
         }
         FileOps::writeTextFile(FileOps::joinPath(dir, "_SCHLUESSEL.txt"), sk.str());
     }
@@ -320,9 +329,9 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
     std::string cardPath = FileOps::joinPath(docDir, cardName);
 
     std::ostringstream content;
-    content << "DOKUMENT-KARTE\n"
+    content << "AKTEN-KARTE\n"
             << "=======================================================\n"
-            << "DOKUMENT-ID      : " << d.documentId          << "\n"
+            << "AKTEN-ID      : " << d.documentId          << "\n"
             << "TITEL            : " << d.title               << "\n"
             << "TYP              : " << d.docType             << "\n"
             << "FORMAT           : " << d.format              << "\n"
@@ -336,8 +345,6 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
             << "  [mfs/" << parentRef << "/]\n";
     if (!d.authorId.empty())
         content << "  VERFASSER-REF   : " << d.authorId << "  → owner_key.txt\n";
-    if (!d.fileUrl.empty())
-        content << "  QUELLE-URL      : " << d.fileUrl  << "\n";
     if (!d.filePath.empty())
         content << "  DATEI-PFAD      : " << d.filePath << "\n";
     content << "\nKLARNAMENZUORDNUNG → owner_key.txt\n";
@@ -460,9 +467,12 @@ void MFSWriter::rebuildTypeSchluessel(const std::string& mfsRoot,
     FileOps::makeDirs(typeDir);
 
     std::ostringstream s;
-    s << "SCHLUESSEL — " << typeCode << "\n"
-      << "Erstellt: " << nowIso() << "\n"
-      << "==============================================================\n\n";
+    s << "ROSENHOLZ PM — SCHLÜSSELDATEI\n"
+      << "==============================\n"
+      << "Typ      : " << typeCode << "\n"
+      << "Erstellt : " << nowIso() << "\n\n"
+      << "Diese Datei ermöglicht die Entschlüsselung der Objekte ohne Rosenholz PM.\n"
+      << "==============================\n\n";
 
     if (typeCode == "F16") {
         auto items = ProjectF16::loadAll();
@@ -490,9 +500,9 @@ void MFSWriter::rebuildTypeSchluessel(const std::string& mfsRoot,
         s << "Alle F18-Vorgaenge (" << items.size() << "):\n\n";
         for (auto& v : items) s << v->mfsSchluesselText();
 
-    } else if (typeCode == "DOK") {
+    } else if (typeCode == "AKT") {
         auto items = Document::loadRecent(9999);
-        s << "Alle Dokumente (" << items.size() << "):\n\n";
+        s << "Alle Akten (" << items.size() << "):\n\n";
         for (auto& d : items) s << d->mfsSchluesselText();
 
     } else if (typeCode == "PER") {
@@ -508,7 +518,7 @@ void MFSWriter::rebuildTypeSchluessel(const std::string& mfsRoot,
 
 bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
     LOG_INFO("Rebuilding MFS tree at: " + mfsRoot);
-    for (auto& sub : {"F16","F22","F18","F77","DOK"})
+    for (auto& sub : {"F16","F22","F18","F77","AKT"})
         FileOps::makeDirs(FileOps::joinPath(mfsRoot, sub));
 
     // Reset owner key
@@ -566,7 +576,7 @@ bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
              + " F77=" + std::to_string(nF77)
              + " OK=" + std::string(ok?"yes":"NO"));
     // Rebuild type-level Schlüssel index files
-    for (const std::string& type : std::vector<std::string>{"F16","F22","F18","DOK","PER"})
+    for (const std::string& type : std::vector<std::string>{"F16","F22","F18","AKT","PER"})
         rebuildTypeSchluessel(mfsRoot, type);
 
     return ok;

@@ -222,6 +222,10 @@ public:
     /// Default: appends new step before the End step.
     // addStep: append a regular step (connected in the linear chain) or a
     // free step (isFree=true, no predecessor dependencies, always startable).
+    /// Engine tick: auto-approve Init, auto-approve End when all mid-steps done.
+    /// Returns true if any state changed.
+    bool tick();
+
     std::shared_ptr<F18OperationStep> addStep(
         const std::string& title,
         const std::string& stepType   = "task",

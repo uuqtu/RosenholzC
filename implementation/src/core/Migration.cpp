@@ -29,7 +29,7 @@ std::map<std::string, int> MigrationEngine::targetVersionMap() {
         {"f16",  SchemaVersions::f16},
         {"f22",  SchemaVersions::f22},
         {"f77",  SchemaVersions::f77},
-        {"dok",  SchemaVersions::dok},
+        {"akt",  SchemaVersions::akt},
         {"f18",       SchemaVersions::f18},
     };
 }
@@ -61,11 +61,11 @@ std::vector<Migration> MigrationEngine::registry() {
     //
     return {
         // dok v5: remove project_id column (docs now linked F22/F18 only)
-        {"dok", 5,
+        {"akt", 5,
          "v5: project_id removed — documents belong to F22 or F18 only",
          // SQLite < 3.35 has no DROP COLUMN — recreate table without project_id
          R"SQL(
-            CREATE TABLE IF NOT EXISTS documents_v5 AS
+            CREATE TABLE IF NOT EXISTS akten_v5 AS
                 SELECT document_id, release_workflow_id, task_id,
                        f18_operation_id, f18_step_id, author_id, approved_by,
                        doc_type, doc_category, title, version,
@@ -74,14 +74,32 @@ std::vector<Migration> MigrationEngine::registry() {
                        format, file_path, file_size, file_hash, file_url,
                        external_ref, tags, summary, links, notes,
                        created_at, updated_at
-                FROM documents;
-            DROP TABLE documents;
-            ALTER TABLE documents_v5 RENAME TO documents;
+                FROM akten;
+            DROP TABLE akten;
+            ALTER TABLE akten_v5 RENAME TO akten;
          )SQL"
         },
-        {"dok", 6,
-         "v6: source_url added to document_objects for URL-based objects",
-         "ALTER TABLE document_objects ADD COLUMN source_url TEXT;"
+        {"akt", 6,
+         "v6: source_url added to akt_objekte for URL-based objects",
+         "ALTER TABLE akt_objekte ADD COLUMN source_url TEXT;"
+        },
+        {"akt", 7,
+         "v7: file_url removed from documents — URL belongs to DocumentObjects only",
+         // SQLite < 3.35: recreate table without file_url
+         R"SQL(
+            CREATE TABLE IF NOT EXISTS akten_v7 AS
+                SELECT document_id, release_workflow_id, task_id,
+                       f18_operation_id, f18_step_id, author_id, approved_by,
+                       doc_type, doc_category, title, version,
+                       date_created, date_modified, date_approved, date_expires,
+                       classification, volume_number, page_count, language,
+                       format, file_path, file_size, file_hash,
+                       external_ref, tags, summary, links, notes,
+                       created_at, updated_at
+                FROM akten;
+            DROP TABLE akten;
+            ALTER TABLE akten_v7 RENAME TO akten;
+         )SQL"
         },
     }; // end registry
 }

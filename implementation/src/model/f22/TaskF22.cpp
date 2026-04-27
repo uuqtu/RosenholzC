@@ -5,6 +5,10 @@
 #include "../../mfs/MFSWriter.h"
 #include "TaskF22.h"
 #include "../dok/Document.h"
+#include "../dok/DocumentObject.h"
+#include "../../repository/DocumentRevision.h"
+#include "../../core/FileOps.h"
+#include "../dok/Document.h"
 #include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "../../core/Database.h"
@@ -382,6 +386,52 @@ std::string TaskF22::mfsSchluesselText() const {
     }
     s << "\n";
     return s.str();
+}
+
+// ── TaskF22::scanMfsForUnregistered ──────────────────────────────────────
+// Scan the MFS folder for this task for files not registered as Akte objects.
+// Returns (filePath, suggestedTitle) pairs for each unregistered file.
+std::vector<std::pair<std::string,std::string>>
+TaskF22::scanMfsForUnregistered() const {
+    const std::string& mfsRoot = Config::instance().mfsPath();
+    // F22 folder: mfs/F22/<regNr>/
+    std::string taskDir = FileOps::joinPath(
+        FileOps::joinPath(mfsRoot, "F22"),
+        sanitiseRegNr(regNumber.toString()));
+
+    if (!FileOps::dirExists(taskDir)) return {};
+
+    // Collect all registered object paths (from all Akten linked to this task):
+    std::set<std::string> knownPaths;
+    auto docs = Document::loadForEntity("f22", taskId);
+    for (auto& d : docs) {
+        auto cur = DocumentRevision::currentRevision(d->documentId);
+        if (!cur) continue;
+        auto objs = DocumentObject::loadForRevision(d->documentId, cur->rev);
+        for (auto& o : objs) {
+            if (!o->mfsPath.empty()) knownPaths.insert(o->mfsPath);
+            if (!o->mfsFilename.empty())
+                knownPaths.insert(FileOps::joinPath(taskDir, o->mfsFilename));
+        }
+    }
+
+    // Scan task folder for any files not in knownPaths:
+    std::vector<std::pair<std::string,std::string>> result;
+    auto files = FileOps::listFiles(taskDir, true); // recursive
+    for (auto& f : files) {
+        std::string base = FileOps::baseName(f);
+        // Skip metadata files:
+        if (base == "_SCHLUESSEL.txt" || base == "00_KARTE.txt" ||
+            base == "owner_key.txt"   || base.empty()) continue;
+        if (knownPaths.count(f)) continue;
+        // Suggest a title from the filename (strip extension, replace _ with space):
+        std::string stem = base;
+        auto dot = stem.rfind('.');
+        if (dot != std::string::npos) stem = stem.substr(0, dot);
+        for (char& c : stem) if (c == '_' || c == '-') c = ' ';
+        result.emplace_back(f, stem);
+    }
+    return result;
 }
 
 } // namespace Rosenholz

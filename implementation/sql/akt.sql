@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
     description TEXT
 );
 
-CREATE TABLE IF NOT EXISTS documents (
+CREATE TABLE IF NOT EXISTS akten (
     -- Core identity
     document_id            TEXT PRIMARY KEY,
     release_workflow_id    TEXT,               -- F77 Main-Workflow instance
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 
 -- Polymorphic attachment: any entity can reference any document
-CREATE TABLE IF NOT EXISTS entity_documents (
+CREATE TABLE IF NOT EXISTS entity_akten (
     link_id     TEXT    PRIMARY KEY,
     entity_type TEXT    NOT NULL,
     entity_id   TEXT    NOT NULL,
@@ -64,8 +64,8 @@ CREATE TABLE IF NOT EXISTS entity_documents (
     linked_at   TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_docs_task     ON documents(task_id);
-CREATE INDEX IF NOT EXISTS idx_ent_docs_key  ON entity_documents(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_docs_task     ON akten(task_id);
+CREATE INDEX IF NOT EXISTS idx_ent_docs_key  ON entity_akten(entity_type, entity_id);
 
 -- ── Dokument-Versionen ─────────────────────────────────────────
 -- Jede gespeicherte Version eines Dokuments (vor Änderung)
@@ -82,7 +82,7 @@ CREATE INDEX IF NOT EXISTS idx_ent_docs_key  ON entity_documents(entity_type, en
 --   released → locked, closed   (immutable)
 --   locked → pre_released (newest only), closed
 --   closed → [terminal]
-CREATE TABLE IF NOT EXISTS document_revisions (
+CREATE TABLE IF NOT EXISTS akt_revisionen (
     document_id     TEXT    NOT NULL,
     rev             INTEGER NOT NULL DEFAULT 1,
     parent_rev      INTEGER DEFAULT 0,
@@ -99,9 +99,9 @@ CREATE TABLE IF NOT EXISTS document_revisions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_docrev_current
-    ON document_revisions(document_id, superseded);
+    ON akt_revisionen(document_id, superseded);
 CREATE INDEX IF NOT EXISTS idx_docrev_state
-    ON document_revisions(document_id, rev_state);
+    ON akt_revisionen(document_id, rev_state);
 -- ── Dokument-Datei-Metadaten ────────────────────────────────────
 -- Ergänzt documents-Tabelle um Datei-spezifische Informationen
 
@@ -113,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_docrev_state
 --
 -- Naming convention:  {docRegNr}_{revNNN}_{originalFilename}
 -- Example:            XV_DOK_0018_2026_r001_tests-example.xls
-CREATE TABLE IF NOT EXISTS document_objects (
+CREATE TABLE IF NOT EXISTS akt_objekte (
     -- PK: documentId + ":" + 5-char objectId  e.g. "XV/DOK/0018/2026:A1B2C"
     object_id       TEXT    PRIMARY KEY,
     document_id     TEXT    NOT NULL,       -- XV/DOK/0018/2026
@@ -130,14 +130,14 @@ CREATE TABLE IF NOT EXISTS document_objects (
     committed       INTEGER NOT NULL DEFAULT 0,  -- 1 = in LMDB, 0 = MFS only
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (document_id, rev) REFERENCES document_revisions(document_id, rev)
+    FOREIGN KEY (document_id, rev) REFERENCES akt_revisionen(document_id, rev)
         ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_doc_objects_docrev
-    ON document_objects (document_id, rev);
+    ON akt_objekte (document_id, rev);
 
-CREATE TABLE IF NOT EXISTS document_objects (
+CREATE TABLE IF NOT EXISTS akt_objekte (
     -- Primary key: documentId + ":" + 5-char alphanumeric objectId
     -- e.g. "XV/DOK/0018/2026:A1B2C"
     -- objectId is unique per document, not globally. Same ID can exist in different documents.
@@ -154,11 +154,11 @@ CREATE TABLE IF NOT EXISTS document_objects (
     committed       INTEGER NOT NULL DEFAULT 0,  -- 0=MFS only, 1=in LMDB
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (document_id, rev) REFERENCES document_revisions(document_id, rev)
+    FOREIGN KEY (document_id, rev) REFERENCES akt_revisionen(document_id, rev)
         ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS document_object_sequences (
+CREATE TABLE IF NOT EXISTS akt_sequenzen (
     -- Tracks the next objectId sequence number per document.
     -- objectId is generated as base-36 zero-padded to 5 chars.
     document_id     TEXT    PRIMARY KEY,

@@ -111,6 +111,7 @@ set(MODEL_SOURCES
 
 set(WORKFLOW_SOURCES
     src/workflow/F77Workflow.cpp
+    src/workflow/F77Task.cpp
     src/repository/ArchiveStore.cpp
     src/repository/DocumentRevision.cpp
 )
@@ -175,6 +176,7 @@ set(CLI_SOURCES
     src/cli/cli_per.cpp
     src/cli/cli_de.cpp
     src/cli/cli_comm.cpp
+    src/cli/cli_tasks.cpp
     src/cli/cli_sys.cpp
 )
 

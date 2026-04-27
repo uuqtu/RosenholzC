@@ -34,7 +34,8 @@ using namespace Rosenholz;
 
 static void printHelp() {
     std::cout <<
-"Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""DOK: -dok Dokumente   | -dok -n Neu | -dok <id> Öffnen | -dok <f22id> Liste\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/DOK/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
+"Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
+"     -tasks       | Meine Workflow-Aufgaben (F77-Tasks)\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/DOK/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
 ;
 }
 
@@ -70,8 +71,8 @@ static void sigintHandler(int) {
 //   -search <text>  → no completion (free text)
 
 static const char* const kCommands[] = {
-    "-f16", "-f22", "-f18", "-dok", "-f77",
-    "-per", "-de",  "-search", "-backup", "-status",
+    "-f16", "-f22", "-f18", "-akt", "-f77",
+    "-per", "-de",  "-search", "-backup", "-status", "-tasks",
     "-mfs", "-log", "-indexdok", "-h", "--help",
     "exit", "quit", "help",
     nullptr
@@ -175,10 +176,9 @@ static char** rhCompletion(const char* text, int /*start*/, int /*end*/) {
         addF16();
         addF18();
         g_candidates.insert(g_candidates.end(), {"-n", "-t"});
-    } else if (cmd == "-dok") {
-        addF16();
+    } else if (cmd == "-akt") {
         addDok();
-        g_candidates.insert(g_candidates.end(), {"-n", "-f16", "-f22", "-f18"});
+        g_candidates.insert(g_candidates.end(), {"-n", "-s", "-f22", "-f18"});
     } else if (cmd == "-f77") {
         if (tokens.size() >= 2 && tokens[1] == "-start") {
             // -f77 -start <any-entity-id>
@@ -293,10 +293,11 @@ static void dispatch(const std::string& cmd, const std::vector<std::string>& res
     if (cmd == "-f16")              { CLI::cmdF16(rest);           return; }
     if (cmd == "-f22")              { CLI::cmdF22(rest);           return; }
     if (cmd == "-f18")              { CLI::cmdF18(rest);           return; }
-    if (cmd == "-dok")              { CLI::cmdDok(rest);           return; }
+    if (cmd == "-akt")              { CLI::cmdAkt(rest);           return; }
     if (cmd == "-f77")              { CLI::cmdF77(rest);           return; }
     if (cmd == "-per")              { CLI::cmdPer(rest);           return; }
     if (cmd == "-de")               { CLI::cmdDe(rest);            return; }
+    if (cmd == "-tasks")            { CLI::cmdTasks(rest);         return; }
     if (cmd == "-status")           { CLI::cmdStatus();            return; }
     if (cmd == "-backup")           { CLI::cmdBackup();            return; }
     if (cmd == "-mfs")              { CLI::cmdMfs(rest);           return; }

@@ -540,4 +540,56 @@ std::string F18Operation::mfsSchluesselText() const {
     return s.str();
 }
 
+// ── F18Operation::tick ───────────────────────────────────────────────────
+// Auto-approve Init and End steps when conditions are met.
+bool F18Operation::tick() {
+    loadSteps();
+    bool changed = false;
+
+    // Auto-approve Init step:
+    for (auto& s : steps) {
+        if (s.isInitialize && s.status == "pending") {
+            s.status = "done";
+            s.completedDate = nowIso();
+            s.save();
+            changed = true;
+            LOG_INFO("[F18] Auto-approved Init step: " + s.stepId);
+        }
+    }
+
+    // Check if all mid-steps (non-Init, non-End) are done:
+    bool allMidDone = true;
+    bool hasMid = false;
+    for (auto& s : steps) {
+        if (s.isInitialize || s.isFinal) continue;
+        hasMid = true;
+        if (s.status != "done" && s.status != "completed"
+            && s.status != "approved" && s.status != "skipped"
+            && s.status != "rejected") {
+            allMidDone = false;
+        }
+    }
+
+    // Auto-approve End step when all mid-steps are done:
+    for (auto& s : steps) {
+        if (s.isFinal && s.status == "pending" && (allMidDone || !hasMid)) {
+            s.status = "done";
+            s.completedDate = nowIso();
+            s.save();
+            // Advance operation status to released:
+            if (status != "released" && status != "cancelled") {
+                status = "released";
+                updatedAt = nowIso();
+                update();
+                LOG_INFO("[F18] Operation auto-completed: " + vorgangId);
+            }
+            changed = true;
+            LOG_INFO("[F18] Auto-approved End step: " + s.stepId);
+        }
+    }
+
+    return changed;
+}
+
+
 } // namespace Rosenholz

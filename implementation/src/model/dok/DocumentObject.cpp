@@ -23,7 +23,7 @@ static auto t_(const std::string& s) { return BindParam::text(s); }
 static auto i_(int64_t v)             { return BindParam::int64(v); }
 
 Database* DocumentObject::db() {
-    return DatabasePool::instance().get("dok");
+    return DatabasePool::instance().get("akt");
 }
 
 // ── CRUD + internal helpers ─────────────────────────────────────────────────
@@ -55,13 +55,18 @@ OperationResult DocumentObject::save() const {
     auto* d = db();
     if (!d) return OperationResult::DB_ERROR;
     bool ok = d->exec(R"(
-        INSERT OR REPLACE INTO document_objects
+        INSERT OR REPLACE INTO akt_objekte
         (object_id,document_id,rev,original_name,mfs_filename,mfs_path,
-         content_hash,content_size,format,source_url,committed,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);)",
-        {t_(objectId), t_(documentId), i_(rev), t_(originalName),
-         t_(mfsFilename), t_(mfsPath), t_(contentHash), i_(contentSize),
-         t_(format), t_(sourceUrl), i_(committed ? 1 : 0), t_(createdAt), t_(nowIso())});
+         content_hash,content_size,format,source_url,display_name,description,committed,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);)",
+        {BindParam::text(objectId), BindParam::text(documentId),
+         BindParam::int64(rev), BindParam::text(originalName),
+         BindParam::text(mfsFilename), BindParam::text(mfsPath),
+         BindParam::text(contentHash), BindParam::int64(contentSize),
+         BindParam::text(format), BindParam::nullOrText(sourceUrl),
+         BindParam::nullOrText(displayName_), BindParam::nullOrText(description),
+         BindParam::int64(committed ? 1 : 0),
+         BindParam::text(createdAt), BindParam::text(nowIso())});
     return ok ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
@@ -70,7 +75,7 @@ OperationResult DocumentObject::update() const { return save(); }
 OperationResult DocumentObject::remove() const {
     auto* d = db();
     if (!d) return OperationResult::DB_ERROR;
-    bool ok = d->exec("DELETE FROM document_objects WHERE object_id=? AND document_id=?;",
+    bool ok = d->exec("DELETE FROM akt_objekte WHERE object_id=? AND document_id=?;",
                       {t_(objectId), t_(documentId)});
     return ok ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
@@ -94,7 +99,7 @@ std::shared_ptr<DocumentObject> DocumentObject::loadByDocAndId(
     // objectId is stored globally unique as docId+":"+oid in DB PK
     std::string pk = docId + ":" + oid;
     auto rows = d->query(
-        "SELECT * FROM document_objects WHERE object_id=?;", {t_(pk)});
+        "SELECT * FROM akt_objekte WHERE object_id=?;", {t_(pk)});
     if (rows.empty()) return nullptr;
     auto o = std::make_shared<DocumentObject>(); o->fromRow(rows[0]);
     return o;
@@ -107,7 +112,7 @@ std::vector<std::shared_ptr<DocumentObject>> DocumentObject::loadForRevision(
     std::vector<std::shared_ptr<DocumentObject>> result;
     if (!d) return result;
     auto rows = d->query(
-        "SELECT * FROM document_objects "
+        "SELECT * FROM akt_objekte "
         "WHERE document_id=? AND rev=? ORDER BY original_name;",
         {t_(docId), i_(revNum)});
     for (auto& r : rows) {
@@ -128,7 +133,7 @@ std::string DocumentObject::nextObjectId(const std::string& docId) {
 
     // Count existing objects for this document (across all revisions)
     auto rows = d->query(
-        "SELECT COUNT(*) as n FROM document_objects WHERE document_id=?;",
+        "SELECT COUNT(*) as n FROM akt_objekte WHERE document_id=?;",
         {t_(docId)});
     int64_t seq = 1;
     if (!rows.empty()) {
@@ -155,7 +160,7 @@ std::string DocumentObject::mfsRevDir(const std::string& docId, uint32_t revNum)
     for (char& c : sane) if (c == '/') c = '_';
     char revbuf[8]; std::snprintf(revbuf, sizeof(revbuf), "%03u", revNum);
     std::string folderName = sane + "_" + revbuf;
-    return FileOps::joinPath(FileOps::joinPath(mfsRoot, "DOK"), folderName);
+    return FileOps::joinPath(FileOps::joinPath(mfsRoot, "AKT"), folderName);
 }
 
 std::string DocumentObject::buildMfsFilename(
@@ -180,7 +185,9 @@ std::shared_ptr<DocumentObject> DocumentObject::importFile(
     const std::string& docId,
     uint32_t            revNum,
     const std::string& srcPath,
-    OperationResult&   result)
+    OperationResult&   result,
+    const std::string& label,
+    const std::string& desc)
 {
     // docRegNr is always identical to documentId — derive it here
     const std::string& docRegNr = docId;
@@ -224,6 +231,8 @@ std::shared_ptr<DocumentObject> DocumentObject::importFile(
     obj->mfsFilename  = mfsFname;
     obj->mfsPath      = destPath;
     obj->format       = ext;
+    obj->displayName_ = label;
+    obj->description  = desc;
     obj->committed    = false;
     obj->createdAt    = nowIso();
     obj->updatedAt    = obj->createdAt;
@@ -261,7 +270,7 @@ OperationResult DocumentObject::writeKeyFile(
     std::ostringstream ss;
     ss << "ROSENHOLZ PM — SCHLÜSSELDATEI\n"
        << "==============================\n"
-       << "Dokument-ID  : " << docId << "\n";
+       << "Akten-ID  : " << docId << "\n";
     if (!docTitle.empty())
         ss << "Bezeichnung  : " << docTitle << "\n";
     ss << "Revision     : " << revNum << "\n"
@@ -283,11 +292,14 @@ OperationResult DocumentObject::writeKeyFile(
         auto col = shortId.rfind(':');
         if (col != std::string::npos) shortId = shortId.substr(col+1);
 
+        std::string dispName = o->displayName_.empty() ? o->originalName : o->displayName_;
         ss << std::left
            << std::setw(8) << shortId
-           << "  " << std::setw(42) << o->originalName.substr(0,40)
+           << "  " << std::setw(42) << dispName.substr(0,40)
            << "  " << std::setw(50) << o->mfsFilename.substr(0,48)
            << "  " << (o->committed ? "LMDB (dauerhaft)" : "MFS  (in_work)") << "\n";
+        if (!o->description.empty())
+            ss << "          Beschr.: " << o->description.substr(0,72) << "\n";
     }
 
     if (objs.empty())
@@ -533,9 +545,9 @@ std::vector<std::string> DocumentObject::scanForUnregisteredFiles(
 
 // ── DocumentObject::loadById ─────────────────────────────────────────────
 std::shared_ptr<DocumentObject> DocumentObject::loadById(const std::string& objectId) {
-    auto* db = DatabasePool::instance().get("dok");
+    auto* db = DatabasePool::instance().get("akt");
     if (!db) return nullptr;
-    auto rows = db->query("SELECT * FROM document_objects WHERE object_id=?;",
+    auto rows = db->query("SELECT * FROM akt_objekte WHERE object_id=?;",
                           {BindParam::text(objectId)});
     if (rows.empty()) return nullptr;
     auto obj = std::make_shared<DocumentObject>();

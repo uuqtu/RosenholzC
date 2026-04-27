@@ -127,12 +127,12 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
 //   rh -dok <project-id>             → open documentBrowserMenu
 //   rh -dok <project-id> (anything)  → create doc under project
 
-void cmdDok(const std::vector<std::string>& args) {
+void cmdAkt(const std::vector<std::string>& args) {
 
     // No arguments: list 20 most recent documents
     if (args.empty()) {
         auto all = Document::loadRecent(20);
-        if (all.empty()) { std::cout << "  (keine Dokumente)\n"; return; }
+        if (all.empty()) { std::cout << "  (keine Akten)\n"; return; }
         std::cout << "  " << std::left
                   << std::setw(26) << "ID (für rh -dok <id>)"
                   << std::setw(14) << "STATUS"
@@ -149,6 +149,26 @@ void cmdDok(const std::vector<std::string>& args) {
     }
 
     // -n  —  fully guided creation (pick entity type, then entity)
+    if (args[0] == "-s") {
+        std::string q;
+        for (size_t i=1; i<args.size(); ++i) { if(!q.empty()) q+=" "; q+=args[i]; }
+        if (q.empty()) { printErr("-s benoetigt einen Suchbegriff"); return; }
+        std::string lq=q; for(char& c:lq) c=(char)std::tolower((unsigned char)c);
+        auto all = Document::loadRecent(9999);
+        bool found=false;
+        for (auto& d : all) {
+            std::string chk = d->title + " " + d->documentId;
+            for(char& c:chk) c=(char)std::tolower((unsigned char)c);
+            if (chk.find(lq)!=std::string::npos) {
+                std::cout << "  AKT  " << std::left << std::setw(28) << d->documentId
+                          << " " << d->title << "  [" << d->docType << "]\n";
+                found=true;
+            }
+        }
+        if(!found) std::cout << "  (keine Akte gefunden fuer: " << q << ")\n";
+        return;
+    }
+
     if (args[0] == "-n" || args[0] == "--neu") {
         auto doc = createDocumentWizardGuided();
         if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
@@ -256,7 +276,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
 {
     using namespace Rosenholz;
 
-    hdr("DOKUMENT ANLEGEN / REGISTRIEREN");
+    hdr("AKTE ANLEGEN / REGISTRIEREN");
 
     // ── Titel + Typ ─────────────────────────────────────────────
     std::string title = readLine("Dokumententitel: ");
@@ -273,16 +293,10 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
         "evidence","plan","minutes","archive","other","analysis"};
     std::string docType = dtypes[dt-1];
 
-    // ── URL nur wenn Dokument einen Link-Ursprung hat ────────────────────
-    std::string url;
-    if (yesno("  Liegt ein Link/URL vor?")) {
-        url = readLine("URL: ");
-    }
-
     // ── Dokument-Datensatz speichern (keine Datei — Objekte später hinzufügen) ──
+    // URLs gehören zu Objekten, nicht zum Dokument-Container.
     auto doc = Document::create(title, docType, taskId, f18OpId);
     doc->format      = "pdf";  // default; overridden when a file is attached
-    doc->fileUrl     = url;
     doc->dateCreated = nowIso();
 
     if (!opOk(doc->save())) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
@@ -431,7 +445,7 @@ static bool dokHandleWorkflow(DocMenuCtx& ctx) {
     if (ctx.doc->releaseWorkflowId.empty()) {
         std::cout << "  Kein aktiver F77.\n";
         if (readInt("  1.F77 starten  0.Zurueck", 0, 1) == 1) {
-            std::string wid = startWfInstanceWizard("dok", ctx.doc->documentId);
+            std::string wid = startWfInstanceWizard("akt", ctx.doc->documentId);
             if (!wid.empty()) instanceMenu(wid);
         }
     } else {
@@ -444,7 +458,7 @@ static bool dokHandleWorkflow(DocMenuCtx& ctx) {
         } else {
             std::cout << "  (F77 abgeschlossen/abgebrochen)\n";
             if (readInt("  1.Neuen F77 starten  0.Zurueck", 0, 1) == 1) {
-                std::string wid = startWfInstanceWizard("dok", ctx.doc->documentId);
+                std::string wid = startWfInstanceWizard("akt", ctx.doc->documentId);
                 if (!wid.empty()) instanceMenu(wid);
             }
         }
@@ -507,11 +521,14 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
     if (choice == 1) {
         std::string srcPath = readLine("Lokaler Dateipfad: ");
         if (srcPath.empty() || cliIsInterrupted()) return true;
+        std::string label1 = readOpt("  Bezeichnung (sprechend, leer=Dateiname): ");
+        std::string desc1  = readOpt("  Beschreibung (optional): ");
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = DocumentObject::importFile(ctx.doc->documentId, ctx.curRevNum, srcPath, res);
+        auto obj = DocumentObject::importFile(
+            ctx.doc->documentId, ctx.curRevNum, srcPath, res, label1, desc1);
         if (opOk(res) && obj)
-            std::cout << "  >> Objekt importiert: " << obj->mfsPath << "\n"
-                      << "  >> Name in MFS: " << obj->displayName() << "\n";
+            std::cout << "  >> Importiert: " << obj->displayName() << "\n"
+                      << "  >> MFS-Datei:  " << obj->mfsFilename << "\n";
         else
             std::cout << "  >> " << opResultMessage(res) << "\n";
         return true;
@@ -558,13 +575,20 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
         }
 #endif
 
+        std::string label2 = readOpt("  Bezeichnung (sprechend, leer=Dateiname): ");
+        std::string desc2  = readOpt("  Beschreibung (optional): ");
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = DocumentObject::importFile(ctx.doc->documentId, ctx.curRevNum, toImport, res);
-        FileOps::deleteFile(toImport);
-        if (opOk(res) && obj)
-            std::cout << "  >> Heruntergeladen und importiert: " << obj->mfsPath << "\n";
-        else
+        auto obj = DocumentObject::importFile(
+            ctx.doc->documentId, ctx.curRevNum, toImport, res, label2, desc2);
+        if (opOk(res) && obj) {
+            obj->sourceUrl = url;
+            obj->update();
+            std::cout << "  >> Importiert: " << obj->displayName() << "\n"
+                      << "  >> MFS-Datei:  " << obj->mfsFilename << "\n";
+        } else {
             std::cout << "  >> " << opResultMessage(res) << "\n";
+        }
+        FileOps::deleteFile(toImport);
         return true;
     }
 
@@ -600,7 +624,7 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
         if (safeName.size() > 40) safeName = safeName.substr(0, 40);
         std::string parentSane = sanitiseRegNr(
             ctx.doc->taskId.empty() ? ctx.doc->f18OperationId : ctx.doc->taskId);
-        std::string dir = FileOps::joinPath(mfs, "DOK", parentSane);
+        std::string dir = FileOps::joinPath(mfs, "AKT", parentSane);
         FileOps::makeDirs(dir);
         std::string fname = sane + "_" + safeName + "_v"
                           + std::to_string(ctx.curRevNum) + "." + ext;
@@ -636,12 +660,16 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
             }
         }
 
+        // Name + Beschreibung
+        std::string label3 = readOpt("  Bezeichnung (sprechend, leer=Dateiname): ");
+        std::string desc3  = readOpt("  Beschreibung (optional): ");
         // Import into DocumentObject
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = DocumentObject::importFile(ctx.doc->documentId, ctx.curRevNum, fpath, res);
+        auto obj = DocumentObject::importFile(
+            ctx.doc->documentId, ctx.curRevNum, fpath, res, label3, desc3);
         if (opOk(res) && obj) {
-            std::cout << "  >> Datei angelegt: " << fpath << "\n";
-            // Open immediately with the system default application
+            std::cout << "  >> Angelegt: " << obj->displayName() << "\n"
+                      << "  >> MFS-Datei: " << obj->mfsFilename << "\n";
             ctx.doc->openFile("edit");
         } else {
             std::cout << "  >> " << opResultMessage(res) << "\n";
@@ -858,68 +886,6 @@ static bool dokHandleRevert(DocMenuCtx& ctx) {
     return true;
 }
 
-// ch==11: dokHandleUrlDownload
-// Zeigt aktuelle URL, erlaubt Änderung, lädt neuen Stand herunter
-// und legt ihn als neues Objekt in der aktuellen Revision ab.
-static bool dokHandleUrlDownload(DocMenuCtx& ctx) {
-    if (!ctx.inWork) {
-        std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
-        return true;
-    }
-
-    // Zeige und ggf. aktualisiere die URL
-    std::cout << "  Aktuelle URL: " << (ctx.doc->fileUrl.empty() ? "(keine)" : ctx.doc->fileUrl) << "\n";
-    std::string newUrl = readOpt("Neue URL (leer = behalten): ");
-    if (!newUrl.empty()) {
-        ctx.doc->fileUrl = newUrl;
-        { auto r = ctx.doc->update(); (void)r; }
-    }
-
-    if (ctx.doc->fileUrl.empty()) {
-        std::cout << "  >> Keine URL gesetzt — nichts heruntergeladen.\n";
-        return true;
-    }
-
-    // Download und als neues Objekt importieren
-    std::cout << "  Herunterladen von: " << ctx.doc->fileUrl << "\n";
-    const std::string& base = Config::instance().basePath();
-    std::string tmpDir = FileOps::joinPath(base, "documents", "tmp");
-    FileOps::makeDirs(tmpDir);
-    std::string downloaded = FileOps::downloadUrl(ctx.doc->fileUrl, tmpDir);
-    if (downloaded.empty()) {
-        std::cout << "  >> Download fehlgeschlagen.\n";
-        return true;
-    }
-
-    // Office → PDF conversion on Linux
-    std::string toImport = downloaded;
-    std::string ext = FileOps::extension(downloaded);
-    if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
-    static const std::vector<std::string> officeExts =
-        {"xls","xlsx","doc","docx","ppt","pptx","odt","ods","odp"};
-    bool isOffice = false;
-    for (auto& e : officeExts) if (ext == e) { isOffice = true; break; }
-#ifndef _WIN32
-    if (isOffice) {
-        std::string pdfPath = downloaded.substr(0, downloaded.rfind('.')) + ".pdf";
-        std::string cmd = "libreoffice --headless --convert-to pdf --outdir \""
-                        + tmpDir + "\" \"" + downloaded + "\" 2>/dev/null";
-        if (std::system(cmd.c_str()) == 0 && FileOps::fileExists(pdfPath)) {
-            FileOps::deleteFile(downloaded);
-            toImport = pdfPath;
-        }
-    }
-#endif
-
-    OperationResult res = OperationResult::OPERATION_ACK;
-    auto obj = DocumentObject::importFile(ctx.doc->documentId, ctx.curRevNum, toImport, res);
-    FileOps::deleteFile(toImport);
-    if (opOk(res) && obj)
-        std::cout << "  >> Aktualisiert: " << obj->displayName() << "\n";
-    else
-        std::cout << "  >> " << opResultMessage(res) << "\n";
-    return true;
-}
 
 // ch==12: dokHandleVersionHistory
 static bool dokHandleVersionHistory(DocMenuCtx& ctx) {
@@ -1058,7 +1024,7 @@ void documentMenu(std::shared_ptr<Document> doc) {
                       << "  |  " << curObjs.size() << " Objekt(e)\n";
 
         // ── Menü ────────────────────────────────────────────────────────────
-        std::cout << "  DOK: 1.Bearbeiten | 2.Revision | 15.Verlauf | 16.MFS | 18.Drucken | 19.RevWechsel\n"
+        std::cout << "  AKT: 1.Bearbeiten | 2.Revisionieren | 15.Verlauf | 16.MFS | 18.Drucken | 19.RevWechsel\n"
                   << "  F77: 3.F77\n"
                   << "  OBJ: 4.listen(" << curObjs.size() << ") | 5.<#>→Untermenü (öffnen/checkout/URL)\n";
         if (inWork) {

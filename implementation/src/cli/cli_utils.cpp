@@ -207,7 +207,7 @@ void printDocument(const Document& d) {
 void listDocuments(const std::vector<std::shared_ptr<Document>>& docs,
                    const std::string& title) {
     hdr(title.empty() ? "DOKUMENTE" : title);
-    if (docs.empty()) { std::cout << "  (keine Dokumente)\n"; return; }
+    if (docs.empty()) { std::cout << "  (keine Akten)\n"; return; }
     int n=1;
     for (auto& d : docs) {
         auto cur = DocumentRevision::currentRevision(d->documentId);

@@ -36,7 +36,6 @@ public:
     std::string language        { "EN" };
     std::string format;         // pdf|docx|xlsx|html|txt|image|archive
     std::string filePath;       // local path on disk
-    std::string fileUrl;        // original source URL
     std::string externalRef;
     std::string storageSystem;
     std::string tags;           // JSON array

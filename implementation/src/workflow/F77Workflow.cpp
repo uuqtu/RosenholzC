@@ -190,13 +190,13 @@ std::vector<std::shared_ptr<F77_WorkflowTemplate>> F77_WorkflowTemplate::loadFor
 }
 
 // ─────────────────────────────────────────────────────────────
-// F77_WorkflowStep
+// F77_WorkflowOperation
 // ─────────────────────────────────────────────────────────────
-Database* F77_WorkflowStep::db() { return wfDB(); }
+Database* F77_WorkflowOperation::db() { return wfDB(); }
 
 
 // ── predecessors CSV helpers ──────────────────────────────────
-std::string F77_WorkflowStep::predecessorsToString() const {
+std::string F77_WorkflowOperation::predecessorsToString() const {
     std::string out;
     for (size_t i = 0; i < predecessors.size(); ++i) {
         if (i) out += ',';
@@ -205,7 +205,7 @@ std::string F77_WorkflowStep::predecessorsToString() const {
     return out;
 }
 
-std::vector<std::string> F77_WorkflowStep::predecessorsFromString(const std::string& csv) {
+std::vector<std::string> F77_WorkflowOperation::predecessorsFromString(const std::string& csv) {
     std::vector<std::string> result;
     std::istringstream ss(csv);
     std::string id;
@@ -217,7 +217,7 @@ std::vector<std::string> F77_WorkflowStep::predecessorsFromString(const std::str
     return result;
 }
 
-void F77_WorkflowStep::fromRow(const Row& r) {
+void F77_WorkflowOperation::fromRow(const Row& r) {
     auto g=[&](const std::string& k){auto it=r.find(k);return it!=r.end()?it->second:"";};
     auto gb=[&](const std::string& k){return g(k)=="1";};
     auto gi=[&](const std::string& k){auto v=g(k);return v.empty()?0:std::stoi(v);};
@@ -242,7 +242,7 @@ void F77_WorkflowStep::fromRow(const Row& r) {
     updatedAt           = g("updated_at");
 }
 
-OperationResult F77_WorkflowStep::save() const {
+OperationResult F77_WorkflowOperation::save() const {
     auto* d=wfDB(); if(!d) return OperationResult::DB_ERROR;
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f77_workflow_steps
@@ -260,13 +260,13 @@ OperationResult F77_WorkflowStep::save() const {
     }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-OperationResult F77_WorkflowStep::remove() const {
+OperationResult F77_WorkflowOperation::remove() const {
     auto* d=wfDB(); if(!d) return OperationResult::DB_ERROR;
     return d->exec("DELETE FROM f77_workflow_steps WHERE step_id=?;",{BindParam::text(stepId)})
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-void F77_WorkflowStep::syncFromF18() {
+void F77_WorkflowOperation::syncFromF18() {
     if(f18OperationId.empty()) return;
     auto op = F18Operation::loadById(f18OperationId);
     if(!op) return;
@@ -277,7 +277,7 @@ void F77_WorkflowStep::syncFromF18() {
     save();
 }
 
-bool F77_WorkflowStep::canStart(const std::vector<F77_WorkflowStep>& all) const {
+bool F77_WorkflowOperation::canStart(const std::vector<F77_WorkflowOperation>& all) const {
     if (status != "pending" && status != "in_progress") return false;
     for (const auto& predId : predecessors) {
         bool done = false;
@@ -289,20 +289,20 @@ bool F77_WorkflowStep::canStart(const std::vector<F77_WorkflowStep>& all) const 
     return true;
 }
 
-std::shared_ptr<F77_WorkflowStep> F77_WorkflowStep::loadById(const std::string& id) {
+std::shared_ptr<F77_WorkflowOperation> F77_WorkflowOperation::loadById(const std::string& id) {
     auto* d=wfDB(); if(!d) return nullptr;
     auto rows=d->query("SELECT * FROM f77_workflow_steps WHERE step_id=?;",{BindParam::text(id)});
     if(rows.empty()) return nullptr;
-    auto s=std::make_shared<F77_WorkflowStep>(); s->fromRow(rows[0]); return s;
+    auto s=std::make_shared<F77_WorkflowOperation>(); s->fromRow(rows[0]); return s;
 }
 
-std::vector<F77_WorkflowStep> F77_WorkflowStep::loadForWorkflow(const std::string& wfId) {
-    auto* d=wfDB(); std::vector<F77_WorkflowStep> res;
+std::vector<F77_WorkflowOperation> F77_WorkflowOperation::loadForWorkflow(const std::string& wfId) {
+    auto* d=wfDB(); std::vector<F77_WorkflowOperation> res;
     if(!d) return res;
     for(auto& r:d->query(
         "SELECT * FROM f77_workflow_steps WHERE workflow_id=? ORDER BY sequence_order;",
         {BindParam::text(wfId)}))
-    { F77_WorkflowStep s; s.fromRow(r); res.push_back(s); }
+    { F77_WorkflowOperation s; s.fromRow(r); res.push_back(s); }
     return res;
 }
 
@@ -350,7 +350,7 @@ OperationResult F77_Workflow::remove() const {
 }
 
 bool F77_Workflow::loadSteps() {
-    steps = F77_WorkflowStep::loadForWorkflow(workflowId);
+    steps = F77_WorkflowOperation::loadForWorkflow(workflowId);
     return true;
 }
 
@@ -361,8 +361,8 @@ bool F77_Workflow::isComplete() const {
     return mid>0;
 }
 
-std::vector<F77_WorkflowStep*> F77_Workflow::readySteps() {
-    std::vector<F77_WorkflowStep*> res;
+std::vector<F77_WorkflowOperation*> F77_Workflow::readySteps() {
+    std::vector<F77_WorkflowOperation*> res;
     for(auto& s:steps)
         if(!s.isComplete() && s.canStart(steps)) res.push_back(&s);
     return res;
@@ -449,8 +449,8 @@ static EntityCtx entityContext(const std::string& entityType) {
         return { pool.get("f22"), "tasks",          "task_id" };
     if (entityType == "f18")
         return { pool.get("f18"), "f18_operations", "vorgang_id" };
-    if (entityType == "dok")
-        return { pool.get("dok"), "documents",      "document_id" };
+    if (entityType == "akt")
+        return { pool.get("akt"), "akten",          "document_id" };
     return { nullptr, nullptr, nullptr };
 }
 
@@ -537,7 +537,7 @@ static void propagateDokWorkflowToParent(const std::string& docId,
     }
 
     // Add a step describing the DOK workflow:
-    std::string stepTitle = "DOK Freigabe [" + workflowId + "] → " + targetState;
+    std::string stepTitle = "AKT Freigabe [" + workflowId + "] → " + targetState;
     trackingF18->addStep(stepTitle, "review", "", false);
     LOG_INFO("[F77] propagateDok: added step '" + stepTitle + "' to F18 " + trackingF18->vorgangId);
 }
@@ -570,7 +570,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
     wf->templateId = templateId;
     if (!opOk(wf->save())) return nullptr;
 
-    // Snapshot template steps → F77_WorkflowStep (+ F18_Operation per mid-step)
+    // Snapshot template steps → F77_WorkflowOperation (+ F18_Operation per mid-step)
     // Build map: tpl_step_id → runtime step_id for predecessor resolution
     std::map<std::string,std::string> tplToRuntime;
     tpl->loadSteps();
@@ -590,7 +590,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
     }
 
     for(auto& ts : tpl->steps) {
-        F77_WorkflowStep rs;
+        F77_WorkflowOperation rs;
         rs.stepId        = genId("F77S");
         rs.workflowId    = wf->workflowId;
         rs.tplStepId     = ts.tplStepId;
@@ -621,7 +621,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
                     resolved+=it->second;
                 }
             }
-            rs.predecessors = F77_WorkflowStep::predecessorsFromString(resolved);
+            rs.predecessors = F77_WorkflowOperation::predecessorsFromString(resolved);
         }
 
         // Link mid-steps to the single workflow F18 (F22 only).
@@ -646,7 +646,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
             if (s.sequenceOrder > maxNonEndSeq) { maxNonEndSeq = s.sequenceOrder; lastManualId = s.stepId; }
         }
         if (!endStepId.empty() && !lastManualId.empty()) {
-            F77_WorkflowStep dbStep;
+            F77_WorkflowOperation dbStep;
             dbStep.stepId        = genId("F77S"); dbStep.workflowId = wf->workflowId;
             dbStep.title         = "DB schreiben";
             dbStep.sequenceOrder = maxNonEndSeq + 1;
@@ -674,7 +674,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
 
     // Store the workflow ID back into the entity's releaseWorkflowId field
     storeWorkflowId(entityType, entityId, wf->workflowId);
-    if (entityType == "dok")
+    if (entityType == "akt")
         propagateDokWorkflowToParent(entityId, wf->workflowId, wf->targetState);
 
     return wf;
@@ -723,7 +723,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     else if(entityType=="f18"){ auto op=F18Operation::loadById(entityId); if(op) projId=op->taskId; }
 
     // Init step (auto-approved)
-    F77_WorkflowStep init;
+    F77_WorkflowOperation init;
     init.stepId=genId("F77S"); init.workflowId=wf->workflowId;
     init.title="Init"; init.sequenceOrder=0; init.isInitialize=true;
     init.autoApprove=true; init.status="approved"; init.executionMode="sequential";
@@ -746,7 +746,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
 
     // DB schreiben step — visible, auto-approved system step.
     // Shows in the F77 chain so the user can see the commit happening.
-    F77_WorkflowStep dbStep;
+    F77_WorkflowOperation dbStep;
     dbStep.stepId        = genId("F77S"); dbStep.workflowId = wf->workflowId;
     dbStep.title         = "DB schreiben";
     dbStep.sequenceOrder = 1;
@@ -758,7 +758,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     dbStep.save(); wf->steps.push_back(dbStep);
 
     // End step — auto-approved once DB schreiben completes.
-    F77_WorkflowStep end;
+    F77_WorkflowOperation end;
     end.stepId=genId("F77S"); end.workflowId=wf->workflowId;
     end.title="End"; end.sequenceOrder=9999; end.isFinal=true;
     end.autoApprove=true; end.predecessors={dbStep.stepId};
@@ -770,7 +770,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
 
     // Store the workflow ID back into the entity's releaseWorkflowId field
     storeWorkflowId(entityType, entityId, wf->workflowId);
-    if (entityType == "dok")
+    if (entityType == "akt")
         propagateDokWorkflowToParent(entityId, wf->workflowId, targetState);
 
     return wf;
@@ -780,12 +780,12 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
 // When saveSpace=true: removes MFS copies of revisions that are neither
 // in_work nor the superseded=false (active) revision.
 static void pruneMFSRevisions(const std::string& docId) {
-    auto* db = DatabasePool::instance().get("dok");
+    auto* db = DatabasePool::instance().get("akt");
     if (!db) return;
 
     // Find revisions to keep: in_work OR superseded=0
     auto keepRows = db->query(
-        "SELECT rev FROM document_revisions WHERE document_id=? "
+        "SELECT rev FROM akt_revisionen WHERE document_id=? "
         "AND (rev_state='in_work' OR superseded=0);",
         {BindParam::text(docId)});
 
@@ -798,7 +798,7 @@ static void pruneMFSRevisions(const std::string& docId) {
 
     // Find all revisions
     auto allRows = db->query(
-        "SELECT rev FROM document_revisions WHERE document_id=?;",
+        "SELECT rev FROM akt_revisionen WHERE document_id=?;",
         {BindParam::text(docId)});
 
     for (auto& r : allRows) {
@@ -822,7 +822,7 @@ static void pruneMFSRevisions(const std::string& docId) {
 // Execute a system step (isSystem=true). Currently only one action exists:
 // SystemAction::COMMIT_DB_OBJECTS — commits all uncommitted DocumentObjects to LMDB.
 // Adding a new system action = adding a case to the switch below.
-static void executeSystemStep(F77_WorkflowStep& step,
+static void executeSystemStep(F77_WorkflowOperation& step,
                                F77_Workflow& wf, bool& changed) {
     // ── 3b: SystemAction enum replaces magic string comparison ──────────────
     // step.systemAction determines what this step does.
@@ -831,7 +831,7 @@ static void executeSystemStep(F77_WorkflowStep& step,
     if (step.systemAction != SystemAction::COMMIT_DB_OBJECTS) return;
 
     // For non-DOK entities: write MFS index files (tracking data).
-    if (wf.entityType != "dok") {
+    if (wf.entityType != "akt") {
         const std::string& mfsRoot = Rosenholz::Config::instance().mfsPath();
         if (wf.entityType == "f16") {
             auto p = Rosenholz::ProjectF16::loadById(wf.entityId);
@@ -960,7 +960,7 @@ bool F77_Engine::fireStep(F77_Workflow& wf, const std::string& stepId,
                            const std::string& comment)
 {
     wf.loadSteps();
-    F77_WorkflowStep* step=nullptr;
+    F77_WorkflowOperation* step=nullptr;
     for(auto& s:wf.steps) if(s.stepId==stepId){step=&s;break;}
     if(!step) { LOG_WARN("[F77] Step not found: "+stepId); return false; }
     if(step->isComplete()) { LOG_WARN("[F77] Step already complete: "+stepId); return false; }
@@ -998,7 +998,7 @@ bool F77_Engine::fireStep(F77_Workflow& wf, const std::string& stepId,
     return true;
 }
 
-void F77_Engine::spawnWaitConditionF18(F77_WorkflowStep& step, const std::string& entityId) {
+void F77_Engine::spawnWaitConditionF18(F77_WorkflowOperation& step, const std::string& entityId) {
     std::string projId;
     // F18 resolves to its owning task (taskId)
     auto op = F18Operation::loadById(entityId);
@@ -1028,11 +1028,11 @@ bool F77_Engine::checkAndComplete(F77_Workflow& wf) {
 }
 
 bool F77_Engine::applyTargetState(const F77_Workflow& wf) {
-    if(wf.entityType == "dok") {
+    if(wf.entityType == "akt") {
         auto rev = DocumentRevision::currentRevision(wf.entityId);
         if(rev && DocumentRevision::isTransitionAllowed(rev->revState,
              revStateFromString(wf.targetState))) {
-            rev->transitionState(wf.targetState);
+            rev->transitionState(revStateFromString(wf.targetState), true); // F77-gated
             LOG_INFO("[F77] DOK revision transitioned: "+wf.entityId+" → "+wf.targetState);
         }
     } else {
@@ -1144,7 +1144,7 @@ void F77_Engine::seedDefaultTemplates() {
 
     // ── Standard templates (all entity types) ──────────────────
     // Dok gets all 5-state transitions; F16/F22/F18 only get released/closed
-    const std::string dokTypes  = "dok";
+    const std::string dokTypes  = "akt";
     const std::string objTypes  = "f16,f22,f18,dok";
 
     // 1. Lock Workflow: → locked  (available from in_work and pre_released)

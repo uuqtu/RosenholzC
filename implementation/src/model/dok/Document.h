@@ -52,7 +52,6 @@ public:
     std::string filePath;       // local path on disk (in MFS)
     int64_t     fileSize    { 0 };  // bytes
     std::string fileHash;       // SHA-256
-    std::string fileUrl;        // original source URL
     std::string externalRef;
     std::string tags;           // JSON array
     std::string summary;
@@ -266,22 +265,6 @@ public:
     OperationResult revertChanges();
 
     OperationResult importLocalFile(const std::string& srcPath);
-    /// Re-download fileUrl, snapshot current, update filePath.
-    // ------------------------------
-    // Re-download the document from fileUrl, replacing the current file.
-    //
-    // Behavior:
-    //   - Calls snapshotVersion() first to preserve the current file
-    //   - Downloads to a temporary directory
-    //   - Imports via importLocalFile() which updates MFS path + hash
-    //   - Bumps the minor version number (e.g. "1.0" → "1.1")
-    //   - Deletes the temp download after import
-    //   - No-op (returns false) if fileUrl is empty
-    //
-    // Returns:
-    //   true on successful download + import; false on any failure
-    // ------------------------------
-    OperationResult refreshFromUrl();
     /// Open file. mode="read" → temp copy; mode="edit" → original in place.
     // ------------------------------
     // Open the document's physical file using the system viewer.
