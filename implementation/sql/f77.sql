@@ -112,6 +112,8 @@ CREATE TABLE IF NOT EXISTS f77_workflow_steps (
     status              TEXT NOT NULL DEFAULT 'pending'
                              CHECK(status IN ('pending','in_progress','approved','rejected','skipped','cancelled')),
     auto_approve        INTEGER NOT NULL DEFAULT 0,
+    is_system           INTEGER NOT NULL DEFAULT 0,
+    system_action       INTEGER NOT NULL DEFAULT 0, -- SystemAction enum value
     requires_comment    INTEGER NOT NULL DEFAULT 0,
     requires_document   INTEGER NOT NULL DEFAULT 0,
     completed_date      TEXT,

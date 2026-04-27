@@ -30,7 +30,7 @@ struct SchemaVersions {
     static constexpr int core      = 4;  // v4 baseline
     static constexpr int f16       = 4;  // v4 baseline
     static constexpr int f22       = 4;  // v4 baseline
-    static constexpr int f77       = 4;  // v4 baseline
+    static constexpr int f77       = 5;  // v5: is_system + system_action added;  // v4 baseline
     static constexpr int akt       = 7;
     static constexpr int f77task   = 1;  // v1: initial schema  // v7: file_url removed from Akte (URL belongs to objects)
     static constexpr int f18       = 4;  // v4: no project_id, task_id required

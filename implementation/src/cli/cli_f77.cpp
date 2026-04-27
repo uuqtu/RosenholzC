@@ -251,39 +251,14 @@ void instanceMenu(const std::string& workflowId) {
             if (title.empty()) continue;
             std::string desc  = readOpt("Beschreibung (optional): ");
 
-            // Spawn F18 Operation of type "measure" linked to this workflow step
-            auto f18 = F18Operation::create(title, "measure", wf->entityId.empty()
-                                             ? wf->workflowId : wf->entityId);
-            if (f18) {
-                if (!desc.empty()) f18->description = desc;
-                f18->notes = "Automatisch aus F77: " + wf->workflowId;
-                f18->save();
-
-                // Add the step to the running workflow instance (before End step)
-                F77_WorkflowStep step;
-                step.stepId      = genId("F77S");
-                step.workflowId  = wf->workflowId;
-                step.title       = title;
-                step.autoApprove = false;
-                step.isInitialize= false;
-                step.isFinal     = false;
-                step.f18OperationId = f18->vorgangId;
-                // Insert before End step: give it sequenceOrder = end-1
-                int endOrder = 999;
-                for (auto& s : wf->steps)
-                    if (s.isFinal) { endOrder = s.sequenceOrder - 1; break; }
-                step.sequenceOrder = endOrder;
-                // Predecessor: last non-final step
-                for (auto& s : wf->steps)
-                    if (!s.isFinal && !s.predecessors.empty())
-                        step.predecessors = {s.stepId};
-                step.save();
+            std::string ass = readOpt("Zugewiesen an Person-ID (leer=offen): ");
+            std::string opId = F77_Engine::addManualOperation(*wf, title, desc, ass);
+            if (!opId.empty()) {
                 wf->loadSteps();
-                std::cout << "  >> Schritt '" << title << "' angelegt.\n"
-                          << "  >> F18-Operation: " << f18->vorgangId << "\n"
-                          << "  >> Schritt wird automatisch abgehakt, sobald F18 abgeschlossen.\n";
+                std::cout << "  >> Operation '" << title << "' angelegt.\n"
+                          << "  >> F77-Task erstellt — erreichbar unter: rh -tasks\n";
             } else {
-                std::cout << "  >> Fehler beim Anlegen der F18.\n";
+                std::cout << "  >> Fehler beim Anlegen.\n";
             }
         }
 
@@ -353,51 +328,27 @@ std::string startWfInstanceWizard(const std::string& entityType,
     F77_Engine::attachWorkflow(effType, effId, wf->workflowId);
     std::cout << "  >> F77 gestartet: " << wf->workflowId << "\n";
 
-    // ── Optional: zusätzliche Schritte hinzufügen ─────────────────────────────
-    // Ask if the user wants to insert manual steps (spawning F18 operations)
-    // BEFORE the automatic DB-write and End steps run.
-    std::cout << "\n  Optional: Weitere Schritte hinzufuegen?\n"
-              << "  (Jeder Schritt erzeugt eine F18, die manuell\n"
-              << "   abgeschlossen werden muss. F77 wartet auf jeden Schritt.)\n";
-    while (yesno("  Weiteren Schritt hinzufuegen?")) {
-        std::string title = readLine("  Schritt-Titel: ");
+    // ── Optional: manuelle Schritte vor dem ersten Tick hinzufügen ────────────
+    // IMPORTANT: steps must be added BEFORE tick() so End is not yet auto-approved.
+    std::cout << "\n  Optional: Manuelle Operationen hinzufuegen?\n"
+              << "  (Jede Operation erzeugt einen F77-Task in \'Meine Aufgaben\'.\n"
+              << "   Die F77-Engine wartet, bis alle Tasks abgeschlossen sind.)\n";
+    while (yesno("  Operation hinzufuegen?")) {
+        std::string title = readLine("  Titel: ");
         if (title.empty()) break;
-        std::string desc = readOpt("  Beschreibung (optional): ");
+        std::string desc  = readOpt("  Beschreibung (optional): ");
+        std::string ass   = readOpt("  Zugewiesen an Person-ID (leer=offen): ");
 
-        auto f18 = F18Operation::create(title, "measure", effId);
-        if (f18) {
-            if (!desc.empty()) f18->description = desc;
-            f18->notes = "F77 Pflichtschritt: " + wf->workflowId;
-            f18->save();
-
-            F77_WorkflowStep step;
-            step.stepId         = genId("F77S");
-            step.workflowId     = wf->workflowId;
-            step.title          = title;
-            step.autoApprove    = false;
-            step.isInitialize   = false;
-            step.isFinal        = false;
-            step.f18OperationId = f18->vorgangId;
-            // Place before the DB-write/End steps
-            wf->loadSteps();
-            int endOrder = 999;
-            for (auto& s : wf->steps)
-                if (s.isFinal) { endOrder = s.sequenceOrder - 1; break; }
-            step.sequenceOrder = endOrder;
-            // Chain after last non-final step
-            for (auto& s : wf->steps)
-                if (!s.isFinal && s.isInitialize == false && !s.predecessors.empty())
-                    step.predecessors = {s.stepId};
-            step.save();
-            wf->loadSteps();
-            std::cout << "  >> Schritt '" << title << "' + F18 '" << f18->vorgangId
-                      << "' angelegt.\n";
-        } else {
-            std::cout << "  >> Fehler beim Anlegen.\n"; break;
-        }
+        std::string opId = F77_Engine::addManualOperation(*wf, title, desc, ass);
+        if (!opId.empty())
+            std::cout << "  >> Operation '" << title << "' angelegt — F77-Task erstellt.\n"
+                      << "  >> Erreichbar unter: rh -tasks\n";
+        else
+            std::cout << "  >> Fehler beim Anlegen.\n";
+        wf->loadSteps();
     }
 
-    // Run initial tick to start the engine
+    // Run initial tick — End will be blocked until all F77_Tasks are closed
     F77_Engine::tick(*wf);
     return wf->workflowId;
 }

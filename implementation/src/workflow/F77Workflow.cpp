@@ -2,6 +2,7 @@
 // F77Workflow.cpp — F77 Freigabe-Workflow Engine implementation
 // ============================================================
 #include "F77Workflow.h"
+#include "F77Task.h"
 #include "../core/FileOps.h"
 #include "../model/dok/DocumentObject.h"
 #include "../repository/DocumentRevision.h"
@@ -235,6 +236,8 @@ void F77_WorkflowOperation::fromRow(const Row& r) {
     waitConditionF18Type= g("wait_condition_f18_type");
     status              = g("status");
     autoApprove         = gb("auto_approve");
+    isSystem            = gb("is_system");
+    systemAction        = static_cast<SystemAction>(gi("system_action"));
     requiresComment     = gb("requires_comment");
     requiresDocument    = gb("requires_document");
     completedDate       = g("completed_date");
@@ -249,13 +252,15 @@ OperationResult F77_WorkflowOperation::save() const {
         (step_id,workflow_id,tpl_step_id,title,sequence_order,is_initialize,is_final,
          execution_mode,predecessor_step_ids,f18_operation_id,wait_f18_operation_id,
          wait_condition_f18_type,status,auto_approve,requires_comment,requires_document,
-         completed_date,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         is_system,system_action,completed_date,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )SQL", {
         BindParam::text(stepId),BindParam::text(workflowId),BindParam::nullOrText(tplStepId),BindParam::text(title),BindParam::int64(sequenceOrder),
         BindParam::int64(isInitialize?1:0),BindParam::int64(isFinal?1:0),BindParam::text(executionMode),BindParam::nullOrText(predecessorsToString()),
         BindParam::nullOrText(f18OperationId),BindParam::nullOrText(waitF18OperationId),BindParam::nullOrText(waitConditionF18Type),
-        BindParam::text(status),BindParam::int64(autoApprove?1:0),BindParam::int64(requiresComment?1:0),BindParam::int64(requiresDocument?1:0),
+        BindParam::text(status),BindParam::int64(autoApprove?1:0),
+        BindParam::int64(requiresComment?1:0),BindParam::int64(requiresDocument?1:0),
+        BindParam::int64(isSystem?1:0),BindParam::int64(static_cast<int>(systemAction)),
         BindParam::nullOrText(completedDate),BindParam::text(createdAt),BindParam::text(nowIso())
     }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
@@ -635,10 +640,8 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
         wf->steps.push_back(rs);
     }
 
-    // Inject "DB schreiben" step: auto-approved system step before the End step.
-    // Ensures MFS/LMDB commit is visible in the chain, after all manual steps.
+    // Inject Objektverwaltung + DB schreiben before End (template workflows).
     {
-        // Find End step and last non-End step:
         std::string endStepId, lastManualId;
         int maxNonEndSeq = -1;
         for (auto& s : wf->steps) {
@@ -646,26 +649,40 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
             if (s.sequenceOrder > maxNonEndSeq) { maxNonEndSeq = s.sequenceOrder; lastManualId = s.stepId; }
         }
         if (!endStepId.empty() && !lastManualId.empty()) {
+            // Objektverwaltung: auto if no loose files, else spawns F77_Tasks
+            F77_WorkflowOperation objStep;
+            objStep.stepId        = genId("F77S"); objStep.workflowId = wf->workflowId;
+            objStep.title         = "Objektverwaltung";
+            objStep.sequenceOrder = maxNonEndSeq + 1;
+            objStep.executionMode = "sequential";
+            objStep.predecessors  = { lastManualId };
+            objStep.autoApprove   = true; objStep.isSystem = true;
+            objStep.systemAction  = SystemAction::SCAN_UNREGISTERED_FILES;
+            objStep.status        = "pending";
+            objStep.createdAt     = nowIso(); objStep.updatedAt = nowIso();
+            objStep.save(); wf->steps.push_back(objStep);
+
+            // DB schreiben: runs after Objektverwaltung
             F77_WorkflowOperation dbStep;
             dbStep.stepId        = genId("F77S"); dbStep.workflowId = wf->workflowId;
             dbStep.title         = "DB schreiben";
-            dbStep.sequenceOrder = maxNonEndSeq + 1;
+            dbStep.sequenceOrder = maxNonEndSeq + 2;
             dbStep.executionMode = "sequential";
-            dbStep.predecessors  = { lastManualId };
+            dbStep.predecessors  = { objStep.stepId };
             dbStep.autoApprove   = true; dbStep.isSystem = true;
             dbStep.systemAction  = SystemAction::COMMIT_DB_OBJECTS;
             dbStep.status        = "pending";
             dbStep.createdAt     = nowIso(); dbStep.updatedAt = nowIso();
             dbStep.save(); wf->steps.push_back(dbStep);
-            // Rewire End step to wait for DB schreiben:
+
+            // Rewire End step:
             for (auto& s : wf->steps) {
                 if (s.stepId == endStepId) {
                     s.predecessors = { dbStep.stepId };
-                    s.save();
-                    break;
+                    s.save(); break;
                 }
             }
-            LOG_INFO("[F77] Injected DB schreiben step before End");
+            LOG_INFO("[F77] Injected Objektverwaltung + DB schreiben before End");
         }
     }
 
@@ -744,13 +761,25 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
         }
     }
 
-    // DB schreiben step — visible, auto-approved system step.
-    // Shows in the F77 chain so the user can see the commit happening.
+    // Objektverwaltung step — auto-approved if no loose files exist,
+    // otherwise spawns one F77_Task per unregistered file and waits.
+    F77_WorkflowOperation objStep;
+    objStep.stepId        = genId("F77S"); objStep.workflowId = wf->workflowId;
+    objStep.title         = "Objektverwaltung";
+    objStep.sequenceOrder = 1;
+    objStep.executionMode = "sequential"; objStep.predecessors = {init.stepId};
+    objStep.autoApprove   = true; objStep.isSystem = true;
+    objStep.systemAction  = SystemAction::SCAN_UNREGISTERED_FILES;
+    objStep.status        = "pending";
+    objStep.createdAt     = nowIso(); objStep.updatedAt = nowIso();
+    objStep.save(); wf->steps.push_back(objStep);
+
+    // DB schreiben step — runs after Objektverwaltung.
     F77_WorkflowOperation dbStep;
     dbStep.stepId        = genId("F77S"); dbStep.workflowId = wf->workflowId;
     dbStep.title         = "DB schreiben";
-    dbStep.sequenceOrder = 1;
-    dbStep.executionMode = "sequential"; dbStep.predecessors = {init.stepId};
+    dbStep.sequenceOrder = 2;
+    dbStep.executionMode = "sequential"; dbStep.predecessors = {objStep.stepId};
     dbStep.autoApprove   = true; dbStep.isSystem = true;
     dbStep.systemAction  = SystemAction::COMMIT_DB_OBJECTS;
     dbStep.status        = "pending";
@@ -828,6 +857,79 @@ static void executeSystemStep(F77_WorkflowOperation& step,
     // step.systemAction determines what this step does.
     // COMMIT_DB_OBJECTS is the only action currently; the enum makes it
     // extensible without touching tick().
+    // ── SCAN_UNREGISTERED_FILES ─────────────────────────────────────────────
+    if (step.systemAction == SystemAction::SCAN_UNREGISTERED_FILES) {
+        // Scan the entity's MFS folder for files not registered as AKT objects.
+        // If none: auto-approve immediately (step was already approved by tick).
+        // If some: revoke the auto-approval, spawn one F77_Task per file,
+        //          and block until all tasks are closed.
+        std::vector<std::pair<std::string,std::string>> loose;
+
+        if (wf.entityType == "f22") {
+            auto t = Rosenholz::TaskF22::loadById(wf.entityId);
+            if (t) loose = t->scanMfsForUnregistered();
+        } else if (wf.entityType == "akt") {
+            auto curRev = Rosenholz::DocumentRevision::currentRevision(wf.entityId);
+            if (curRev) {
+                auto files = Rosenholz::DocumentObject::scanForUnregisteredFiles(
+                    wf.entityId, curRev->rev);
+                for (auto& f : files)
+                    loose.emplace_back(f, Rosenholz::FileOps::baseName(f));
+            }
+        }
+        // F16/F18: scan their MFS sub-folder
+        else if (wf.entityType == "f16") {
+            auto p = Rosenholz::ProjectF16::loadById(wf.entityId);
+            if (p) {
+                const std::string& mfsRoot = Rosenholz::Config::instance().mfsPath();
+                std::string dir = Rosenholz::FileOps::joinPath(
+                    Rosenholz::FileOps::joinPath(mfsRoot, "F16"),
+                    sanitiseRegNr(p->regNumber.toString()));
+                auto files = Rosenholz::FileOps::listFiles(dir, true);
+                for (auto& f : files) {
+                    auto b = Rosenholz::FileOps::baseName(f);
+                    if (b == "_SCHLUESSEL.txt" || b == "00_DECKBLATT.txt"
+                        || b == "owner_key.txt" || b.empty()) continue;
+                    loose.emplace_back(f, b);
+                }
+            }
+        }
+
+        if (loose.empty()) {
+            LOG_INFO("[F77] Objektverwaltung: no loose files — auto-approved for "
+                     + wf.entityId);
+            return; // step stays approved
+        }
+
+        // Files found: revoke auto-approval, spawn F77_Tasks
+        step.status = "in_progress"; step.completedDate = ""; step.save();
+        changed = false; // don't let tick advance further
+
+        // Check if tasks already spawned for this operation:
+        auto existing = F77_Task::loadForOperation(step.stepId);
+        if (!existing.empty()) {
+            LOG_INFO("[F77] Objektverwaltung: tasks already spawned, waiting ("
+                     + std::to_string(existing.size()) + " tasks)");
+            return;
+        }
+
+        for (auto& [fpath, fname] : loose) {
+            std::string taskTitle = "Nicht abgelegte Datei verwalten: " + fname;
+            F77_Task::create(
+                wf.workflowId,
+                step.stepId,       // operationId
+                taskTitle,
+                wf.entityType,
+                wf.entityId,
+                "nacherfassen",    // targetAction
+                fpath,             // filePath
+                fname);            // fileName
+        }
+        LOG_INFO("[F77] Objektverwaltung: spawned " + std::to_string(loose.size())
+                 + " F77_Tasks for " + wf.entityId);
+        return;
+    }
+
     if (step.systemAction != SystemAction::COMMIT_DB_OBJECTS) return;
 
     // For non-DOK entities: write MFS index files (tracking data).
@@ -890,9 +992,19 @@ bool F77_Engine::tick(F77_Workflow& wf) {
         if(s.status=="pending" && s.autoApprove && s.canStart(wf.steps)) {
             s.status="approved"; s.completedDate=nowIso(); s.save(); changed=true;
             LOG_INFO("[F77] Auto-approved step '"+s.title+"'");
-
-            // Delegate system step execution — each action is self-contained.
             if(s.isSystem) executeSystemStep(s, wf, changed);
+        }
+
+        // Re-check in_progress SCAN steps: if all F77_Tasks closed, approve
+        if(s.status=="in_progress" && s.isSystem
+           && s.systemAction == SystemAction::SCAN_UNREGISTERED_FILES) {
+            auto tasks = F77_Task::loadForOperation(s.stepId);
+            bool allClosed = true;
+            for (auto& t : tasks) if (t->isOpen()) { allClosed = false; break; }
+            if (allClosed && !tasks.empty()) {
+                s.status="approved"; s.completedDate=nowIso(); s.save(); changed=true;
+                LOG_INFO("[F77] Objektverwaltung approved — all tasks closed: " + s.stepId);
+            }
         }
 
         // Spawn wait-condition F18_Operation if needed
@@ -910,15 +1022,132 @@ bool F77_Engine::tick(F77_Workflow& wf) {
             s.status="in_progress"; s.save(); changed=true;
         }
 
-        // End step: auto-approve when all mid-steps done
+        // End step: auto-approve when all mid-steps done AND no open F77_Tasks remain
         if(s.isFinal && s.status=="pending" && wf.isComplete()) {
-            s.status="approved"; s.completedDate=nowIso(); s.save(); changed=true;
-            LOG_INFO("[F77] End step auto-approved — workflow closing");
+            // Guard: check all F77_Tasks spawned by this workflow are closed
+            auto pendingTasks = F77_Task::loadForWorkflow(wf.workflowId);
+            bool hasOpenTasks = false;
+            for (auto& t : pendingTasks) if (t->isOpen()) { hasOpenTasks = true; break; }
+            if (hasOpenTasks) {
+                LOG_INFO("[F77] End step blocked: open F77_Tasks pending for "
+                         + wf.workflowId);
+            } else {
+                s.status="approved"; s.completedDate=nowIso(); s.save(); changed=true;
+                LOG_INFO("[F77] End step auto-approved — workflow closing");
+            }
         }
     }
 
     if(changed) checkAndComplete(wf);
     return changed;
+}
+
+
+// ── F77_Engine::addManualOperation ───────────────────────────────────────
+// Adds a non-auto-approved operation to a running workflow,
+// then creates a F77_Task as the actionable item for -tasks.
+// No F18 Operation is spawned — the F77_Task IS the work item.
+std::string F77_Engine::addManualOperation(
+    F77_Workflow&      wf,
+    const std::string& title,
+    const std::string& description,
+    const std::string& assignedTo)
+{
+    // Always reload from DB to get current status:
+    auto fresh = F77_Workflow::loadById(wf.workflowId);
+    if (fresh) { wf.status = fresh->status; wf.steps = fresh->steps; }
+    if (wf.status != "active") {
+        LOG_WARN("[F77] addManualOperation: workflow not active (status=" + wf.status + "): " + wf.workflowId);
+        return "";
+    }
+
+    wf.loadSteps();
+
+    // Manual operations insert BEFORE Objektverwaltung (SCAN step).
+    // Chain: Init → [manual ops] → Objektverwaltung → DB schreiben → End
+    int insertBefore = 9998;
+    std::string lastManualId;   // last manual (non-auto, non-system) step
+    std::string scanStepId;     // the Objektverwaltung step
+    for (auto& s : wf.steps) {
+        if (s.isFinal) { insertBefore = s.sequenceOrder - 1; continue; }
+        if (s.isSystem && s.systemAction == SystemAction::SCAN_UNREGISTERED_FILES)
+            { scanStepId = s.stepId; insertBefore = s.sequenceOrder - 1; continue; }
+        if (s.isSystem && s.systemAction == SystemAction::COMMIT_DB_OBJECTS)
+            { insertBefore = std::min(insertBefore, s.sequenceOrder - 1); continue; }
+        if (!s.isInitialize && !s.autoApprove)
+            lastManualId = s.stepId;
+    }
+
+    // Build the operation:
+    F77_WorkflowOperation op;
+    op.stepId        = genId("F77S");
+    op.workflowId    = wf.workflowId;
+    op.title         = title;
+    op.autoApprove   = false;
+    op.isInitialize  = false;
+    op.isFinal       = false;
+    op.isSystem      = false;
+    op.status        = "pending";
+    op.sequenceOrder = insertBefore;
+    op.executionMode = "sequential";
+    // Chain after last manual step (or Init if none)
+    if (!lastManualId.empty()) {
+        op.predecessors = {lastManualId};
+    } else {
+        for (auto& s : wf.steps)
+            if (s.isInitialize) { op.predecessors = {s.stepId}; break; }
+    }
+    op.createdAt = nowIso();
+    op.updatedAt = nowIso();
+    if (!opOk(op.save())) {
+        LOG_ERROR("[F77] addManualOperation: save failed");
+        return "";
+    }
+    wf.steps.push_back(op);
+
+    // Re-wire successors: manual op must complete before the next pending system step.
+    // If SCAN (Objektverwaltung) is already approved, wire into DB schreiben.
+    for (auto& s : wf.steps) {
+        bool isScan = (s.isSystem && s.systemAction == SystemAction::SCAN_UNREGISTERED_FILES);
+        bool isDb   = (s.isSystem && s.systemAction == SystemAction::COMMIT_DB_OBJECTS);
+        // Wire into SCAN if pending/in_progress, into DB if SCAN already done
+        bool shouldWire = false;
+        if (isScan && !s.isComplete()) shouldWire = true;
+        if (isDb && !s.isComplete() && !isScan) {
+            // Only wire DB if SCAN is already complete (or absent)
+            bool scanDone = true;
+            for (auto& s2 : wf.steps)
+                if (s2.isSystem && s2.systemAction == SystemAction::SCAN_UNREGISTERED_FILES
+                    && !s2.isComplete()) { scanDone = false; break; }
+            if (scanDone) shouldWire = true;
+        }
+        if (s.isFinal && !s.isComplete()) shouldWire = true;
+        if (shouldWire) {
+            bool already = false;
+            for (auto& p : s.predecessors) if (p == op.stepId) { already = true; break; }
+            if (!already) s.predecessors.push_back(op.stepId);
+            s.save();
+        }
+    }
+
+    // ── Create a F77_Task as the actionable work item ─────────────────────
+    std::string taskTitle = title;
+    auto task = F77_Task::create(
+        wf.workflowId,
+        op.stepId,        // operationId — so checkOperationComplete can close the op
+        taskTitle,
+        wf.entityType,    // navigate back to the entity
+        wf.entityId,
+        "review",         // generic hint
+        "",               // no file path for user-added steps
+        "",
+        assignedTo);
+    if (task) {
+        LOG_INFO("[F77] F77_Task created: " + task->taskId + " for operation " + op.stepId);
+    }
+
+    LOG_INFO("[F77] Manual operation added: " + op.stepId + " \"" + title + "\"");
+    return op.stepId;
 }
 
 // Validate whether a step can be fired — dry-run, no state change

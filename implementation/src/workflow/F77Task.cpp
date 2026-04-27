@@ -223,9 +223,22 @@ bool F77_Task::checkOperationComplete(const std::string& operationId) {
     if (!wf) return false;
 
     LOG_INFO("[F77Task] All tasks for operation " + operationId +
-             " closed — auto-completing operation in workflow " + wfId);
-    F77_Engine::fireStep(*wf, operationId, "approved", "system",
-                         "All F77 tasks completed");
+             " closed — auto-approving operation and ticking workflow " + wfId);
+    // Find if this is a SCAN step (system) or a manual step:
+    wf->loadSteps();
+    bool isScanStep = false;
+    for (auto& s : wf->steps)
+        if (s.stepId == operationId && s.systemAction == SystemAction::SCAN_UNREGISTERED_FILES)
+            { isScanStep = true; break; }
+
+    if (isScanStep) {
+        // SCAN step: just tick — tick will re-check tasks and approve the step
+        F77_Engine::tick(*wf);
+    } else {
+        // Manual operation: fire it as approved, then tick advances
+        F77_Engine::fireStep(*wf, operationId, "approved", "system",
+                             "All F77 tasks completed");
+    }
     return true;
 }
 

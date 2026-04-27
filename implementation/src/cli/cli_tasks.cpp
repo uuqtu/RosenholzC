@@ -73,36 +73,41 @@ static void executeTask(std::shared_ptr<F77_Task> task) {
         if (ch == 0) return;
         if (ch == 3) { task->skip("Datei ignoriert"); std::cout << "  >> Uebersprungen.\n"; return; }
 
-        // Load the F22 task to create/find Akten under it:
-        auto f22 = TaskF22::loadById(task->targetEntityId);
-        if (!f22) {
-            std::cout << "  >> F22 nicht gefunden: " << task->targetEntityId << "\n";
-            return;
-        }
-
+        // Route by entity type:
         std::shared_ptr<Document> targetDoc;
 
-        if (ch == 1) {
-            // New Akte:
-            std::string stem = task->fileName;
-            auto dot = stem.rfind('.'); if (dot != std::string::npos) stem = stem.substr(0,dot);
-            std::string title = readOpt("  Titel (leer=" + stem + "): ");
-            if (title.empty()) title = stem;
-            targetDoc = Document::create(title, "other", task->targetEntityId);
-            if (!opOk(targetDoc->save())) { std::cout << "  >> Fehler.\n"; return; }
-            std::cout << "  >> Akte angelegt: " << targetDoc->documentId << "\n";
-        } else {
-            // Pick existing:
-            auto docs = Document::loadForEntity("f22", task->targetEntityId);
-            if (docs.empty()) {
-                std::cout << "  (keine Akten vorhanden)\n";
+        if (task->targetEntityType == "akt") {
+            // File found in an AKT revision folder — add directly to that AKT
+            targetDoc = Document::loadById(task->targetEntityId);
+            if (!targetDoc) {
+                std::cout << "  >> Akte nicht gefunden: " << task->targetEntityId << "\n";
                 return;
             }
-            for (size_t i=0; i<docs.size(); ++i)
-                std::cout << "  " << std::setw(3) << (i+1) << ". "
-                          << docs[i]->documentId << "  " << docs[i]->title << "\n";
-            int pick = readInt("Akte #", 1, (int)docs.size());
-            targetDoc = docs[pick-1];
+            std::cout << "  Akte: " << targetDoc->documentId << " — " << targetDoc->title << "\n";
+        } else {
+            // F22 (or F16/F18): load/create an AKT under that entity
+            auto f22 = TaskF22::loadById(task->targetEntityId);
+            if (!f22) {
+                std::cout << "  >> Entität nicht gefunden: " << task->targetEntityId << "\n";
+                return;
+            }
+            if (ch == 1) {
+                std::string stem = task->fileName;
+                auto dot = stem.rfind('.'); if (dot != std::string::npos) stem = stem.substr(0,dot);
+                std::string title = readOpt("  Titel (leer=" + stem + "): ");
+                if (title.empty()) title = stem;
+                targetDoc = Document::create(title, "other", task->targetEntityId);
+                if (!opOk(targetDoc->save())) { std::cout << "  >> Fehler.\n"; return; }
+                std::cout << "  >> Akte angelegt: " << targetDoc->documentId << "\n";
+            } else {
+                auto docs = Document::loadForEntity("f22", task->targetEntityId);
+                if (docs.empty()) { std::cout << "  (keine Akten vorhanden)\n"; return; }
+                for (size_t i=0; i<docs.size(); ++i)
+                    std::cout << "  " << std::setw(3) << (i+1) << ". "
+                              << docs[i]->documentId << "  " << docs[i]->title << "\n";
+                int pick = readInt("Akte #", 1, (int)docs.size());
+                targetDoc = docs[pick-1];
+            }
         }
 
         // Ensure inWork revision:

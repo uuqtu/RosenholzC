@@ -37,7 +37,8 @@ namespace Rosenholz {
 // Adding a new system action: add an enum value + a case in executeSystemStep().
 enum class SystemAction {
     NONE,               // Not a system step (default)
-    COMMIT_DB_OBJECTS,  // Commit all uncommitted DocumentObjects to LMDB archive
+    COMMIT_DB_OBJECTS,      // Commit all uncommitted DocumentObjects to LMDB archive
+    SCAN_UNREGISTERED_FILES, // Scan entity MFS folder; spawn F77_Task per loose file
 };
 
 struct F77_WorkflowTemplateStep {
@@ -272,6 +273,16 @@ public:
         const std::string& entityId,
         const std::string& releaseWorkflowId,
         bool confirmLock);
+
+    /// Add a manual F77_WorkflowOperation to a running workflow.
+    /// Creates a F77_Task (not an F18) as the actionable work item.
+    /// The operation blocks End until the F77_Task is closed.
+    /// Returns the new stepId, or empty string on failure.
+    static std::string addManualOperation(
+        F77_Workflow&      wf,
+        const std::string& title,
+        const std::string& description = "",
+        const std::string& assignedTo  = "");
 
     /// Validate whether a step can be fired — dry-run, no state change.
     /// Returns a human-readable status string starting with "OK:" or "BLOCKED:".
