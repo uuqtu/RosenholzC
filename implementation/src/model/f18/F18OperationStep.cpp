@@ -38,7 +38,7 @@ void F18OperationStep::fromRow(const Row& r) {
     completedDate     = g("completed_date");
     slaHours          = gi("sla_hours");
     slaBreached       = gb("sla_breached");
-    status            = g("status");
+    status            = f18StepStatusFrom(g("status"));
     autoApprove       = gb("auto_approve");
     requiresComment   = gb("requires_comment");
     requiresDocument  = gb("requires_document");
@@ -83,7 +83,7 @@ bool F18OperationStep::save() const {
         BindParam::int64(isInitialize?1:0), BindParam::int64(isFinal?1:0), BindParam::int64(isFree?1:0),
         BindParam::nullOrText(assignedTo), BindParam::nullOrText(requiredRole), BindParam::nullOrText(dueDate), BindParam::nullOrText(startedDate), BindParam::nullOrText(completedDate),
         BindParam::int64(slaHours), BindParam::int64(slaBreached?1:0),
-        BindParam::text(status), BindParam::int64(autoApprove?1:0), BindParam::int64(requiresComment?1:0), BindParam::int64(requiresDocument?1:0),
+        BindParam::text(f18StepStatusToString(status)), BindParam::int64(autoApprove?1:0), BindParam::int64(requiresComment?1:0), BindParam::int64(requiresDocument?1:0),
         BindParam::nullOrText(decision), BindParam::nullOrText(decisionBy), BindParam::nullOrText(decisionDate), BindParam::nullOrText(comment),
         BindParam::text(trackingStatus), BindParam::nullOrText(focusDate), BindParam::nullOrText(inWorkSince),
         BindParam::text(priority.empty()?"medium":priority), BindParam::nullOrText(assignedToGroup), BindParam::nullOrText(progressNote),
@@ -100,7 +100,8 @@ bool F18OperationStep::remove() const {
 
 // ── computeTrackingStatus ────────────────────────────────────
 void F18OperationStep::computeTrackingStatus() {
-    if (status == "done" || status == "skipped") {
+    if (status == F18StepStatus::DONE
+    || status == F18StepStatus::SKIPPED) {
         trackingStatus = "archived";
     } else if (!inWorkSince.empty()) {
         trackingStatus = "in_work";
@@ -120,7 +121,8 @@ void F18OperationStep::computeTrackingStatus() {
 // ── canStart ─────────────────────────────────────────────────
 bool F18OperationStep::canStart(const std::vector<F18OperationStep>& allSteps) const {
     // Terminal states can never be restarted
-    if (status == "done" || status == "skipped") return false;
+    if (status == F18StepStatus::DONE
+    || status == F18StepStatus::SKIPPED) return false;
     // Free steps have no predecessor dependencies — always startable
     if (isFree) return true;
     // Non-free steps in waiting/blocked can still be started once deps clear
@@ -165,6 +167,26 @@ std::vector<F18OperationStep> F18OperationStep::loadForVorgang(const std::string
         F18OperationStep s; s.fromRow(r); result.push_back(s);
     }
     return result;
+}
+
+F18StepSymbol F18OperationStep::displaySymbol() const {
+    switch (status) {
+        case F18StepStatus::DONE:
+        case F18StepStatus::APPROVED:    return F18StepSymbol::DONE;
+        case F18StepStatus::SKIPPED:
+        case F18StepStatus::REJECTED:    return F18StepSymbol::SKIPPED;
+        case F18StepStatus::IN_PROGRESS: return F18StepSymbol::IN_PROGRESS;
+        case F18StepStatus::PENDING:     return F18StepSymbol::PENDING;
+    }
+    return F18StepSymbol::PENDING;
+}
+
+bool F18OperationStep::complete() {
+    if (isComplete()) return true;
+    status        = F18StepStatus::DONE;
+    completedDate = nowIso();
+    updatedAt     = nowIso();
+    return save();
 }
 
 } // namespace Rosenholz

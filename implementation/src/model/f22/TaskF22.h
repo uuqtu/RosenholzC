@@ -49,7 +49,7 @@ public:
     std::string assignedBy;
 
     // ── Status / workflow ─────────────────────────────────
-    std::string status      { "in_work" }; ///< in_work → released (only via Main WFI End step)
+    EntityStatus status { EntityStatus::IN_WORK }; ///< lifecycle via F77 — IN_WORK|LOCKED|RELEASED|CLOSEDI End step)
     std::string releaseWorkflowId;    ///< WFI ID of the controlling Main Workflow
     std::string priority;
     std::string workflowInstanceId;
@@ -99,9 +99,12 @@ public:
 
 
     // ── State predicates ──────────────────────────────────────
-    bool isReleased()     const { return status == "released"; }
-    bool canEdit()        const { return !isReleased() && !isWorkflowComplete(); }
-    bool canAddChildren() const { return !isReleased() && !isWorkflowComplete(); }
+    bool isReleased()    const { return status == EntityStatus::RELEASED; }
+    bool isLocked()      const { return status == EntityStatus::LOCKED; }
+    bool isClosed()      const { return status == EntityStatus::CLOSED; }
+    bool isEditable()    const { return status == EntityStatus::IN_WORK; }
+    bool canEdit()        const { return status == EntityStatus::IN_WORK && !isWorkflowComplete(); }
+    bool canAddChildren() const { return status == EntityStatus::IN_WORK && !isWorkflowComplete(); }
     /// True when the controlling F77 workflow has status="completed".
     /// A completed workflow means the entity is permanently locked.
     bool isWorkflowComplete() const;

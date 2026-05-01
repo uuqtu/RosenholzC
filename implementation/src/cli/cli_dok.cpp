@@ -451,8 +451,8 @@ static bool dokHandleWorkflow(DocMenuCtx& ctx) {
     } else {
         auto wf = F77_Workflow::loadById(ctx.doc->releaseWorkflowId);
         std::cout << "  F77-ID : " << ctx.doc->releaseWorkflowId.substr(0, 36) << "\n"
-                  << "  Status      : " << (wf ? wf->status : "unbekannt") << "\n";
-        if (wf && wf->status == "active") {
+                  << "  Status      : " << (wf ? toString(wf->status) : "unbekannt") << "\n";
+        if (wf && wf->status == WorkflowStatus::ACTIVE) {
             if (readInt("  1.Oeffnen  0.Zurueck", 0, 1) == 1)
                 instanceMenu(ctx.doc->releaseWorkflowId);
         } else {
@@ -1013,8 +1013,8 @@ void documentMenu(std::shared_ptr<Document> doc) {
         if (auto fresh = Document::loadById(doc->documentId)) *doc = *fresh;
 
         auto cur       = DocumentRevision::currentRevision(doc->documentId);
-        bool inWork    = doc->isInWork();
-        bool immutable = doc->isFrozen();
+        bool inWork    = doc->isEditable();
+        bool immutable = !doc->isEditable();
         uint32_t curRevNum = cur ? cur->rev : 0;
         auto curObjs   = curRevNum > 0
             ? DocumentObject::loadForRevision(doc->documentId, curRevNum)

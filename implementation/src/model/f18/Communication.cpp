@@ -33,7 +33,7 @@ void Communication::fromRow(const Row& r) {
     decisions     = g("decisions");
     actions       = g("actions");
     notes         = g("notes");
-    status        = g("status");
+    status        = commStatusFrom(g("status"));
     createdAt     = g("created_at");
     updatedAt     = g("updated_at");
 }
@@ -52,7 +52,7 @@ bool Communication::save() const {
         BindParam::nullOrText(scheduledDate), BindParam::nullOrText(actualDate), BindParam::int64(durationMins), BindParam::nullOrText(channel), BindParam::nullOrText(location), BindParam::nullOrText(organiserId),
         BindParam::text(participants.empty()?"[]":participants),
         BindParam::nullOrText(decisions), BindParam::text(actions.empty()?"[]":actions), BindParam::nullOrText(notes),
-        BindParam::text(status), BindParam::text(createdAt), BindParam::text(updatedAt)
+        BindParam::text(commStatusToString(status)), BindParam::text(createdAt), BindParam::text(updatedAt)
     });
 }
 
@@ -85,7 +85,7 @@ std::shared_ptr<Communication> Communication::create(
     c->ownerType = ownerType;
     c->commType  = commType.empty() ? "meeting" : commType;
     c->title     = title;
-    c->status    = "scheduled";
+    c->status    = CommStatus::SCHEDULED;
     c->createdAt = nowIso();
     c->updatedAt = nowIso();
     if (!c->save()) {
@@ -119,7 +119,7 @@ std::vector<std::shared_ptr<Communication>> Communication::loadForOwner(
 bool Communication::complete(const std::string& decs, const std::string& acts) {
     decisions  = decs;
     actions    = acts;
-    status     = "completed";
+    status     = CommStatus::COMPLETED;
     actualDate = nowIso().substr(0,10);
     return update();
 }
@@ -134,6 +134,36 @@ std::vector<std::shared_ptr<Communication>> Communication::loadRecent(int n) {
         auto c = std::make_shared<Communication>(); c->fromRow(r); result.push_back(c);
     }
     return result;
+}
+
+std::string Communication::notizTemplate(CommType type) {
+    switch (type) {
+        case CommType::MEETING:
+            return "TAGESORDNUNG:\n"
+                   "1. \n"
+                   "2. \n\n"
+                   "BESCHLUESSE:\n"
+                   "- \n\n"
+                   "OFFENE PUNKTE:\n"
+                   "- \n";
+        case CommType::CALL:
+            return "GESPRAECHSPARTNER:\n"
+                   "THEMA:\n"
+                   "ERGEBNIS:\n"
+                   "NAECHSTE SCHRITTE:\n";
+        case CommType::EMAIL:
+            return "BETREFF:\n"
+                   "EMPFAENGER:\n"
+                   "INHALT:\n"
+                   "ANHANG:\n";
+        case CommType::REPORT:
+            return "ZUSAMMENFASSUNG:\n"
+                   "DETAILS:\n"
+                   "EMPFEHLUNG:\n";
+        case CommType::MESSAGE:
+            return "INHALT:\n";
+    }
+    return "";
 }
 
 } // namespace Rosenholz

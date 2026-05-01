@@ -39,7 +39,7 @@ void cmdF77(const std::vector<std::string>& args) {
             std::cout << "  " << std::setw(28) << w->workflowId
                       << std::setw(24) << w->templateName.substr(0,23)
                       << std::setw(8)  << w->entityType
-                      << w->targetState << "\n";
+                      << entityStatusToString(w->targetState) << "\n";
         return;
     }
 
@@ -49,8 +49,8 @@ void cmdF77(const std::vector<std::string>& args) {
         for (auto& t : tpls)
             std::cout << "  " << std::left << std::setw(28) << t->templateId
                       << "  " << std::setw(24) << t->name.substr(0,23)
-                      << "  ->" << t->targetState
-                      << "  [" << t->status << "]\n";
+                      << "  ->" << entityStatusToString(t->targetState)
+                      << "  [" << templateStatusToString(t->status) << "]\n";
         return;
     }
 
@@ -76,10 +76,7 @@ static void drawF77Chain(const std::vector<F77_WorkflowStep>& steps, bool compac
         std::cout << "  ";
         for (int i = 0; i < (int)sorted.size(); ++i) {
             const auto& s = sorted[i];
-            std::string sym = s.status == "approved"    ? "OK" :
-                              s.status == "rejected"    ? "X"  :
-                              s.status == "in_progress" ? ">"  :
-                              s.status == "skipped"     ? "~"  : " ";
+            const char* sym = stepSymbolShortStr(s.stepSymbol());
             std::string label = s.isInitialize ? "INIT" :
                                 s.isFinal      ? "END"  :
                                 s.title.substr(0, 10);
@@ -93,10 +90,7 @@ static void drawF77Chain(const std::vector<F77_WorkflowStep>& steps, bool compac
     std::cout << "\n";
     for (int i = 0; i < (int)sorted.size(); ++i) {
         const auto& s = sorted[i];
-        std::string sym = s.status == "approved"    ? "[OK]" :
-                          s.status == "rejected"    ? "[X] " :
-                          s.status == "in_progress" ? "[ >]" :
-                          s.status == "skipped"     ? "[~] " : "[  ]";
+        std::string sym = stepSymbolStr(s.stepSymbol());
         std::string conn = (i == 0) ? "   " : "-->";
         std::string label = s.isInitialize ? "Init" : s.isFinal ? "End " : "    ";
         std::cout << "  " << conn << sym << " " << label
@@ -122,13 +116,11 @@ void listWfInstances(const std::string& entityType, const std::string& entityId)
         int done = 0, total = (int)wf->steps.size();
         for (auto& s : wf->steps) if (s.isComplete()) done++;
 
-        std::string sm = wf->status == "completed" ? "[OK]" :
-                         wf->status == "active"    ? "[ >]" :
-                         wf->status == "locked"    ? "[L] " : "[  ]";
+        std::string sm = workflowSymbolStr(wf->workflowSymbol());
 
         std::cout << "  " << std::setw(3) << n++ << ". " << sm << " "
                   << std::left << std::setw(26) << wf->templateName.substr(0, 24)
-                  << "  ->" << wf->targetState
+                  << "  ->" << entityStatusToString(wf->targetState)
                   << "  " << done << "/" << total << " Schritte\n";
         if (!wf->steps.empty())
             drawF77Chain(wf->steps, true);
@@ -153,8 +145,8 @@ void instanceMenu(const std::string& workflowId) {
         row("ID",          wf->workflowId);
         row("Vorlage",     wf->templateName);
         row("Entitaet",    wf->entityType + " / " + wf->entityId);
-        row("Zielzustand", wf->targetState);
-        row("Status",      wf->status);
+        row("Zielzustand", std::string(entityStatusToString(wf->targetState)));
+        row("Status", std::string(toString(wf->status)));
         row("Gestartet",   wf->initiatedDate.substr(0, 16));
         row("Abgeschl.",   fdate(wf->completedDate));
         std::cout << "  +" << std::string(52, '-') << "+\n";
@@ -232,7 +224,7 @@ void instanceMenu(const std::string& workflowId) {
         else if (action == 3) {
             // ── Optionalen Schritt hinzufügen ─────────────────────────────────
             // Only allowed while workflow is active and End step not yet reached
-            if (wf->status != "active") {
+            if (wf->status != WorkflowStatus::ACTIVE) {
                 std::cout << "  >> Nur bei aktivem F77 möglich.\n"; continue;
             }
             // Check End step not yet done
@@ -296,7 +288,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
         int ti = 1;
         for (auto& t : templates)
             std::cout << "    " << ti++ << ". " << t->name
-                      << "  -> " << t->targetState << "\n";
+                      << "  -> " << entityStatusToString(t->targetState) << "\n";
         std::cout << "    " << ti << ". Standard-Freigabe (ohne Vorlage)\n";
         int choice = readInt("Vorlage waehlen", 1, (int)templates.size() + 1);
         std::string actor = readOpt("Gestartet von (Person-ID, leer=System): ");
@@ -307,7 +299,10 @@ std::string startWfInstanceWizard(const std::string& entityType,
                 templates[choice-1]->templateId, effType, effId, actor);
         } else {
             std::cout << "  1.in_work  2.pre_released  3.released  4.locked  5.closed\n";
-            static const char* sts[] = {"in_work","pre_released","released","locked","closed"};
+            static const EntityStatus sts[] = {
+            EntityStatus::IN_WORK, EntityStatus::PRE_RELEASED,
+            EntityStatus::RELEASED, EntityStatus::LOCKED, EntityStatus::CLOSED
+        };
             int si = readInt("Zielzustand", 1, 5);
             wf = F77_Engine::startDefault(effType, effId, sts[si-1], actor);
         }
@@ -315,7 +310,10 @@ std::string startWfInstanceWizard(const std::string& entityType,
         std::string actor = readOpt("Gestartet von (Person-ID, leer=System): ");
         if (actor.empty()) actor = "system";
         std::cout << "  1.in_work  2.pre_released  3.released  4.locked  5.closed\n";
-        static const char* sts[] = {"in_work","pre_released","released","locked","closed"};
+        static const EntityStatus sts[] = {
+            EntityStatus::IN_WORK, EntityStatus::PRE_RELEASED,
+            EntityStatus::RELEASED, EntityStatus::LOCKED, EntityStatus::CLOSED
+        };
         int si = readInt("Zielzustand", 1, 5);
         wf = F77_Engine::startDefault(effType, effId, sts[si-1], actor);
     }
@@ -358,9 +356,9 @@ static void templateMenu(const std::string& templateId) {
         hdr("F77-VORLAGE  " + tpl->name);
         std::cout << "  ID:           " << tpl->templateId << "\n"
                   << "  Version:      " << tpl->version    << "\n"
-                  << "  Zielzustand:  " << tpl->targetState << "\n"
+                  << "  Zielzustand:  " << entityStatusToString(tpl->targetState) << "\n"
                   << "  Entitaeten:   " << fval(tpl->entityTypes) << "\n"
-                  << "  Status:       " << tpl->status << "\n";
+                  << "  Status:       " << templateStatusToString(tpl->status) << "\n";
 
         std::cout << "  Vorlage-Schritte:\n";
         if (tpl->steps.empty()) {
@@ -407,8 +405,7 @@ static void templateMenu(const std::string& templateId) {
         }
 
         else if (ch == 2) {
-            tpl->status = "inactive";
-            tpl->save();
+            tpl->deactivate();
             std::cout << "  >> Vorlage deaktiviert.\n";
         }
     }
@@ -437,8 +434,8 @@ void workflowMenu() {
             for (auto& t : templates)
                 std::cout << "  " << std::setw(3) << n++ << ". "
                           << std::left << std::setw(28) << t->name
-                          << "  -> " << std::setw(14) << t->targetState
-                          << "  v" << t->version << "  [" << t->status << "]\n";
+                          << "  -> " << std::setw(14) << entityStatusToString(t->targetState)
+                          << "  v" << t->version << "  [" << templateStatusToString(t->status) << "]\n";
             std::cout << "\n";
         }
 
@@ -447,7 +444,10 @@ void workflowMenu() {
             if (name.empty()) continue;
             std::cout << "  Zielzustand:\n"
                          "  1.in_work  2.pre_released  3.released  4.locked  5.closed\n";
-            static const char* sts[] = {"in_work","pre_released","released","locked","closed"};
+            static const EntityStatus sts[] = {
+            EntityStatus::IN_WORK, EntityStatus::PRE_RELEASED,
+            EntityStatus::RELEASED, EntityStatus::LOCKED, EntityStatus::CLOSED
+        };
             int si = readInt("Zielzustand", 1, 5);
             std::string entityTypes = readOpt("Entitaetstypen (z.B. f16,f22,akt, leer=alle): ");
             if (entityTypes.empty()) entityTypes = "f16,f22,f18,akt";

@@ -63,7 +63,7 @@ void cmdF18(const std::vector<std::string>& args) {
         for (auto& v : all)
             std::cout << "  " << std::setw(26) << v->vorgangId.substr(0, 24)
                       << std::setw(18) << ("[" + v->vorgangType + "]")
-                      << std::setw(12) << v->status
+                      << std::setw(12) << entityStatusToString(v->status)
                       << v->title.substr(0, 30) << "\n";
         std::cout << "  " << all.size() << " F18\n";
         return;
@@ -125,13 +125,7 @@ static void drawF18Chain(const std::vector<Rosenholz::F18OperationStep>& steps) 
     for (auto& s : steps) {
         if (!first) std::cout << "-->";
         first = false;
-        std::string mark;
-        if      (s.status == "done")        mark = "OK";
-        else if (s.status == "skipped")     mark = "--";
-        else if (s.status == "in_progress") mark = " >";
-        else if (s.status == "waiting")     mark = " W";
-        else if (s.status == "blocked")     mark = "!!";
-        else                               mark = "  ";
+        const char* mark = f18StepSymbolStr(s.displaySymbol());
         std::string label = s.title.size() > 14 ? s.title.substr(0, 13) + "~" : s.title;
         std::cout << "[" << mark << "] " << std::left << std::setw(14) << label;
 
@@ -152,7 +146,7 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
         hdr("F18S — " + step.stepId.substr(0, 22));
         std::cout << "  Titel   : " << step.title << "\n"
                   << "  Typ     : " << step.stepType << "\n"
-                  << "  Status  : " << step.status << "\n";
+                  << "  Status  : " << Rosenholz::f18StepStatusToString(step.status) << "\n";
         if (step.percentComplete > 0)
             std::cout << "  Fortsch.: " << step.percentComplete << "%\n";
         if (!step.assignedTo.empty())
@@ -172,11 +166,11 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
         if (ch == 1) {
             std::cout << "  1.Abschliessen  2.Ablehnen  3.Überspringen\n";
             int sc = readInt("Status",1,3);
-            if (sc==1) step.status="done";
-            else if (sc==2) step.status="rejected";
-            else step.status="skipped";
-            step.completedDate = nowIso(); step.save();
-            std::cout << "  >> Status: " << step.status << "\n";
+            if (sc==1) step.status = Rosenholz::F18StepStatus::DONE;
+            else if (sc==2) step.status = Rosenholz::F18StepStatus::REJECTED;
+            else step.status = Rosenholz::F18StepStatus::SKIPPED;
+            step.complete();
+            std::cout << "  >> Status: " << Rosenholz::f18StepStatusToString(step.status) << "\n";
         } else if (ch == 2) {
             std::string ts = readOpt("Tracking-Status: ");
             std::string pct = readOpt("Fortschritt % (0-100): ");
@@ -223,7 +217,7 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
 void printF18Operation(const Rosenholz::F18Operation& v) {
     using namespace Rosenholz;
     hdr("F18 " + v.vorgangId.substr(0,24) + "  " + v.title.substr(0,28));
-    std::cout << "  Typ:" << v.vorgangType << "  Status:" << v.status
+    std::cout << "  Typ:" << v.vorgangType << "  Status:" << entityStatusToString(v.status)
               << "  Prio:" << v.priority << "\n";
     if (!v.taskId.empty())
         std::cout << "  F22:" << v.taskId.substr(0,26) << "\n";
@@ -239,7 +233,7 @@ void printF18Operation(const Rosenholz::F18Operation& v) {
     if (!v.steps.empty()) {
         std::cout << "  Steps (" << v.steps.size() << "):\n";
         for (auto& s : v.steps)
-            std::cout << "    [" << s.status.substr(0,8) << "] " << s.title.substr(0,40) << "\n";
+            std::cout << "    [" << f18StepStatusToString(s.status) << "] " << s.title.substr(0,40) << "\n";
     }
 }
 
@@ -301,7 +295,7 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     v->update();
 
     std::cout << "  >> F18 angelegt: " << v->vorgangId << "\n";
-    std::cout << "  >> Typ: " << v->vorgangType << "  Status: " << v->status << "\n";
+    std::cout << "  >> Typ: " << v->vorgangType << "  Status: " << entityStatusToString(v->status) << "\n";
     return v;
 }
 
@@ -340,7 +334,7 @@ static bool f18_step_list(std::shared_ptr<F18Operation> v) {
     int n = 1;
     for (auto& s : v->steps)
         std::cout << "  " << std::setw(3) << n++ << ". "
-                  << "[" << std::left << std::setw(8) << s.status.substr(0,7) << "] "
+                  << "[" << std::left << std::setw(8) << std::string(Rosenholz::f18StepStatusToString(s.status)).substr(0,7) << "] "
                   << std::setw(30) << s.title.substr(0,28)
                   << "  " << s.stepType << "\n";
     return true;
@@ -352,7 +346,7 @@ static bool f18_step_open(std::shared_ptr<F18Operation> v) {
     int n=1;
     for (auto& s : v->steps)
         std::cout << "  " << std::setw(3) << n++ << ". "
-                  << "[" << std::left << std::setw(8) << s.status.substr(0,7) << "] "
+                  << "[" << std::left << std::setw(8) << std::string(Rosenholz::f18StepStatusToString(s.status)).substr(0,7) << "] "
                   << s.title.substr(0,34) << "\n";
     int pick = readInt("F18S #", 1, (int)v->steps.size());
     stepMenu(v->steps[pick-1], v->steps);
@@ -458,7 +452,7 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
         v->loadSteps();
         printF18Operation(*v);
         drawF18Chain(v->steps);
-        bool v_released = (v->status == "released");
+        bool v_released = v->isReleased();
         if (v_released) std::cout << "  ⚠ RELEASED — nur Lesezugriff\n";
         std::cout
             << "  1.Bearbeiten | 2.Notiz+\n"
@@ -494,7 +488,7 @@ void f18BrowserMenu(const std::string& taskId,
                 std::cout << "  " << std::setw(3) << n++ << ". "
                           << "[" << std::left << std::setw(14) << v->vorgangType.substr(0,13) << "] "
                           << std::setw(28) << v->title.substr(0,26)
-                          << "  " << v->status << "\n";
+                          << "  " << entityStatusToString(v->status) << "\n";
         }
 
         // Check whether the parent entity is released (no new children allowed)

@@ -91,8 +91,9 @@ public:
     OperationResult checkCanEdit()    const;
 
     // ── Bool convenience wrappers (for internal/legacy use) ───
-    bool isInWork()     const;
-    bool isFrozen()     const;
+    // Revision state predicates — use currentRevisionState() for full state.
+    // isEditable: revision is IN_WORK (can edit, checkout, add objects)
+    bool isEditable()   const; ///< replaces isInWork() in v5
     bool canRevise()    const;
 
     /// Returns the current in_work revision, creating one (rev=1) if none exists.

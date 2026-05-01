@@ -31,6 +31,11 @@
 #endif
 #include "../repository/DocumentRevision.h"
 #include "../core/FileOps.h"
+
+static std::string fval(const std::string& v) {
+    return v.empty() ? "-" : v;
+}
+
 #include "../core/Logger.h"
 #include "../core/Config.h"
 #include "../model/f16/ProjectF16.h"
@@ -62,9 +67,6 @@ bool MFSWriter::ownerOnlyWrite(const std::string& path, const std::string& conte
 
 
 // ── Entity folder helpers ─────────────────────────────────────
-static std::string f16Dir(const std::string& mfsRoot, const std::string& regNr) {
-    return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F16"), sanitiseRegNr(regNr));
-}
 static std::string f22Dir(const std::string& mfsRoot, const std::string& regNr) {
     return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F22"), sanitiseRegNr(regNr));
 }
@@ -84,104 +86,75 @@ static std::string docEntityDir(const std::string& entityDir, const std::string&
 // PROJECT (F16) — Hängeregister + cover sheet
 // ─────────────────────────────────────────────────────────────
 bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
-    std::string sane = sanitiseRegNr(p.regNumber.toString());
-    std::string dir  = f16Dir(mfsRoot, p.regNumber.toString());
-    FileOps::makeDirs(dir);
+    // F16 writes a single flat file in mfs/F16/ named by registration number.
+    // No subdirectory is created — the F16 folder contains one file per project.
+    // The file is named: XV_F16_0001_26.txt (sanitised registration number)
 
-    std::string coverFile = FileOps::joinPath(dir, "00_DECKBLATT.txt");
-    std::ostringstream cover;
-    cover << "VORGANGSAKTE\n"
-          << "=======================================================\n"
-          << "REGISTRIERNUMMER : " << p.regNumber.toString()   << "\n"
-          << "TITEL            : " << p.title                  << "\n"
-          << "VORGANGSART      : " << p.projectType             << "\n"
-          << "GROESSENKLASSE   : " << p.sizeClass               << "\n"
-          << "STATUS           : " << p.status                  << "\n"
-          << "PHASE            : " << p.phase                   << "\n"
-          << "CODENAME         : " << p.codename                << "\n"
-          << "MAIN-WORKFLOW    : " << p.releaseWorkflowId       << "\n"
-          << "AKTENZEICHEN     : "
-          << Config::instance().registratur().geschaeftszeichen
-          << "-" << sane << "\n"
-          << "ANGELEGT         : " << p.createdAt               << "\n"
-          << "GEAENDERT        : " << p.updatedAt               << "\n"
-          << "=======================================================\n"
-          << "\n";
+    std::string f16FolderPath = FileOps::joinPath(mfsRoot, "F16");
+    FileOps::makeDirs(f16FolderPath);
+
+    std::string sanitisedId = sanitiseRegNr(p.regNumber.toString());
+    std::string schluesselPath = FileOps::joinPath(f16FolderPath, sanitisedId + ".txt");
+
+    std::ostringstream schluessel;
+    schluessel
+        << "PROJEKTKARTEI (F16)\n"
+        << std::string(60, '=') << "\n"
+        << "REGISTRIERNUMMER : " << p.regNumber.toString() << "\n"
+        << "AKTENZEICHEN     : "
+        << Config::instance().registratur().geschaeftszeichen
+        << "-" << sanitisedId << "\n"
+        << "TITEL            : " << p.title << "\n"
+        << "VORGANGSART      : " << p.projectType << "\n"
+        << "GROESSENKLASSE   : " << p.sizeClass << "\n"
+        << "PHASE            : " << fval(p.phase) << "\n"
+        << "CODENAME         : " << fval(p.codename) << "\n"
+        << "PRIORITAET       : " << fval(p.priority) << "\n"
+        << "ARCHIVIERT       : " << (p.archived ? "ja" : "nein") << "\n"
+        << "\n"
+        << "ORGANISATION\n"
+        << std::string(40, '-') << "\n";
+    if (!p.leadId.empty())       schluessel << "LEITER     : " << p.leadId << "\n";
+    if (!p.ownerTeamId.empty())  schluessel << "EINHEIT    : " << p.ownerTeamId << "\n";
+    if (!p.sponsorId.empty())    schluessel << "AUFTRAGG   : " << p.sponsorId << "\n";
+
+    schluessel << "\n"
+        << "ZEITPLANUNG\n"
+        << std::string(40, '-') << "\n"
+        << "GEPLANTER START  : " << fval(p.startDatePlanned) << "\n"
+        << "GEPLANTES ENDE   : " << fval(p.endDatePlanned) << "\n"
+        << "TATS. START      : " << fval(p.startDateActual) << "\n"
+        << "TATS. ENDE       : " << fval(p.endDateActual) << "\n"
+        << "\n"
+        << "KOSTEN / EARNED VALUE\n"
+        << std::string(40, '-') << "\n"
+        << "BUDGET GEPLANT   : " << p.budgetPlanned << " " << p.currency << "\n"
+        << "BUDGET AKTUELL   : " << p.budgetActual << " " << p.currency << "\n"
+        << "CPI              : " << p.costPerformanceIndex << "\n"
+        << "SPI              : " << p.schedulePerformanceIndex << "\n";
+
     if (!p.scopeStatement.empty())
-        cover << "SCOPE:\n" << p.scopeStatement << "\n\n";
-    if (!p.notes.empty())
-        cover << "NOTIZEN:\n" << p.notes << "\n\n";
+        schluessel << "\nSCOPE\n"
+                   << std::string(40, '-') << "\n"
+                   << p.scopeStatement << "\n";
 
-    // Cross-references: persons linked to this project
-    if (!p.leadId.empty())      cover << "LEITER-REF       : " << p.leadId      << "\n";
-    if (!p.ownerTeamId.empty()) cover << "EINHEIT-REF      : " << p.ownerTeamId << "\n";
-    if (!p.sponsorId.empty())   cover << "AUFTRAGGEBER-REF : " << p.sponsorId   << "\n";
-
-    cover << "\n"
-          << "VERWEISE (alle Unterakten dieser Vorgangsakte):\n"
-          << "  F22/   → Aufgabenkartei    [mfs/F22/<reg>/]\n"
-          << "  F18/   → Vorgangskartei    [mfs/F18/<id>/]\n"
-          << "  AKT/   → Akten        [mfs/F16/<reg>/AKT/<id>/]\n"
-          << "\n"
-          << "KLARNAMENZUORDNUNG → owner_key.txt\n"
-          << "  Alle Registriernummern sind dort aufgeloest.\n"
-          << "  Diese Akte ist ohne owner_key.txt nicht vollstaendig.\n";
-
-    ownerOnlyWrite(coverFile, cover.str());
-
-    // ── Entitäts-spezifischer Schlüssel ───────────────────────
-    {
-        std::ostringstream sk;
-        sk << "ROSENHOLZ PM — F16 SCHLÜSSELDATEI\n"
-           << "==================================\n"
-           << "REGISTRIERNUMMER : " << p.regNumber.toString() << "\n"
-           << "TITEL            : " << p.title << "\n"
-           << "STATUS           : " << p.status << "\n"
-           << "TYP              : " << p.projectType << "\n"
-           << "ANGELEGT         : " << p.createdAt << "\n\n"
-           << "Navigation: Unterordner F22/<reg>/_SCHLUESSEL.txt fuer Aufgabendetails\n"
-           << "           Unterordner AKT/<id>/_SCHLUESSEL.txt fuer Aktendetails\n\n"
-           << "Verbundene F22-Aufgaben:\n"
-           << "  " << std::left << std::setw(28) << "REG-NR"
-           << std::setw(34) << "TITEL" << "STATUS\n"
-           << "  " << std::string(70, '-') << "\n";
-        auto tasks = TaskF22::loadForProject(p.regNumber.toString());
-        for (auto& t : tasks)
-            sk << "  " << std::left << std::setw(28) << t->taskId
-               << std::setw(34) << t->title.substr(0,32) << t->status << "\n";
-        sk << "\nVerbundene Akten (via F22):\n"
-           << "  " << std::left << std::setw(28) << "AKTEN-ID"
-           << std::setw(34) << "TITEL" << "TYP\n"
-           << "  " << std::string(70, '-') << "\n";
-        for (auto& t : tasks) {
-            auto tDocs = Document::loadForEntity("f22", t->taskId);
-            for (auto& d : tDocs)
-                sk << "  " << std::left << std::setw(28) << d->documentId
-                   << std::setw(34) << d->title.substr(0,32) << d->docType << "\n";
-        }
-        FileOps::writeTextFile(FileOps::joinPath(dir, "_SCHLUESSEL.txt"), sk.str());
+    schluessel << "\n"
+        << "VERBUNDENE AUFGABEN (F22)\n"
+        << std::string(40, '-') << "\n";
+    auto tasks = TaskF22::loadForProject(p.projectId);
+    if (tasks.empty()) {
+        schluessel << "  (keine)\n";
+    } else {
+        for (auto& task : tasks)
+            schluessel << "  " << std::left << std::setw(28) << task->regNumber.toString()
+                       << "  " << task->title.substr(0, 34) << "\n";
     }
 
-    // ── PER-Ordner Schlüssel ──────────────────────────────────
-    std::string perDir = FileOps::joinPath(mfsRoot, "PER");
-    FileOps::makeDirs(perDir);
-    {
-        std::ostringstream pk;
-        if (!p.leadId.empty())     pk << "LEITER    : " << p.leadId << "\n";
-        if (!p.ownerTeamId.empty())pk << "EINHEIT   : " << p.ownerTeamId << "\n";
-        if (!p.sponsorId.empty())  pk << "AUFTRAGG  : " << p.sponsorId << "\n";
-        if (!pk.str().empty())
-{
-            std::string perSchluessel = FileOps::joinPath(perDir, "_SCHLUESSEL.txt");
-            std::string existing;
-            if (FileOps::fileExists(perSchluessel))
-                existing = FileOps::readTextFile(perSchluessel);
-            FileOps::writeTextFile(perSchluessel,
-                existing + "[F16] " + p.regNumber.toString() + " — " + p.title + ":\n" + pk.str() + "\n");
-        }
-    }
+    schluessel << "\nANGELEGT         : " << p.createdAt << "\n"
+               << "ZULETZT GEAENDERT: " << p.updatedAt << "\n";
 
-    LOG_DEBUG("MFS F16 written: " + coverFile);
+    ownerOnlyWrite(schluesselPath, schluessel.str());
+    LOG_DEBUG("MFS F16 geschrieben: " + schluesselPath);
     return true;
 }
 
@@ -204,7 +177,7 @@ bool MFSWriter::writeTask(const TaskF22& t, const std::string& mfsRoot) {
         << "=======================================================\n"
         << "REGISTRIERNUMMER : " << t.regNumber.toString()   << "\n"
         << "TITEL            : " << t.title                  << "\n"
-        << "STATUS           : " << t.status                  << "\n"
+        << "STATUS           : " << entityStatusToString(t.status) << "\n"
         << "PRIORITAET       : " << t.priority                << "\n"
         << "FORTSCHRITT      : " << t.percentComplete << "%"  << "\n"
         << "BEARBEITER-REF   : " << t.assigneeId              << "\n"
@@ -260,7 +233,7 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
         << "VORGANG-ID       : " << v.vorgangId              << "\n"
         << "TITEL            : " << v.title                  << "\n"
         << "VORGANGSART      : " << v.vorgangType             << "\n"
-        << "STATUS           : " << v.status                  << "\n"
+        << "STATUS           : " << entityStatusToString(v.status)                  << "\n"
         << "PRIORITAET       : " << v.priority                << "\n"
         << "F77-FREIGABE-WFI : " << v.releaseWorkflowId       << "\n"
         << "ANGELEGT         : " << v.createdAt               << "\n"

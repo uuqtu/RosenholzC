@@ -87,8 +87,8 @@ void testSuiteModel() {
         fix.project->actualCost   = 80000.0;
         fix.project->recalcEarnedValue();
         fix.project->save();
-        CHECK(fix.project->cpi > 0.0, "CPI calculated");
-        CHECK(fix.project->spi > 0.0, "SPI calculated");
+        CHECK(fix.project->costPerformanceIndex > 0.0, "CPI calculated");
+        CHECK(fix.project->schedulePerformanceIndex > 0.0, "SPI calculated");
 
         // Reassignment
         PersonFixture newLead("Neue","Leiterin","nl@test.de","internal");
@@ -381,7 +381,7 @@ void testSuiteModel() {
         c16->complete("Meeting abgeschlossen", "Aktionsplan erstellt");
         auto reloaded = Comm::loadById(c16->commId);
         CHECK(reloaded != nullptr, "Communication reloadable after complete");
-        CHECK(reloaded->status == "completed", "status=completed after complete()");
+        CHECK(reloaded->status == R::CommStatus::COMPLETED, "status=completed after complete()");
         CHECK(!reloaded->decisions.empty(), "decisions persisted");
     }
 
@@ -427,8 +427,8 @@ void testSuiteModel() {
         ProjectFixture pfix("Lifecycle-F22-Test");
         auto task = R::TaskF22::create(pfix.project->projectId, "Lifecycle-Task", "", "");
         task->save();
-        CHECK(task->releaseWorkflowId.empty(), "F22 starts with no workflow");
-        CHECK(task->status == "in_work", "F22 status=in_work");
+        CHECK(task->workflowInstanceId.empty(), "F22 starts with no workflow");
+        CHECK(task->status == R::EntityStatus::IN_WORK, "F22 status=in_work");
         auto wf = R::F77_Engine::startDefault("f22", task->taskId);
         CHECK(wf != nullptr, "startDefault creates F77 workflow for F22");
         if (wf) CHECK(wf->entityType == "f22", "WF entityType=f22");
@@ -485,16 +485,16 @@ void testSuiteModel() {
         ProjectFixture pfix("Release-Test");
         auto task = R::TaskF22::create(pfix.project->projectId, "Release-Task", "", "");
         task->save();
-        CHECK(task->status == "in_work", "starts in_work");
+        CHECK(task->status == R::EntityStatus::IN_WORK, "starts in_work");
         auto wf = R::F77_Engine::startDefault("f22", task->taskId);
         CHECK(wf != nullptr, "WF created");
         if (!wf) return;
-        wf->targetState = "released";
+        wf->targetState = R::EntityStatus::RELEASED;
         bool ok = R::F77_Engine::applyTargetState(*wf);
         CHECK(ok, "applyTargetState succeeds");
         auto reloaded = R::TaskF22::loadById(task->taskId);
         CHECK(reloaded != nullptr, "reloaded after release");
-        CHECK(reloaded->status == "released", "status=released after applyTargetState");
+        CHECK(reloaded->status == R::EntityStatus::RELEASED, "status=released after applyTargetState");
     }
 
 

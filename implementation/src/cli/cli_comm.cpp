@@ -23,7 +23,7 @@ void commDetailMenu(std::shared_ptr<Communication> c) {
         hdr("COMMUNICATION — " + c->commId.substr(0,22));
         std::cout << "  Typ    : " << c->commType << "\n";
         std::cout << "  Titel  : " << c->title << "\n";
-        std::cout << "  Status : " << c->status << "\n";
+        std::cout << "  Status : " << commStatusToString(c->status) << "\n";
         std::cout << "  Geplant: " << fdate(c->scheduledDate) << "\n";
         std::cout << "  Ist    : " << fdate(c->actualDate) << "\n";
         std::cout << "  Dauer  : " << c->durationMins << " min\n";
@@ -76,7 +76,7 @@ void communicationMenu(const std::string& ownerId, const std::string& ownerType)
                           << "[" << std::left << std::setw(7) << c->commType.substr(0,6) << "] "
                           << std::setw(26) << c->title.substr(0,24)
                           << "  " << fdate(c->scheduledDate)
-                          << "  " << c->status << "\n";
+                          << "  " << commStatusToString(c->status) << "\n";
         }
         std::cout << "\n  1.Neu anlegen  2.Öffnen  0.Zurück\n";
         int ch = readInt("Wahl",0,2); if (ch==0) break;
@@ -84,16 +84,26 @@ void communicationMenu(const std::string& ownerId, const std::string& ownerType)
         if (ch==1) {
             std::cout << "  Typ: 1.meeting  2.message  3.call  4.email  5.report\n";
             int ct = readInt("Typ",1,5);
-            static const char* cts[] = {"meeting","message","call","email","report"};
+            static const CommType ctypes[] = {
+                CommType::MEETING, CommType::MESSAGE, CommType::CALL,
+                CommType::EMAIL, CommType::REPORT};
+            CommType ctype = ctypes[ct-1];
             std::string t = readLine("Titel: ");
             if (t.empty()) continue;
-            auto c = Communication::create(ownerId, ownerType, t, cts[ct-1]);
+            auto c = Communication::create(
+                ownerId, ownerType, t, commTypeToString(ctype));
             if (c) {
                 c->scheduledDate = readOpt("Datum (JJJJ-MM-TT): ");
                 c->channel       = readOpt("Kanal: ");
                 c->location      = readOpt("Ort: ");
                 c->agenda        = readOpt("Agenda: ");
                 c->organiserId   = readOpt("Organisator Person-ID: ");
+                // KOM-only: offer notiz template (Feature 23)
+                std::string tpl  = Communication::notizTemplate(ctype);
+                if (!tpl.empty()) {
+                    std::cout << "  Notiz-Vorlage verwenden? (j/n): ";
+                    if (yesno("")) c->notes = tpl;
+                }
                 c->update();
                 std::cout << "  >> Communication angelegt: " << c->commId << "\n";
                 commDetailMenu(c);

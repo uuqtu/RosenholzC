@@ -144,7 +144,7 @@ OperationResult Document::remove() {
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 OperationResult Document::update() {
-    if (isFrozen()) {
+    if (!isEditable()) {
         LOG_WARN("[AKT] update() verweigert: Revision ist eingefroren — " + documentId);
         return OperationResult::DOC_REV_NOT_IN_WORK;
     } updatedAt=nowIso(); dateModified=updatedAt; return save(); }
@@ -541,11 +541,8 @@ RevState Document::currentRevisionState() const {
     return cur ? cur->revState : RevState::IN_WORK;
 }
 
-bool Document::isInWork() const {
+bool Document::isEditable() const {
     return currentRevisionState() == RevState::IN_WORK;
-}
-bool Document::isFrozen() const {
-    return currentRevisionState() != RevState::IN_WORK;
 }
 bool Document::canRevise() const {
     // No revision yet: can create first. Otherwise: state must not be in_work.
@@ -553,17 +550,17 @@ bool Document::canRevise() const {
     return !cur || currentRevisionState() != RevState::IN_WORK;
 }
 bool Document::canCheckout() const {
-    return isInWork() && checkedOutPath.empty();
+    return isEditable() && checkedOutPath.empty();
 }
 bool Document::canCheckin() const {
-    return isInWork() && !checkedOutPath.empty();
+    return isEditable() && !checkedOutPath.empty();
 }
 bool Document::canRevert() const {
-    if (!isInWork() || checkedOutPath.empty()) return false;
+    if (!isEditable() || checkedOutPath.empty()) return false;
     auto cur = Rosenholz::DocumentRevision::currentRevision(documentId);
     return cur && cur->parentRev > 0;
 }
-bool Document::canEdit() const { return isInWork(); }
+bool Document::canEdit() const { return isEditable(); }
 
 
 // ── Lifecycle: ensure Main WFI for this document ─────────────

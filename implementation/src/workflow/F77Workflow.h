@@ -51,6 +51,29 @@ enum class StepStatus {
 std::string toString(StepStatus s);
 StepStatus  stepStatusFrom(const std::string& s);
 
+// ── Display symbols — returned by model, rendered by UI layer ────────────
+// CLI maps to ASCII strings; Qt maps to icons/colors. Both in one place.
+enum class StepSymbol {
+    PENDING,      ///< step not yet startable or not started
+    IN_PROGRESS,  ///< step is being worked
+    APPROVED,     ///< step completed successfully
+    REJECTED,     ///< step was rejected
+    SKIPPED,      ///< step was skipped
+    LOCKED,       ///< workflow is locked
+};
+
+enum class WorkflowSymbol {
+    ACTIVE,
+    COMPLETED,
+    LOCKED,
+    CANCELLED,
+};
+
+// Canonical step symbol from StepStatus — single conversion point.
+StepSymbol     stepSymbol(StepStatus s);
+WorkflowSymbol workflowSymbol(WorkflowStatus s);
+
+
 
 struct F77_WorkflowTemplateStep {
     // Mirror of F77_WorkflowStep.systemAction — set when defining the template.
@@ -86,9 +109,9 @@ struct F77_WorkflowTemplate {
     std::string name;
     std::string version         { "1.0" };
     std::string description;
-    std::string entityTypes;    // comma-sep: "f16,f22,f18,akt"
-    std::string targetState     { "released" }; // in_work|pre_released|released|locked|closed
-    std::string status          { "active" };   // active|inactive
+    std::string entityTypes;    // comma-sep: "f22,f18,akt"
+    EntityStatus   targetState  { EntityStatus::RELEASED }; ///< target after workflow completes
+    TemplateStatus status       { TemplateStatus::ACTIVE };  ///< active|inactive
     std::string createdBy;
     std::string createdAt;
     std::string updatedAt;
@@ -97,6 +120,7 @@ struct F77_WorkflowTemplate {
 
     OperationResult save()   const;
     OperationResult remove() const;
+    OperationResult deactivate(); ///< Sets status=inactive
     bool loadSteps();
     void fromRow(const Row& r);
 
@@ -109,8 +133,8 @@ struct F77_WorkflowTemplate {
 
     static std::shared_ptr<F77_WorkflowTemplate> create(
         const std::string& name,
-        const std::string& targetState = "released",
-        const std::string& entityTypes = "f16,f22,f18,akt");
+        EntityStatus targetState = EntityStatus::RELEASED,
+        const std::string& entityTypes = "f22,f18,akt");
     static std::shared_ptr<F77_WorkflowTemplate> loadById(const std::string& id);
     static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadAll();
     static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadForEntityType(
@@ -136,7 +160,7 @@ struct F77_WorkflowOperation {
     std::string predecessorsToString() const;
     static std::vector<std::string> predecessorsFromString(const std::string& csv);
 
-    std::string status          { "pending" }; // pending|in_progress|approved|rejected|skipped|cancelled
+    StepStatus  status          { StepStatus::PENDING }; ///< step lifecycle
     bool        autoApprove     { false };
     bool        requiresComment { false };
     bool        requiresDocument{ false };
@@ -148,7 +172,9 @@ struct F77_WorkflowOperation {
 
     /// True if status is a terminal state.
     bool isComplete() const {
-        return status == "approved" || status == "rejected" || status == "skipped";
+        return status == StepStatus::APPROVED
+            || status == StepStatus::REJECTED
+            || status == StepStatus::SKIPPED;
     }
 
     /// Check if all predecessor steps are complete.
@@ -160,6 +186,8 @@ struct F77_WorkflowOperation {
 
     static std::shared_ptr<F77_WorkflowOperation> loadById(const std::string& id);
     static std::vector<F77_WorkflowOperation>     loadForWorkflow(const std::string& workflowId);
+
+    StepSymbol     stepSymbol()     const; ///< canonical symbol — UI maps to string/icon
 
 private:
     static Database* db();
@@ -173,10 +201,10 @@ struct F77_Workflow {
     std::string workflowId;
     std::string templateId;     // soft ref only; template may have changed
     std::string templateName;   // snapshot of name at start
-    std::string entityType;     // f16|f22|f18|akt
+    std::string entityType;     // f22|f18|akt
     std::string entityId;
-    std::string targetState     { "released" }; // snapshot from template
-    std::string status          { "active" };   // active|completed|cancelled|locked
+    EntityStatus   targetState  { EntityStatus::RELEASED }; ///< target state applied on completion
+    WorkflowStatus status       { WorkflowStatus::ACTIVE };  ///< workflow lifecycle
     std::string initiatedBy;
     std::string initiatedDate;
     std::string completedDate;
@@ -192,17 +220,18 @@ struct F77_Workflow {
     bool loadSteps();
     void fromRow(const Row& r);
 
-    bool isComplete() const;
+    bool isComplete() const { return status == WorkflowStatus::COMPLETED; }
     std::vector<F77_WorkflowOperation*> readySteps();
 
     static std::shared_ptr<F77_Workflow> create(
         const std::string& entityType,
         const std::string& entityId,
         const std::string& templateName = "Standard-Freigabe",
-        const std::string& targetState  = "released",
+        EntityStatus targetState = EntityStatus::RELEASED,
         const std::string& initiatedBy  = "system");
 
     static std::shared_ptr<F77_Workflow> loadById(const std::string& id);
+    WorkflowSymbol workflowSymbol() const; ///< canonical symbol — UI maps to string/icon
     static std::vector<std::shared_ptr<F77_Workflow>> loadForEntity(
         const std::string& entityType, const std::string& entityId);
     static std::vector<std::shared_ptr<F77_Workflow>> loadActive();
@@ -228,7 +257,7 @@ public:
     static std::shared_ptr<F77_Workflow> startDefault(
         const std::string& entityType,
         const std::string& entityId,
-        const std::string& targetState  = "released",
+        EntityStatus targetState = EntityStatus::RELEASED,
         const std::string& initiatedBy  = "system");
 
     /// Engine tick: auto-approve Init/autoApprove steps, sync F18 status,
@@ -342,4 +371,13 @@ struct Version {
     }
 };
 
+inline std::ostream& operator<<(std::ostream& os, WorkflowStatus s) {
+    return os << toString(s);
+}
+inline std::ostream& operator<<(std::ostream& os, StepStatus s) {
+    return os << toString(s);
+}
+inline std::ostream& operator<<(std::ostream& os, WorkflowSymbol s) {
+    return os << static_cast<int>(s);
+}
 } // namespace Rosenholz

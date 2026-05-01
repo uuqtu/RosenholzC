@@ -193,7 +193,7 @@ struct WorkflowFixture : Fixture {
     std::shared_ptr<F77_Workflow>         instance;
 
     WorkflowFixture() : projFix("WF-Fixture-Project") {
-        templ = F77_WorkflowTemplate::create("Fixture-Workflow","released","f16");
+        templ = F77_WorkflowTemplate::create("Fixture-Workflow",Rosenholz::EntityStatus::RELEASED,"f16");
         templ->save();
         auto init = templ->addTemplateStep("Init","sequential",true,false); init.save();
         auto step = templ->addTemplateStep("Pruefung","sequential",false,false);

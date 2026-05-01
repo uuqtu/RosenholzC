@@ -66,15 +66,6 @@ inline std::ostream& operator<<(std::ostream& os, RevState s) {
 }
 
 
-// Keep DocRevState aliases for backward compatibility during migration
-// These will be removed once all callers use RevState directly.
-namespace DocRevState {
-    constexpr const char* IN_WORK      = "in_work";
-    constexpr const char* PRE_RELEASED = "pre_released";
-    constexpr const char* RELEASED     = "released";
-    constexpr const char* LOCKED       = "locked";
-    constexpr const char* CLOSED       = "closed";
-}
 
 // ============================================================
 // DocumentRevision

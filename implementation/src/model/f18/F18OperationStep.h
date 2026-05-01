@@ -53,11 +53,11 @@ public:
     bool        slaBreached         { false };
 
     // ── Status & result ───────────────────────────────────────
-    std::string status  { "pending" };
-    // Lifecycle: pending → in_progress → waiting → blocked → skipped → done
-    // Terminal states: done, skipped
-    // waiting: blocked on external input (not predecessor steps)
-    // blocked: blocked by predecessor steps or hard constraint
+    F18StepStatus status { F18StepStatus::PENDING };
+    // Lifecycle: PENDING → IN_PROGRESS → WAITING → BLOCKED → DONE / SKIPPED
+    // Terminal states: DONE, SKIPPED
+    // WAITING: blocked on external input (not predecessor steps)
+    // BLOCKED: blocked by predecessor steps or hard constraint
     bool        autoApprove         { false };
     bool        requiresComment     { false };
     bool        requiresDocument    { false };
@@ -88,10 +88,10 @@ public:
     std::string updatedAt;
 
     // ── State predicates ──────────────────────────────────────
+    /// Returns display symbol — UI layer maps to ASCII/icon.
+    F18StepSymbol displaySymbol() const;
     bool isComplete() const {
-        // A step is complete when it reached a terminal state.
-        // waiting and blocked are NOT terminal — the step can resume.
-        return status == "done" || status == "skipped";
+        return status == F18StepStatus::DONE || status == F18StepStatus::SKIPPED;
     }
 
     // ------------------------------
@@ -107,6 +107,7 @@ public:
 
     // ── CRUD ──────────────────────────────────────────────────
     bool save()   const;
+    bool complete();  ///< Sets status=done and completedDate=now
     bool remove() const;
 
     // ── Factory ───────────────────────────────────────────────

@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS projects (
     workflow_instance_id        TEXT,
     workflow_status             TEXT,
     workflow_current_state      TEXT,
-    release_workflow_id         TEXT,
+    -- release_workflow_id removed in v5: F16 has no lifecycle workflow
+    archived                    INTEGER DEFAULT 0,   -- 0=active 1=soft-deleted
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,

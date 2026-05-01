@@ -78,7 +78,7 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
     while (true) {
         if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
         hdr("F77 — " + t->taskId);
-        std::cout << "  Status       : " << t->status << "\n";
+        std::cout << "  Status       : " << entityStatusToString(t->status) << "\n";
 
         if (t->releaseWorkflowId.empty()) {
             std::cout << "  Kein F77 aktiv.\n";
@@ -91,11 +91,11 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
         }
 
         auto wf = F77_Workflow::loadById(t->releaseWorkflowId);
-        std::string wfStatus = wf ? wf->status : "unbekannt";
+        WorkflowStatus wfStatus = wf ? wf->status : WorkflowStatus::CANCELLED;
         std::cout << "  F77-ID  : " << t->releaseWorkflowId.substr(0, 36) << "\n";
-        std::cout << "  WF-Status    : " << wfStatus << "\n";
+        std::cout << "  WF-Status    : " << toString(wfStatus) << "\n";
 
-        if (wfStatus == "active") {
+        if (wfStatus == WorkflowStatus::ACTIVE) {
             int blockers = 0;
             F77_Engine::canRelease("f22", t->taskId, t->releaseWorkflowId, blockers);
             std::cout << (blockers > 0
@@ -204,7 +204,7 @@ void cmdF22(const std::vector<std::string>& args) {
         for (auto& t : all)
             std::cout << "  " << std::setw(28) << t->taskId
                       << std::setw(32) << t->title.substr(0, 30)
-                      << t->status << "\n";
+                      << entityStatusToString(t->status) << "\n";
         std::cout << "  " << all.size() << " F22\n";
         return;
     }
@@ -230,7 +230,7 @@ void cmdF22(const std::vector<std::string>& args) {
             for(char& c:chk) c=(char)std::tolower((unsigned char)c);
             if (chk.find(lq)!=std::string::npos) {
                 std::cout << "  F22  " << std::left << std::setw(28) << t->taskId
-                          << " " << t->title << "  [" << t->status << "]\n";
+                          << " " << t->title << "  [" << entityStatusToString(t->status) << "]\n";
                 found=true;
             }
         }
@@ -315,7 +315,7 @@ static bool f22_f18_list(std::shared_ptr<TaskF22> t) {
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << "[" << std::left << std::setw(14) << v->vorgangType.substr(0,13) << "] "
                   << std::setw(28) << v->title.substr(0,26)
-                  << "  " << v->status << "\n";
+                  << "  " << entityStatusToString(v->status) << "\n";
     return true;
 }
 

@@ -130,4 +130,28 @@ void Note::writeNotesFile(
     LOG_DEBUG("[Note] _Notizen.txt written: " + path);
 }
 
+std::vector<std::shared_ptr<Note>> Note::search(
+    const std::string& query, const std::string& entityType)
+{
+    auto* d = db();
+    std::vector<std::shared_ptr<Note>> result;
+    if (!d || query.empty()) return result;
+
+    std::string sql = "SELECT * FROM note_entries WHERE body LIKE ?";
+    std::vector<BindParam> params;
+    params.push_back(BindParam::text("%" + query + "%"));
+    if (!entityType.empty()) {
+        sql += " AND entity_type=?";
+        params.push_back(BindParam::text(entityType));
+    }
+    sql += " ORDER BY created_at DESC;";
+
+    for (auto& r : d->query(sql, params)) {
+        auto n = std::make_shared<Note>();
+        n->fromRow(r);
+        result.push_back(n);
+    }
+    return result;
+}
+
 } // namespace Rosenholz

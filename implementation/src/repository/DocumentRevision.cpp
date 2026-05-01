@@ -229,7 +229,7 @@ bool DocumentRevision::transitionState(RevState target, bool f77Gated) {
 
     // Additional locked→pre_released rule:
     // locked may only unlock if it is the NEWEST revision
-    if (revState == RevState::LOCKED && targetState == "pre_released") {
+    if (revState == RevState::LOCKED && target == RevState::PRE_RELEASED) {
         uint32_t latest = latestRevNumber(documentId);
         if (rev != latest) {
             LOG_WARN("[DocRevision] locked→pre_released only allowed for newest rev. "

@@ -57,7 +57,7 @@ void cmdF16(const std::vector<std::string>& args) {
             if (t.find(ql) != std::string::npos || r.find(ql) != std::string::npos) {
                 std::cout << "  " << std::left << std::setw(26) << p->regNumber.toString()
                           << "  " << std::setw(36) << p->title.substr(0, 35)
-                          << "  [" << p->status << "]\n";
+                          << "  [" << (p->archived ? "archiviert" : "aktiv") << "]\n";
                 ++found;
             }
         }
@@ -261,7 +261,7 @@ static bool f16_f22_list(std::shared_ptr<ProjectF16> p) {
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << std::left << std::setw(26) << t->regNumber.toString()
                   << "  " << std::setw(28) << t->title.substr(0,26)
-                  << "  " << t->status << "\n";
+                  << "  " << entityStatusToString(t->status) << "\n";
     return true;
 }
 
@@ -275,9 +275,7 @@ static bool f16_f22_open(std::shared_ptr<ProjectF16> p) {
 
 static bool f16_f22_new(std::shared_ptr<ProjectF16> p) {
     if (!p->canAddChildren()) {
-        std::cout << "  >> " << opResultMessage(p->isWorkflowComplete()
-            ? OperationResult::ENTITY_WF_COMPLETE
-            : OperationResult::ENTITY_RELEASED) << "\n";
+        std::cout << "  >> Projekt ist archiviert — keine neuen Eintraege.\n";
         return true;
     }
     auto t = createTaskWizard(p->projectId);
@@ -327,9 +325,7 @@ static bool f16_dok_open(std::shared_ptr<ProjectF16> p) {
 
 static bool f16_dok_new(std::shared_ptr<ProjectF16> p) {
     if (!p->canAddChildren()) {
-        std::cout << "  >> " << opResultMessage(p->isWorkflowComplete()
-            ? OperationResult::ENTITY_WF_COMPLETE
-            : OperationResult::ENTITY_RELEASED) << " — kein neues AKT.\n";
+        std::cout << "  >> Projekt ist archiviert — kein neues AKT.\n";
         return true;
     }
     auto doc = createDocumentWizardGuided();
@@ -378,8 +374,8 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
     while (true) {
         if (auto fresh = ProjectF16::loadById(p->projectId)) *p = *fresh;
         printProject(*p);
-        if (p->isReleased())
-            std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";
+        if (p->isArchived())
+            std::cout << "  ⚠ ARCHIVIERT — kein Bearbeitungsmodus.\n";
         std::cout
             << "  1.Bearbeiten\n"
             << "  F22: 2.listen | 3.<#> | 4.neu\n"

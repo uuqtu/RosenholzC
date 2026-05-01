@@ -184,20 +184,20 @@ void globalSearch(const std::string& query) {
     auto projs = ProjectF16::loadRecent(200);
     for (auto& p : projs)
         if (match(p->title) || match(p->projectId) || match(p->codename))
-            hits.push_back({"F16", p->projectId, p->title, p->status});
+            hits.push_back({"F16", p->projectId, p->title, p->archived ? "archiviert" : "aktiv"});
 
     // F22 Tasks
     auto tasks = TaskF22::loadRecent(200);
     for (auto& t : tasks)
         if (match(t->title) || match(t->taskId))
-            hits.push_back({"F22", t->taskId, t->title, t->status});
+            hits.push_back({"F22", t->taskId, t->title, entityStatusToString(t->status)});
 
     // F18 Workflows (all types)
     auto vorgaenge = Rosenholz::F18Operation::loadRecent(200);
     for (auto& v : vorgaenge)
         if (match(v->title) || match(v->vorgangId))
             hits.push_back({"F18", v->vorgangId, v->title,
-                            v->vorgangType + "|" + v->status});
+                            v->vorgangType + "|" + std::string(entityStatusToString(v->status))});
 
     // DOK Documents
     auto docs = Document::loadRecent(200);
@@ -209,7 +209,7 @@ void globalSearch(const std::string& query) {
     auto wfis = F77_Workflow::loadActive();
     for (auto& w : wfis)
         if (match(w->templateName) || match(w->workflowId))
-            hits.push_back({"F77", w->workflowId, w->templateName, w->status});
+            hits.push_back({"F77", w->workflowId, w->templateName, std::string(toString(w->status))});
 
     if (hits.empty()) {
         std::cout << "  (keine Treffer für \"" << query << "\")\n";

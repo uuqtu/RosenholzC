@@ -33,6 +33,49 @@
 
 namespace CLI {
 
+// ── Symbol → ASCII renderers (CLI only; Qt will use icons instead) ────────
+inline const char* stepSymbolStr(Rosenholz::StepSymbol s) {
+    switch (s) {
+        case Rosenholz::StepSymbol::APPROVED:    return "[OK]";
+        case Rosenholz::StepSymbol::REJECTED:    return "[X ]";
+        case Rosenholz::StepSymbol::SKIPPED:     return "[~ ]";
+        case Rosenholz::StepSymbol::IN_PROGRESS: return "[ >]";
+        case Rosenholz::StepSymbol::LOCKED:      return "[L ]";
+        case Rosenholz::StepSymbol::PENDING:     return "[  ]";
+    }
+    return "[  ]";
+}
+inline const char* stepSymbolShortStr(Rosenholz::StepSymbol s) {
+    switch (s) {
+        case Rosenholz::StepSymbol::APPROVED:    return "OK";
+        case Rosenholz::StepSymbol::REJECTED:    return "X";
+        case Rosenholz::StepSymbol::SKIPPED:     return "~";
+        case Rosenholz::StepSymbol::IN_PROGRESS: return ">";
+        case Rosenholz::StepSymbol::LOCKED:      return "L";
+        case Rosenholz::StepSymbol::PENDING:     return " ";
+    }
+    return " ";
+}
+inline const char* workflowSymbolStr(Rosenholz::WorkflowSymbol s) {
+    switch (s) {
+        case Rosenholz::WorkflowSymbol::COMPLETED: return "[ABGESCHL]";
+        case Rosenholz::WorkflowSymbol::LOCKED:    return "[GESPERRT]";
+        case Rosenholz::WorkflowSymbol::CANCELLED: return "[ABGEBR  ]";
+        case Rosenholz::WorkflowSymbol::ACTIVE:    return "[AKTIV   ]";
+    }
+    return "[?]";
+}
+inline const char* f18StepSymbolStr(Rosenholz::F18StepSymbol s) {
+    switch (s) {
+        case Rosenholz::F18StepSymbol::DONE:        return "OK";
+        case Rosenholz::F18StepSymbol::SKIPPED:     return "--";
+        case Rosenholz::F18StepSymbol::IN_PROGRESS: return " >";
+        case Rosenholz::F18StepSymbol::PENDING:     return "  ";
+    }
+    return "  ";
+}
+
+
 // ── Input / output primitives (cli_utils.cpp) ─────────────────
 std::string readLine(const std::string& prompt);
 std::string readOpt(const std::string& prompt);

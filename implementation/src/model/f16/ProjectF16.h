@@ -53,9 +53,10 @@ public:
     std::string leadId;            ///< FK -> persons
     std::string sponsorId;         ///< FK -> persons
 
-    // ── Status / phase ────────────────────────────────────
-    std::string status      { "in_work" }; ///< in_work → released (only via Main WFI End step)
-    std::string releaseWorkflowId;    ///< WFI ID of the controlling Main Workflow
+    // ── Phase / state ─────────────────────────────────────
+    // F16 has no lifecycle — it is always editable (IN_WORK).
+    // Use the archived flag to soft-delete.
+    bool archived { false };          ///< soft-delete; archived projects are hidden by default
     std::string phase;
     std::string methodology;       ///< agile|waterfall|kanban
     std::string classification;
@@ -78,14 +79,14 @@ public:
     double budgetCommitted  { 0.0 };
     double budgetActual     { 0.0 };
     double costVariance     { 0.0 };
-    double cpi              { 1.0 };  ///< Cost Performance Index
-    double spi              { 1.0 };  ///< Schedule Performance Index
-    double earnedValue      { 0.0 };
-    double plannedValue     { 0.0 };
-    double actualCost       { 0.0 };
-    double eac              { 0.0 };  ///< Estimate At Completion
-    double etc              { 0.0 };  ///< Estimate To Complete
-    double vac              { 0.0 };  ///< Variance At Completion
+    double costPerformanceIndex     { 1.0 }; ///< EV / AC  (1.0 = on budget)
+    double schedulePerformanceIndex { 1.0 }; ///< EV / PV  (1.0 = on schedule)
+    double earnedValue              { 0.0 }; ///< BCWP — budgeted cost of work performed
+    double plannedValue             { 0.0 }; ///< BCWS — budgeted cost of work scheduled
+    double actualCost               { 0.0 }; ///< ACWP — actual cost of work performed
+    double estimateAtCompletion     { 0.0 }; ///< EAC — projected total cost
+    double estimateToComplete       { 0.0 }; ///< ETC — remaining projected cost
+    double varianceAtCompletion     { 0.0 }; ///< VAC — EAC vs budget at completion
     std::string currency    { "EUR" };
 
     // ── Scope (QTCS) ──────────────────────────────────────
@@ -120,28 +121,14 @@ public:
 
 
     // ── State predicates ──────────────────────────────────────
-    // These are the authoritative guards — the CLI and any other UI
-    // must rely on these, never re-implement the logic themselves.
-
-    /// True when the project has been released and is now immutable.
-    bool isReleased() const { return status == "released"; }
-
-    /// True when the project can still be edited (not yet released).
-    bool canEdit()       const { return !isReleased(); }
-
-    /// True when new child entities (F22, F18, DOK) may be added.
-    bool canAddChildren() const { return !isReleased() && !isWorkflowComplete(); }
-    /// True when the controlling F77 workflow has status="completed".
-    bool isWorkflowComplete() const;
-
-    // ── Guarded update ────────────────────────────────────────
-    /// update() refuses silently if the project is released.
-    /// Returns false and logs a warning if the project is immutable.
-    OperationResult update();
+    // F16 has no release lifecycle — it is always editable.
+    bool isArchived()     const { return archived; }
+    bool canAddChildren() const { return !archived; }
 
     // ── CRUD ──────────────────────────────────────────────
     OperationResult save() const;
-    void ensureReleaseWorkflow();  ///< Creates Main WFI on first save
+    OperationResult update();
+    OperationResult updateScope(const std::string& scopeText); ///< Sets scope + timestamp
     bool load(const std::string& id);
     OperationResult remove();
 
@@ -160,6 +147,8 @@ public:
     //   - Does NOT save — call save() explicitly
     // ------------------------------
     static int count();
+    /// Load all projects that have a planned start or end date.
+    static std::vector<std::shared_ptr<ProjectF16>> loadWithDates();
     static std::shared_ptr<ProjectF16> create(
         const std::string& title,
         const std::string& projectType = "OV",

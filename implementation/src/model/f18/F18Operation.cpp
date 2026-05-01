@@ -39,7 +39,7 @@ void F18Operation::fromRow(const Row& r) {
     releaseWorkflowId     = g("release_workflow_id");
     title              = g("title");
     description        = g("description");
-    status             = g("status");
+    status             = entityStatusFrom(g("status"));
     ownerId            = g("owner_id");
     priority           = g("priority");
     notes              = g("notes");
@@ -147,7 +147,7 @@ OperationResult F18Operation::save() const {
         BindParam::nullOrText(releaseWorkflowId),
         BindParam::text(title),
         BindParam::nullOrText(description),
-        BindParam::text(status),
+        BindParam::text(entityStatusToString(status)),
         BindParam::nullOrText(ownerId),
         BindParam::text(priority),
         BindParam::nullOrText(incidentType),
@@ -258,7 +258,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     v->vorgangType = type.empty() ? F18OperationType::GENERIC : type;
     v->taskId      = taskId;
     v->title       = title;
-    v->status      = "in_work";
+    v->status      = EntityStatus::IN_WORK;
     v->priority    = "medium";
     v->createdAt   = nowIso();
     v->updatedAt   = nowIso();
@@ -283,7 +283,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     initStep->isInitialize  = true;
     initStep->autoApprove   = true;
     // Init step is always auto-approved immediately
-    initStep->status        = "done";   // auto-approved at creation
+    initStep->status        = F18StepStatus::DONE;   // auto-approved at creation
     initStep->decision      = "approved";
     initStep->decisionDate  = nowIso();
     initStep->completedDate = nowIso();
@@ -300,7 +300,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     endStep->isFinal        = true;
     endStep->autoApprove    = false;
     endStep->predecessorStepIds = initStep->stepId;
-    endStep->status         = "pending";
+    endStep->status         = F18StepStatus::PENDING;
     endStep->createdAt      = nowIso();
     endStep->updatedAt      = nowIso();
     endStep->save();
@@ -377,7 +377,7 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     newStep.sequenceOrder      = maxSeq + 1;
     newStep.isFree             = isFree;
     newStep.assignedTo         = assigneeId;
-    newStep.status             = "pending";
+    newStep.status             = F18StepStatus::PENDING;
     newStep.createdAt          = nowIso();
     newStep.updatedAt          = nowIso();
 
@@ -450,7 +450,7 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
     newStep.sequenceOrder      = newSeq;
     newStep.predecessorStepIds = predecessorStepId;
     newStep.assignedTo         = assigneeId;
-    newStep.status             = "pending";
+    newStep.status             = F18StepStatus::PENDING;
     newStep.createdAt          = nowIso();
     newStep.updatedAt          = nowIso();
     newStep.save();
@@ -510,7 +510,7 @@ OperationResult F18Operation::addNote(const std::string& authorId,
 bool F18Operation::isWorkflowComplete() const {
     if (releaseWorkflowId.empty()) return false;
     auto wf = Rosenholz::F77_Workflow::loadById(releaseWorkflowId);
-    return wf && wf->status == "completed";
+    return wf && wf->status == WorkflowStatus::COMPLETED;
 }
 
 void F18Operation::ensureReleaseWorkflow() {
@@ -528,7 +528,7 @@ std::string F18Operation::mfsSchluesselText() const {
     std::ostringstream s;
     s << "  ID      : " << vorgangId << "\n"
       << "  Typ     : " << vorgangType << "\n"
-      << "  Status  : " << status << "\n"
+      << "  Status  : " << entityStatusToString(status) << "\n"
       << "  F22     : " << taskId << "\n";
     auto docs = Rosenholz::Document::loadForEntity("f18", vorgangId);
     if (!docs.empty()) {
@@ -548,8 +548,8 @@ bool F18Operation::tick() {
 
     // Auto-approve Init step:
     for (auto& s : steps) {
-        if (s.isInitialize && s.status == "pending") {
-            s.status = "done";
+        if (s.isInitialize && s.status == F18StepStatus::PENDING) {
+            s.status = F18StepStatus::DONE;
             s.completedDate = nowIso();
             s.save();
             changed = true;
@@ -563,22 +563,22 @@ bool F18Operation::tick() {
     for (auto& s : steps) {
         if (s.isInitialize || s.isFinal) continue;
         hasMid = true;
-        if (s.status != "done" && s.status != "completed"
-            && s.status != "approved" && s.status != "skipped"
-            && s.status != "rejected") {
+        if (!s.isComplete()) {
             allMidDone = false;
         }
     }
 
     // Auto-approve End step when all mid-steps are done:
     for (auto& s : steps) {
-        if (s.isFinal && s.status == "pending" && (allMidDone || !hasMid)) {
-            s.status = "done";
+        if (s.isFinal && s.status == F18StepStatus::PENDING
+            && (allMidDone || !hasMid)) {
+            s.status = F18StepStatus::DONE;
             s.completedDate = nowIso();
             s.save();
             // Advance operation status to released:
-            if (status != "released" && status != "cancelled") {
-                status = "released";
+            if (status != EntityStatus::RELEASED
+    && status != EntityStatus::CANCELLED) {
+                status = EntityStatus::RELEASED;
                 updatedAt = nowIso();
                 update();
                 LOG_INFO("[F18] Operation auto-completed: " + vorgangId);

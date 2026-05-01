@@ -42,6 +42,11 @@ struct Note {
 
     // ── MFS export ───────────────────────────────────────────
     /// Write all notes for an entity to a _Notizen.txt file.
+    /// Full-text search across note bodies.
+    static std::vector<std::shared_ptr<Note>> search(
+        const std::string& query,
+        const std::string& entityType = "");
+
     static void writeNotesFile(
         const std::string& entityType,
         const std::string& entityId,

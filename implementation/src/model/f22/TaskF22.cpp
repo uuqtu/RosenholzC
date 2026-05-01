@@ -39,7 +39,7 @@ std::shared_ptr<TaskF22> TaskF22::create(
     t->title         = title_;
     t->assigneeId    = assigneeId_;
     t->parentTaskId  = parentTaskId_;
-    t->status        = "in_work";
+    t->status        = EntityStatus::IN_WORK;
     t->createdAt     = nowIso();
     t->updatedAt     = t->createdAt;
     t->notes         = "{}";
@@ -89,7 +89,7 @@ OperationResult TaskF22::save() const {
         BindParam::text(title),
         BindParam::nullOrText(description),
         BindParam::nullOrText(taskType),
-        BindParam::text(status),
+        BindParam::text(entityStatusToString(status)),
         BindParam::nullOrText(priority),
         BindParam::real(effortPlannedHrs),
         BindParam::real(effortActualHrs),
@@ -131,7 +131,7 @@ void TaskF22::fromRow(const Row& r) {
     title                = rowGet(r,"title");
     description          = rowGet(r,"description");
     taskType             = rowGet(r,"task_type");
-    status               = rowGet(r,"status");
+    status               = entityStatusFrom(rowGet(r,"status"));
     priority             = rowGet(r,"priority");
     effortPlannedHrs     = rowGetDbl(r,"effort_planned_hrs");
     effortActualHrs      = rowGetDbl(r,"effort_actual_hrs");
@@ -291,7 +291,7 @@ std::string TaskF22::convertToProject(const std::string& projectType_) {
         BindParam::int64(projReg.year),
         BindParam::text(title + " [promoted from F22/" + taskId + "]"),
         BindParam::text(projectType_),
-        BindParam::text(status),
+        BindParam::text(entityStatusToString(EntityStatus::IN_WORK)),  // new project
         BindParam::nullOrText(acceptanceCriteria),
         BindParam::real(costPlanned),
         BindParam::nullOrText(startDatePlanned),
@@ -322,7 +322,7 @@ std::shared_ptr<TaskF22> TaskF22::fromJson(const json& j) {
     t->taskId     = j.value("taskId",    "");
     t->projectId  = j.value("projectId", "");
     t->title      = j.value("title",     "");
-    t->status     = j.value("status",    "draft");
+    t->status     = entityStatusFrom(j.value("status", "in_work"));
     t->assigneeId = j.value("assigneeId","");
     return t;
 }
@@ -355,7 +355,7 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
 bool TaskF22::isWorkflowComplete() const {
     if (releaseWorkflowId.empty()) return false;
     auto wf = Rosenholz::F77_Workflow::loadById(releaseWorkflowId);
-    return wf && wf->status == "completed";
+    return wf && wf->status == WorkflowStatus::COMPLETED;
 }
 
 void TaskF22::ensureReleaseWorkflow() {
@@ -373,7 +373,7 @@ std::string TaskF22::mfsSchluesselText() const {
     std::ostringstream s;
     s << "  ID      : " << taskId << "\n"
       << "  Titel   : " << title << "\n"
-      << "  Status  : " << status << "\n"
+      << "  Status  : " << entityStatusToString(status) << "\n"
       << "  F16     : " << projectId << "\n";
     auto docs = Rosenholz::Document::loadForEntity("f22", taskId);
     if (!docs.empty()) {

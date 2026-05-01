@@ -42,7 +42,7 @@ public:
     std::string decisions;
     std::string actions;        // JSON array of action items
     std::string notes;
-    std::string status  { "scheduled" };   // scheduled|completed|cancelled
+    CommStatus  status  { CommStatus::SCHEDULED }; ///< lifecycle
 
     // ── Audit ─────────────────────────────────────────────────
     std::string createdAt;
@@ -88,6 +88,11 @@ public:
     bool complete(const std::string& decisions, const std::string& actions);
 
     static std::vector<std::shared_ptr<Communication>> loadRecent(int n = 20);
+
+    // ── Notiz template ───────────────────────────────────────────
+    /// Returns a pre-filled note template string for the given commType.
+    /// Used only in KOM creation flow — nowhere else.
+    static std::string notizTemplate(CommType type);
 
 private:
     void fromRow(const Row& r);

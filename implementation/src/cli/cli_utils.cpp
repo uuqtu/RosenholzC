@@ -30,6 +30,7 @@
 
 namespace CLI {
 
+
 using namespace Rosenholz;
 
 // ── Output helpers ────────────────────────────────────────────
@@ -167,20 +168,18 @@ bool yesno(const std::string& prompt) {
 void printProject(const ProjectF16& p) {
     hdr("F16 " + p.regNumber.toString() + "  " + p.title.substr(0,38));
     std::cout << "  ID:" << p.projectId
-              << "  Status:" << p.status << "/" << p.sizeClass << "\n";
+              << "  Status:" << (p.archived ? "archiviert" : "aktiv") << "/" << p.sizeClass << "\n";
     if (!p.leadId.empty() || p.budgetPlanned > 0)
         std::cout << "  Lead:" << (p.leadId.empty()?"—":p.leadId.substr(0,26))
                   << "  Budget:" << (int)p.budgetPlanned << " " << p.currency << "\n";
     if (!p.startDatePlanned.empty() || !p.endDatePlanned.empty())
         std::cout << "  " << (p.startDatePlanned.empty()?"—":p.startDatePlanned.substr(0,10))
                   << " → " << (p.endDatePlanned.empty()?"—":p.endDatePlanned.substr(0,10)) << "\n";
-    if (!p.releaseWorkflowId.empty())
-        std::cout << "  WFI:" << p.releaseWorkflowId.substr(0,36) << "\n";
 }
 void printTask(const TaskF22& t) {
     hdr("F22 " + t.regNumber.toString() + "  " + t.title.substr(0,38));
     std::cout << "  ID:" << t.taskId
-              << "  " << t.status << "/" << t.priority
+              << "  " << entityStatusToString(t.status) << "/" << t.priority
               << "  " << t.percentComplete << "%\n";
     std::cout << "  F16:" << t.projectId.substr(0,26);
     if (!t.assigneeId.empty()) std::cout << "  Person:" << t.assigneeId.substr(0,26);
@@ -243,11 +242,11 @@ void listProjects() {
         std::string phase = p->phase.empty()    ? "-" : p->phase;
         std::string prio  = p->priority.empty() ? "-" : p->priority;
         char cpibuf[10];
-        snprintf(cpibuf, sizeof(cpibuf), "%.2f", p->cpi);
+        snprintf(cpibuf, sizeof(cpibuf), "%.2f", p->costPerformanceIndex);
         std::cout << "  " << std::left
                   << std::setw(28) << p->projectId
                   << std::setw(32) << title
-                  << std::setw(14) << p->status
+                  << std::setw(14) << (p->archived ? "archiviert" : "aktiv")
                   << std::setw(12) << phase
                   << std::setw(8)  << prio
                   << cpibuf << "\n";
@@ -275,7 +274,7 @@ void listTasks(const std::string& projectId) {
         std::cout << "  " << std::left
                   << std::setw(28) << t->taskId
                   << std::setw(30) << title
-                  << std::setw(14) << t->status
+                  << std::setw(14) << entityStatusToString(t->status)
                   << std::setw(6)  << t->percentComplete
                   << std::setw(10) << t->priority
                   << ass << "\n";
@@ -298,7 +297,7 @@ listComms(const std::string& ownerId, const std::string& ownerType) {
                       << std::left << std::setw(8) << c->commType.substr(0,7) << "] "
                       << std::setw(26) << c->title.substr(0,24)
                       << "  " << fdate(c->scheduledDate)
-                      << "  " << c->status << "\n";
+                      << "  " << commStatusToString(c->status) << "\n";
     }
     return items;
 }

@@ -37,7 +37,7 @@ using namespace Rosenholz;
 static void printHelp() {
     std::cout <<
 "Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 -o Auswahl | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
-"     -tasks       | Meine Workflow-Aufgaben (F77-Tasks)\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/AKT/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""     -go <ref>    Direkt öffnen (ID / Typ:N / Seq#)\n""     -ctx [ref]   Kontext setzen (oder 'clear')  ..=zurück\n""     -hist        Verlauf zuletzt geöffneter Entitäten\n""     -tree [f16id] Hierarchiebaum F16→F22→AKT/F18\n""     -watch [N]   Polling: Benachrichtigung bei Task-Änderungen (N=Sek, Standard=30)\n""     -note <id> [Text]  Schnellnotiz ohne Menü\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
+"     -tasks       | Meine Workflow-Aufgaben (F77-Tasks)\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/AKT/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""     -go <ref>    Direkt öffnen (ID / Typ:N / Seq#)\n""     -ctx [ref]   Kontext setzen (oder 'clear')  ..=zurück\n""     -hist        Verlauf zuletzt geöffneter Entitäten\n""     -tree [f16id] Hierarchiebaum F16→F22→AKT/F18\n""     -watch [N]   Polling: Benachrichtigung bei Task-Änderungen (N=Sek, Standard=30)\n""     -note <id> [Text]  Schnellnotiz ohne Menü\n""     -cal               Kalenderansicht geplanter Start-/Enddaten\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
 ;
 }
 
@@ -413,6 +413,25 @@ static void dispatch(const std::string& cmd, const std::vector<std::string>& res
         return;
     }
 
+    if (cmd == "-cal") {
+        // Calendar view: F16 and F22 entries with dates
+        std::cout << "\n  -- KALENDER --\n";
+        auto projs = Rosenholz::ProjectF16::loadWithDates();
+        if (projs.empty()) {
+            std::cout << "  (keine Datumseintraege)\n";
+        } else {
+            for (auto& p : projs) {
+                std::cout << "  F16 "
+                          << std::left << std::setw(26) << p->regNumber.toString()
+                          << "  " << std::setw(28) << p->title.substr(0,26)
+                          << "  Start:" << CLI::fval(p->startDatePlanned)
+                          << "  Ende:"  << CLI::fval(p->endDatePlanned) << "\n";
+            }
+        }
+        std::cout << "\n";
+        return;
+    }
+
     if (cmd == "-note") {
         // -note <id> "<text>" OR -note <id> (then prompt)
         if (rest.empty()) { CLI::printErr("-note <entityId> [Notiztext]"); return; }
@@ -480,6 +499,15 @@ static void dispatch(const std::string& cmd, const std::vector<std::string>& res
             q += r;
         }
         CLI::cmdSearch(q);
+        // Also search notes:
+        auto notes = Rosenholz::Note::search(q);
+        if (!notes.empty()) {
+            std::cout << "\n  -- NOTIZEN (" << notes.size() << ") --\n";
+            for (auto& n : notes)
+                std::cout << "  [" << n->createdAt.substr(0,16) << "] "
+                          << n->entityType << "/" << n->entityId.substr(0,20)
+                          << "  " << n->body.substr(0,50) << "\n";
+        }
         return;
     }
 

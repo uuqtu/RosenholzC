@@ -69,7 +69,7 @@ public:
     // ── Common fields (all types) ─────────────────────────────
     std::string title;
     std::string description;
-    std::string status          { "in_work" }; // in_work → released (only via Main WFI End step)
+    EntityStatus status         { EntityStatus::IN_WORK }; ///< lifecycle via F77 onlyWFI End step)
     std::string releaseWorkflowId;               // WFI ID of the controlling Main Workflow
     std::string ownerId;                      // → Person
     std::string priority        { "medium" }; // low|medium|high|critical
@@ -168,8 +168,11 @@ public:
 
 
     // ── State predicates ──────────────────────────────────────
-    bool isReleased() const { return status == "released"; }
-    bool canEdit()    const { return !isReleased() && !isWorkflowComplete(); }
+    bool isReleased()    const { return status == EntityStatus::RELEASED; }
+    bool isLocked()      const { return status == EntityStatus::LOCKED; }
+    bool isClosed()      const { return status == EntityStatus::CLOSED; }
+    bool isEditable()    const { return status == EntityStatus::IN_WORK; }
+    bool canEdit()    const { return status == EntityStatus::IN_WORK && !isWorkflowComplete(); }
     /// True when the controlling F77 workflow has status="completed".
     bool isWorkflowComplete() const;
 
