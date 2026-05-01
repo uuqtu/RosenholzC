@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
             std::exit(2);
         }
         MigrationEngine::runAll();
-        F77_Engine::seedDefaultTemplates();
+        F77Engine::seedDefaultTemplates();
     };
 
     // Initial setup: wipe and set test dir, then init
@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
     }
     Logger::instance().setLevel(LogLevel::WARN);
     MigrationEngine::runAll();
-    F77_Engine::seedDefaultTemplates();
+    F77Engine::seedDefaultTemplates();
 
     std::cout << "\n=== ROSENHOLZ PM TEST SUITE v" << Version::toString() << " ===\n\n";
 

@@ -17,7 +17,7 @@ void Communication::fromRow(const Row& r) {
     auto g  = [&](const char* k) { return rowGet(r,k); };
     auto gi = [&](const char* k) { return rowGetInt(r,k); };
 
-    commId        = g("comm_id");
+    communicationId        = g("communication_id");
     ownerId       = g("owner_id");
     ownerType     = g("owner_type");
     commType      = g("comm_type");
@@ -43,12 +43,12 @@ bool Communication::save() const {
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO communications
-        (comm_id, owner_id, owner_type, comm_type, title, agenda,
+        (communication_id, owner_id, owner_type, comm_type, title, agenda,
          scheduled_date, actual_date, duration_mins, channel, location, organiser_id,
          participants, decisions, actions, notes, status, created_at, updated_at)
         VALUES(?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,?,?,?)
     )SQL", {
-        BindParam::text(commId), BindParam::text(ownerId), BindParam::text(ownerType), BindParam::text(commType), BindParam::text(title), BindParam::nullOrText(agenda),
+        BindParam::text(communicationId), BindParam::text(ownerId), BindParam::text(ownerType), BindParam::text(commType), BindParam::text(title), BindParam::nullOrText(agenda),
         BindParam::nullOrText(scheduledDate), BindParam::nullOrText(actualDate), BindParam::int64(durationMins), BindParam::nullOrText(channel), BindParam::nullOrText(location), BindParam::nullOrText(organiserId),
         BindParam::text(participants.empty()?"[]":participants),
         BindParam::nullOrText(decisions), BindParam::text(actions.empty()?"[]":actions), BindParam::nullOrText(notes),
@@ -60,13 +60,13 @@ bool Communication::update() { updatedAt = nowIso(); return save(); }
 
 bool Communication::remove() const {
     auto* d = db(); if (!d) return false;
-    return d->exec("DELETE FROM communications WHERE comm_id=?;",
-                   {BindParam::text(commId)});
+    return d->exec("DELETE FROM communications WHERE communication_id=?;",
+                   {BindParam::text(communicationId)});
 }
 
 bool Communication::load(const std::string& id) {
     auto* d = db(); if (!d) return false;
-    auto rows = d->query("SELECT * FROM communications WHERE comm_id=?;",
+    auto rows = d->query("SELECT * FROM communications WHERE communication_id=?;",
                          {BindParam::text(id)});
     if (rows.empty()) return false;
     fromRow(rows[0]);
@@ -80,7 +80,7 @@ std::shared_ptr<Communication> Communication::create(
     const std::string& commType)
 {
     auto c = std::make_shared<Communication>();
-    c->commId    = genId("COM");
+    c->communicationId    = genId("COM");
     c->ownerId   = ownerId;
     c->ownerType = ownerType;
     c->commType  = commType.empty() ? "meeting" : commType;

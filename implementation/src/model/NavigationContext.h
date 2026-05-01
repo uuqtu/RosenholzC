@@ -13,11 +13,11 @@ namespace Rosenholz {
 // ── EntityType ────────────────────────────────────────────────
 enum class EntityType {
     NONE = 0,
-    F16,    // ProjectF16
-    F22,    // TaskF22
+    F16,    // F16
+    F22,    // F22
     F18,    // F18Operation
     AKT,    // Document (Akte)
-    F77,    // F77_Workflow
+    F77,    // F77W
     PER,    // Person
 };
 

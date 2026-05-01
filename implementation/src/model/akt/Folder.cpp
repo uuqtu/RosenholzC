@@ -1,10 +1,10 @@
-// Document.cpp
-#include "Document.h"
-#include "DocumentObject.h"
-#include "../../repository/ArchiveStore.h"
-#include "../../repository/DocumentRevision.h"
+// Folder.cpp
+#include "Folder.h"
+#include "FolderObject.h"
+#include "../../model/akt/ArchiveStore.h"
+#include "../../model/akt/FolderRevision.h"
 #include "../../workflow/F77Workflow.h"
-#include "../../repository/DocumentRevision.h"
+#include "../../model/akt/FolderRevision.h"
 #include <cstdlib>
 #include "../../core/Database.h"
 #include "../../workflow/F77Workflow.h"
@@ -42,11 +42,11 @@ namespace Rosenholz {
 // Returns:
 //   Shared pointer to in-memory Document
 // ------------------------------
-std::shared_ptr<Document> Document::create(
+std::shared_ptr<Folder> Folder::create(
     const std::string& title_, const std::string& type_,
     const std::string& taskId_, const std::string& f18OpId_)
 {
-    auto d = std::make_shared<Document>();
+    auto d = std::make_shared<Folder>();
     d->folderId  = genId("AKT"); d->title = title_;
     d->docType     = type_;
     d->taskId      = taskId_;
@@ -54,18 +54,18 @@ std::shared_ptr<Document> Document::create(
     d->dateCreated = nowIso();
     d->createdAt   = d->dateCreated; d->updatedAt = d->createdAt;
     d->notes       = "{}";
-    LOG_INFO("Document created: " + d->folderId + " \"" + title_ + "\"");
+    LOG_INFO("Folder created: " + d->folderId + " \"" + title_ + "\"");
     return d;
 }
 
 
 // ── MFS folder indexing ────────────────────────────────────────
-std::vector<std::pair<uint32_t,std::string>> Document::indexMfsFolders() const {
+std::vector<std::pair<uint32_t,std::string>> Folder::indexMfsFolders() const {
     std::vector<std::pair<uint32_t,std::string>> result;
     // Load all revisions and scan each folder
-    auto revs = Rosenholz::DocumentRevision::loadAllRevisions(folderId);
+    auto revs = Rosenholz::FolderRevision::loadAllRevisions(folderId);
     for (auto& rev : revs) {
-        auto unregistered = Rosenholz::DocumentObject::scanForUnregisteredFiles(
+        auto unregistered = Rosenholz::FolderObject::scanForUnregisteredFiles(
             folderId, rev->rev);
         for (auto& path : unregistered)
             result.emplace_back(rev->rev, path);
@@ -74,9 +74,9 @@ std::vector<std::pair<uint32_t,std::string>> Document::indexMfsFolders() const {
 }
 
 
-OperationResult Document::save() const {
+OperationResult Folder::save() const {
     auto* db = DatabasePool::instance().get("akt");
-    if (!db) { LOG_ERROR("Document::save — documents DB unavailable"); return OperationResult::IO_ERROR; }
+    if (!db) { LOG_ERROR("Folder::save — documents DB unavailable"); return OperationResult::IO_ERROR; }
     OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO folders
         (folder_id,workflow_id,
@@ -88,7 +88,7 @@ OperationResult Document::save() const {
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )", {
         BindParam::text(folderId),
-        BindParam::nullOrText(releaseWorkflowId),
+        BindParam::nullOrText(workflowId),
         BindParam::nullOrText(taskId),
         BindParam::nullOrText(f18OperationId), BindParam::nullOrText(f18StepId),
         BindParam::nullOrText(authorId), BindParam::nullOrText(approvedBy),
@@ -108,10 +108,10 @@ OperationResult Document::save() const {
     return ok;
 }
 
-void Document::fromRow(const Row& r) {
+void Folder::fromRow(const Row& r) {
     auto g=[&](const std::string& k){ auto it=r.find(k); return it!=r.end()?it->second:""; };
     folderId=g("folder_id");
-    releaseWorkflowId=g("workflow_id");
+    workflowId=g("workflow_id");
     taskId=g("task_id");
     f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
     authorId=g("author_id"); approvedBy=g("approved_by");
@@ -129,33 +129,33 @@ void Document::fromRow(const Row& r) {
     tags=g("tags"); summary=g("summary"); links=g("links"); notes=g("notes");
     createdAt=g("created_at"); updatedAt=g("updated_at");
 }
-bool Document::load(const std::string& id) {
+bool Folder::load(const std::string& id) {
     auto* db=DatabasePool::instance().get("akt");
     if (!db) return false;
     auto rows=db->query("SELECT * FROM folders WHERE folder_id=?;",{BindParam::text(id)});
-    if (rows.empty()) { LOG_WARN("Document not found: "+id); return false; }
+    if (rows.empty()) { LOG_WARN("Folder not found: "+id); return false; }
     fromRow(rows[0]); return true;
 }
-OperationResult Document::remove() {
+OperationResult Folder::remove() {
     auto* db=DatabasePool::instance().get("akt");
     if (!db) return OperationResult::IO_ERROR;
     db->exec("DELETE FROM entity_folders WHERE folder_id=?;",{BindParam::text(folderId)});
     return db->exec("DELETE FROM folders WHERE folder_id=?;",{BindParam::text(folderId)})
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
-OperationResult Document::update() {
+OperationResult Folder::update() {
     if (!isEditable()) {
         LOG_WARN("[AKT] update() verweigert: Revision ist eingefroren — " + folderId);
         return OperationResult::DOC_REV_NOT_IN_WORK;
     } updatedAt=nowIso(); dateModified=updatedAt; return save(); }
 
-std::shared_ptr<Document> Document::loadById(const std::string& id) {
-    auto d=std::make_shared<Document>(); if(!d->load(id)) return nullptr; return d;
-}std::vector<std::shared_ptr<Document>> Document::loadForEntity(
+std::shared_ptr<Folder> Folder::loadById(const std::string& id) {
+    auto d=std::make_shared<Folder>(); if(!d->load(id)) return nullptr; return d;
+}std::vector<std::shared_ptr<Folder>> Folder::loadForEntity(
     const std::string& et, const std::string& eid)
 {
     auto* db=DatabasePool::instance().get("akt");
-    std::vector<std::shared_ptr<Document>> result;
+    std::vector<std::shared_ptr<Folder>> result;
     if (!db) return result;
 
     // Primary: documents with task_id / project_id set directly
@@ -164,7 +164,7 @@ std::shared_ptr<Document> Document::loadById(const std::string& id) {
             "SELECT * FROM folders WHERE task_id=? ORDER BY date_created DESC;",
             {BindParam::text(eid)});
         for (auto& r : rows) {
-            auto d = std::make_shared<Document>(); d->fromRow(r); result.push_back(d);
+            auto d = std::make_shared<Folder>(); d->fromRow(r); result.push_back(d);
         }
     }
 
@@ -178,14 +178,14 @@ std::shared_ptr<Document> Document::loadById(const std::string& id) {
         WHERE e.entity_type=? AND e.entity_id=? ORDER BY d.date_created DESC;
     )", {BindParam::text(et), BindParam::text(eid)});
     for (auto& r : rows2) {
-        auto d = std::make_shared<Document>(); d->fromRow(r);
+        auto d = std::make_shared<Folder>(); d->fromRow(r);
         if (!seen.count(d->folderId)) { result.push_back(d); seen.insert(d->folderId); }
     }
     return result;
 }
 
 // ── URL archiving ─────────────────────────────────────────────
-std::shared_ptr<Document> Document::archiveFromUrl(
+std::shared_ptr<Folder> Folder::archiveFromUrl(
     const std::string& url, const std::string& pid, const std::string& aid)
 {
     LOG_INFO("Archiving URL: " + url);
@@ -228,7 +228,7 @@ std::shared_ptr<Document> Document::archiveFromUrl(
     return d;
 }
 
-std::string Document::archiveWebsite(const std::string& url, const std::string& destDir) {
+std::string Folder::archiveWebsite(const std::string& url, const std::string& destDir) {
 #ifdef _WIN32
     return FileOps::downloadUrl(url, destDir);
 #else
@@ -271,7 +271,7 @@ std::string Document::archiveWebsite(const std::string& url, const std::string& 
 // Returns:
 //   true on success
 // ------------------------------
-OperationResult Document::attachToEntity(const std::string& et, const std::string& eid, const std::string& rel) {
+OperationResult Folder::attachToEntity(const std::string& et, const std::string& eid, const std::string& rel) {
     auto* db = DatabasePool::instance().get("akt");
     if (!db) return OperationResult::DB_ERROR;
     return db->exec(
@@ -279,9 +279,9 @@ OperationResult Document::attachToEntity(const std::string& et, const std::strin
         {BindParam::text(et), BindParam::text(eid), BindParam::text(folderId), BindParam::text(rel)})
         ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
-OperationResult Document::reassignAuthor(const std::string& id) { authorId=id; return update(); }
-OperationResult Document::reassignToTask(const std::string& id) { taskId=id; return update(); }
-nlohmann::json Document::toJson() const {
+OperationResult Folder::reassignAuthor(const std::string& id) { authorId=id; return update(); }
+OperationResult Folder::reassignToTask(const std::string& id) { taskId=id; return update(); }
+nlohmann::json Folder::toJson() const {
     return {{"folderId",folderId},{"title",title},{"docType",docType},
             {"format",format},{"status",currentRevisionState()}};
 }
@@ -311,7 +311,7 @@ static std::string computeSHA256(const std::string& filePath) {
 }
 
 // ── MFS document directory for this document ─────────────────
-static std::string docMFSDir(const Document& d) {
+static std::string docMFSDir(const Folder& d) {
     const std::string& mfsRoot = Config::instance().mfsPath();
     // Parent: F22 task or F18 operation
     std::string parent = d.taskId.empty() ? d.f18OperationId : d.taskId;
@@ -322,21 +322,21 @@ static std::string docMFSDir(const Document& d) {
 }
 
 // ── MFS canonical filename for a document version ────────────
-static std::string mfsDocFilename(const Document& d, int revNumber = 0) {
+static std::string mfsDocFilename(const Folder& d, int revNumber = 0) {
     std::string docSane   = sanitiseRegNr(d.folderId);
     std::string titleSafe = FileOps::sanitizeFilename(d.title);
     if (titleSafe.size() > 40) titleSafe = titleSafe.substr(0, 40);
     std::string ext = d.format.empty() ? "bin" : d.format;
     // Format: {DOK-ID}_{Titel}_r{NNN}.{ext}  (revision-based, no version field)
     int rev = (revNumber > 0) ? revNumber
-                               : (int)DocumentRevision::latestRevNumber(d.folderId);
+                               : (int)FolderRevision::latestRevNumber(d.folderId);
     if (rev <= 0) rev = 1;
     char revbuf[8];
     std::snprintf(revbuf, sizeof(revbuf), "r%03d", rev);
     return docSane + "_" + titleSafe + "_" + revbuf + "." + ext;
 }
 
-OperationResult Document::importLocalFile(const std::string& srcPath) {
+OperationResult Folder::importLocalFile(const std::string& srcPath) {
     if (!FileOps::fileExists(srcPath)) {
         LOG_ERROR("importLocalFile: not found: " + srcPath);
         return OperationResult::IO_ERROR;
@@ -386,8 +386,8 @@ static bool restoreContentFromLMDB(
     Rosenholz::Archive::ArchiveStore& store,
     const std::string& folderId,
     const std::string& format,
-    std::shared_ptr<Rosenholz::DocumentRevision> prevRev,
-    std::shared_ptr<Rosenholz::DocumentRevision> curRev)
+    std::shared_ptr<Rosenholz::FolderRevision> prevRev,
+    std::shared_ptr<Rosenholz::FolderRevision> curRev)
 {
     if (prevRev->contentHash.empty() || !store.isOpen()) return false;
 
@@ -410,14 +410,14 @@ static bool restoreContentFromLMDB(
     return true;
 }
 
-OperationResult Document::revertChanges() {
+OperationResult Folder::revertChanges() {
     // Guard clauses — all failure conditions up front, success path runs flat.
     if (preCheckoutRevId == 0 && checkedOutPath.empty()) {
         LOG_WARN("[Document] revertChanges: kein aktiver Checkout fuer " + folderId);
         return OperationResult::IO_ERROR;
     }
 
-    auto curRev = Rosenholz::DocumentRevision::currentRevision(folderId);
+    auto curRev = Rosenholz::FolderRevision::currentRevision(folderId);
     if (!curRev) {
         LOG_ERROR("[Document] revertChanges: keine aktive Revision"); return OperationResult::DB_ERROR;
     }
@@ -431,7 +431,7 @@ OperationResult Document::revertChanges() {
         return OperationResult::DOC_NO_PARENT_REV;
     }
 
-    auto prevRev = Rosenholz::DocumentRevision::loadByRev(folderId, curRev->parentRev);
+    auto prevRev = Rosenholz::FolderRevision::loadByRev(folderId, curRev->parentRev);
     if (!prevRev) {
         LOG_ERROR("[Document] revertChanges: Vorgaenger-Revision nicht gefunden");
         return OperationResult::DB_ERROR;
@@ -455,10 +455,10 @@ OperationResult Document::revertChanges() {
     return restored ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-std::vector<Document::VersionRecord> Document::loadVersions() const {
-    // Returns version history via DocumentRevision (replaces document_versions table).
+std::vector<Folder::VersionRecord> Folder::loadVersions() const {
+    // Returns version history via FolderRevision (replaces document_versions table).
     std::vector<VersionRecord> result;
-    auto revs = DocumentRevision::loadAllRevisions(folderId);
+    auto revs = FolderRevision::loadAllRevisions(folderId);
     for (auto& r : revs) {
         VersionRecord v;
         v.versionId     = r->folderId + "/r" + std::to_string(r->rev);
@@ -474,7 +474,7 @@ std::vector<Document::VersionRecord> Document::loadVersions() const {
     return result;
 }
 
-bool Document::openFile(const std::string& mode, const std::string& pathOverride) const {
+bool Folder::openFile(const std::string& mode, const std::string& pathOverride) const {
     if (filePath.empty() || !FileOps::fileExists(filePath)) {
         LOG_WARN("openFile: no file at " + filePath);
         return false;
@@ -512,14 +512,14 @@ bool Document::openFile(const std::string& mode, const std::string& pathOverride
 // Parameters:
 //   n : maximum number of results (default 20)
 // ------------------------------
-std::vector<std::shared_ptr<Document>> Document::loadRecent(int n,
+std::vector<std::shared_ptr<Folder>> Folder::loadRecent(int n,
     DocLoadRule /*rule*/, const std::string& /*targetDate*/) {
-    std::vector<std::shared_ptr<Document>> result;
+    std::vector<std::shared_ptr<Folder>> result;
     auto* db = DatabasePool::instance().get("akt");
     if (!db) return result;
     auto rows = db->query("SELECT * FROM folders ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
     for (auto& r : rows) {
-        auto obj = std::make_shared<Document>();
+        auto obj = std::make_shared<Folder>();
         obj->fromRow(r);
         result.push_back(obj);
     }
@@ -536,41 +536,41 @@ std::vector<std::shared_ptr<Document>> Document::loadRecent(int n,
 
 // ── State predicates (direct implementation) ──────────────────
 
-RevState Document::currentRevisionState() const {
-    auto cur = Rosenholz::DocumentRevision::currentRevision(folderId);
+RevState Folder::currentRevisionState() const {
+    auto cur = Rosenholz::FolderRevision::currentRevision(folderId);
     return cur ? cur->revState : RevState::IN_WORK;
 }
 
-bool Document::isEditable() const {
+bool Folder::isEditable() const {
     return currentRevisionState() == RevState::IN_WORK;
 }
-bool Document::canRevise() const {
+bool Folder::canRevise() const {
     // No revision yet: can create first. Otherwise: state must not be in_work.
-    auto cur = Rosenholz::DocumentRevision::currentRevision(folderId);
+    auto cur = Rosenholz::FolderRevision::currentRevision(folderId);
     return !cur || currentRevisionState() != RevState::IN_WORK;
 }
-bool Document::canCheckout() const {
+bool Folder::canCheckout() const {
     return isEditable() && checkedOutPath.empty();
 }
-bool Document::canCheckin() const {
+bool Folder::canCheckin() const {
     return isEditable() && !checkedOutPath.empty();
 }
-bool Document::canRevert() const {
+bool Folder::canRevert() const {
     if (!isEditable() || checkedOutPath.empty()) return false;
-    auto cur = Rosenholz::DocumentRevision::currentRevision(folderId);
+    auto cur = Rosenholz::FolderRevision::currentRevision(folderId);
     return cur && cur->parentRev > 0;
 }
-bool Document::canEdit() const { return isEditable(); }
+bool Folder::canEdit() const { return isEditable(); }
 
 
 // ── Lifecycle: ensure Main WFI for this document ─────────────
-void Document::ensureReleaseWorkflow() {
-    if (!releaseWorkflowId.empty()) return;
+void Folder::ensureReleaseWorkflow() {
+    if (!workflowId.empty()) return;
     // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
-    auto wf = Rosenholz::F77_Engine::startDefault("akt", folderId);
+    auto wf = Rosenholz::F77Engine::startDefault("akt", folderId);
     if (!wf) return;
-    releaseWorkflowId = wf->workflowId;
-    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for akt/" + folderId);
+    workflowId = wf->workflowId;
+    LOG_INFO("[F77] Workflow ensured: " + workflowId + " for akt/" + folderId);
 }
 
 
@@ -579,15 +579,15 @@ void Document::ensureReleaseWorkflow() {
 // The sole entry point for creating new document revisions.
 // All other code paths that used to call createRevision have
 // been consolidated here.
-std::shared_ptr<DocumentRevision> Document::revise(
+std::shared_ptr<FolderRevision> Folder::revise(
     const std::string& changeNote,
     const std::string& createdBy)
 {
-    uint32_t latest = DocumentRevision::latestRevNumber(folderId);
+    uint32_t latest = FolderRevision::latestRevNumber(folderId);
 
     // Case 1: No revisions yet — create the first revision.
     if (latest == 0) {
-        auto rev = DocumentRevision::createRevision(
+        auto rev = FolderRevision::createRevision(
             folderId, 0,
             createdBy.empty() ? authorId : createdBy,
             changeNote.empty() ? "Revision 1 — Initialzustand" : changeNote);
@@ -603,7 +603,7 @@ std::shared_ptr<DocumentRevision> Document::revise(
     }
 
     // Case 2: Check the active revision state.
-    auto cur = DocumentRevision::currentRevision(folderId);
+    auto cur = FolderRevision::currentRevision(folderId);
     if (!cur) {
         LOG_ERROR("[Document] revise: keine aktive Revision gefunden fuer " + folderId);
         return nullptr;
@@ -618,9 +618,9 @@ std::shared_ptr<DocumentRevision> Document::revise(
     }
 
     // Active revision is frozen — create next revision.
-    // Clear the releaseWorkflowId: WFs are revision-specific.
+    // Clear the workflowId: WFs are revision-specific.
     // The new revision can start a fresh F77 workflow.
-    auto newRev = DocumentRevision::createRevision(
+    auto newRev = FolderRevision::createRevision(
         folderId, cur->rev,
         createdBy.empty() ? authorId : createdBy,
         changeNote.empty() ? "Neue Revision" : changeNote);
@@ -632,7 +632,7 @@ std::shared_ptr<DocumentRevision> Document::revise(
                 "UPDATE folders SET workflow_id=NULL, updated_at=?"
                 " WHERE folder_id=?;",
                 {BindParam::text(nowIso()), BindParam::text(folderId)});
-            releaseWorkflowId = ""; // sync in-memory too
+            workflowId = ""; // sync in-memory too
         }
         LOG_INFO("[Document] Revision " + std::to_string(newRev->rev) +
                  " angelegt, WF-Referenz zurückgesetzt: " + folderId);
@@ -644,13 +644,13 @@ std::shared_ptr<DocumentRevision> Document::revise(
 // ── Lifecycle: ensure Revision 1 exists for this document ────
 
 // ── checkout ─────────────────────────────────────────────────
-std::string Document::checkout(const std::string& destDir) {
+std::string Folder::checkout(const std::string& destDir) {
     auto& store = Rosenholz::Archive::ArchiveStore::instance();
 
     // Record which revision was current at checkout time so revertChanges()
     // can restore from the PREVIOUS revision if needed.
     // No new revision is created here — revise() is the only entry point.
-    auto preRev = Rosenholz::DocumentRevision::currentRevision(folderId);
+    auto preRev = Rosenholz::FolderRevision::currentRevision(folderId);
     if (preRev) {
         preCheckoutRevId = preRev->rev;
         LOG_INFO("[Document] checkout: recording preCheckoutRevId=" +
@@ -670,7 +670,7 @@ std::string Document::checkout(const std::string& destDir) {
     std::string localPath = FileOps::joinPath(dir, fname);
 
     // Try LMDB first (authoritative content store)
-    auto rev = Rosenholz::DocumentRevision::currentRevision(folderId);
+    auto rev = Rosenholz::FolderRevision::currentRevision(folderId);
     if (rev && store.isOpen() && !rev->contentHash.empty()) {
         if (store.retrieveContent(folderId, rev->rev, localPath)) {
             checkedOutPath = localPath;
@@ -697,7 +697,7 @@ std::string Document::checkout(const std::string& destDir) {
 }
 
 // ── checkin ──────────────────────────────────────────────────
-bool Document::checkin(const std::string& srcPath) {
+bool Folder::checkin(const std::string& srcPath) {
     std::string path = srcPath.empty() ? checkedOutPath : srcPath;
     if (path.empty() || !FileOps::fileExists(path)) {
         LOG_ERROR("[Document] checkin: no file to check in (path=" + path + ")");
@@ -716,7 +716,7 @@ bool Document::checkin(const std::string& srcPath) {
 
     // Commit content to the CURRENT in_work revision.
     // checkin never creates a new revision — only revise() does that.
-    auto curRev = Rosenholz::DocumentRevision::currentRevision(folderId);
+    auto curRev = Rosenholz::FolderRevision::currentRevision(folderId);
     if (!curRev) {
         LOG_ERROR("[Document] checkin: keine aktive Revision fuer " + folderId);
         std::remove(tmpPath.c_str());
@@ -758,8 +758,8 @@ bool Document::checkin(const std::string& srcPath) {
 }
 
 
-std::string Document::mfsSchluesselText() const {
-    auto cur = Rosenholz::DocumentRevision::currentRevision(folderId);
+std::string Folder::mfsSchluesselText() const {
+    auto cur = Rosenholz::FolderRevision::currentRevision(folderId);
     std::ostringstream s;
     // Compact reg-nr key (slash→underscore) and revision label
     std::string saneId = folderId;
@@ -774,7 +774,7 @@ std::string Document::mfsSchluesselText() const {
     if (!f18OperationId.empty()) s << "  F18-OPERATION    : " << f18OperationId << "\n";
 
     if (cur) {
-        auto objs = Rosenholz::DocumentObject::loadForRevision(folderId, revNum);
+        auto objs = Rosenholz::FolderObject::loadForRevision(folderId, revNum);
         if (!objs.empty()) {
             s << "\n"
               << "  " << std::left
@@ -803,19 +803,19 @@ std::string Document::mfsSchluesselText() const {
 }
 
 
-// ── Document::knownMfsPaths ───────────────────────────────────────────────
-// All MFS file paths registered as DocumentObjects for a parent entity.
+// ── Folder::knownMfsPaths ───────────────────────────────────────────────
+// All MFS file paths registered as FolderObjects for a parent entity.
 // Used by scanners to exclude already-registered files from "loose" lists.
 std::set<std::string>
-Document::knownMfsPaths(const std::string& entityType,
+Folder::knownMfsPaths(const std::string& entityType,
                           const std::string& entityId)
 {
     std::set<std::string> known;
     auto docs = loadForEntity(entityType, entityId);
     for (auto& d : docs) {
-        auto cur = Rosenholz::DocumentRevision::currentRevision(d->folderId);
+        auto cur = Rosenholz::FolderRevision::currentRevision(d->folderId);
         if (!cur) continue;
-        auto objs = Rosenholz::DocumentObject::loadForRevision(d->folderId, cur->rev);
+        auto objs = Rosenholz::FolderObject::loadForRevision(d->folderId, cur->rev);
         for (auto& o : objs) {
             if (!o->mfsPath.empty())     known.insert(o->mfsPath);
             if (!o->storedFileName.empty() && !d->mfsDir().empty())
@@ -825,8 +825,8 @@ Document::knownMfsPaths(const std::string& entityType,
     return known;
 }
 
-// ── Document::mfsDir ─────────────────────────────────────────────────────
-std::string Document::mfsDir() const {
+// ── Folder::mfsDir ─────────────────────────────────────────────────────
+std::string Folder::mfsDir() const {
     const std::string& root = Config::instance().mfsPath();
     if (root.empty() || folderId.empty()) return "";
     std::string sane = folderId;
@@ -834,12 +834,12 @@ std::string Document::mfsDir() const {
     return FileOps::joinPath(FileOps::joinPath(root, "AKT"), sane);
 }
 
-// ── Document::ensureWorkingRevision ──────────────────────────────────────
-std::shared_ptr<DocumentRevision>
-Document::ensureWorkingRevision() {
-    auto cur = DocumentRevision::currentRevision(folderId);
+// ── Folder::ensureWorkingRevision ──────────────────────────────────────
+std::shared_ptr<FolderRevision>
+Folder::ensureWorkingRevision() {
+    auto cur = FolderRevision::currentRevision(folderId);
     if (cur && cur->revState == RevState::IN_WORK) return cur;
-    if (!cur) return DocumentRevision::createRevision(folderId, 1);
+    if (!cur) return FolderRevision::createRevision(folderId, 1);
     return nullptr; // released/locked — caller decides
 }
 

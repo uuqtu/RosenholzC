@@ -1,5 +1,5 @@
 // ============================================================
-// cli_tasks.cpp — "Meine Aufgaben" — F77_Task browser
+// cli_tasks.cpp — "Meine Aufgaben" — F77Task browser
 //
 // Surfaces workflow-spawned tasks that require manual decisions.
 // Each task carries full navigation context; the user can act
@@ -7,10 +7,10 @@
 // ============================================================
 #include "cli_common.h"
 #include "../workflow/F77Task.h"
-#include "../model/f22/TaskF22.h"
-#include "../model/dok/Document.h"
-#include "../model/dok/DocumentObject.h"
-#include "../repository/DocumentRevision.h"
+#include "../model/f22/F22.h"
+#include "../model/akt/Folder.h"
+#include "../model/akt/FolderObject.h"
+#include "../model/akt/FolderRevision.h"
 #include "../core/FileOps.h"
 #include <iomanip>
 
@@ -19,7 +19,7 @@ namespace CLI {
 using namespace Rosenholz;
 
 // ── Display helpers ───────────────────────────────────────────────────────
-static void printTaskList(const std::vector<std::shared_ptr<F77_Task>>& tasks,
+static void printTaskList(const std::vector<std::shared_ptr<F77Task>>& tasks,
                            const std::string& heading)
 {
     std::cout << "  " << heading << " (" << tasks.size() << "):\n";
@@ -43,10 +43,10 @@ static void printTaskList(const std::vector<std::shared_ptr<F77_Task>>& tasks,
     std::cout << "\n";
 }
 
-// ── Handle a single F77_Task interactively ────────────────────────────────
+// ── Handle a single F77Task interactively ────────────────────────────────
 // Business logic: navigate to the target entity, perform the required action,
 // then mark the task complete/skipped.
-static void executeTask(std::shared_ptr<F77_Task> task) {
+static void executeTask(std::shared_ptr<F77Task> task) {
     hdr("F77-AUFGABE — " + task->taskId);
     std::cout << "  Titel   : " << task->title << "\n"
               << "  Status  : " << task->status << "\n"
@@ -74,19 +74,19 @@ static void executeTask(std::shared_ptr<F77_Task> task) {
         if (ch == 3) { task->skip("Datei ignoriert"); std::cout << "  >> Uebersprungen.\n"; return; }
 
         // Route by entity type:
-        std::shared_ptr<Document> targetDoc;
+        std::shared_ptr<Folder> targetDoc;
 
         if (task->targetEntityType == "akt") {
             // File found in an AKT revision folder — add directly to that AKT
-            targetDoc = Document::loadById(task->targetEntityId);
+            targetDoc = Folder::loadById(task->targetEntityId);
             if (!targetDoc) {
                 std::cout << "  >> Akte nicht gefunden: " << task->targetEntityId << "\n";
                 return;
             }
-            std::cout << "  Akte: " << targetDoc->documentId << " — " << targetDoc->title << "\n";
+            std::cout << "  Akte: " << targetDoc->folderId << " — " << targetDoc->title << "\n";
         } else {
             // F22 (or F16/F18): load/create an AKT under that entity
-            auto f22 = TaskF22::loadById(task->targetEntityId);
+            auto f22 = F22::loadById(task->targetEntityId);
             if (!f22) {
                 std::cout << "  >> Entität nicht gefunden: " << task->targetEntityId << "\n";
                 return;
@@ -96,24 +96,24 @@ static void executeTask(std::shared_ptr<F77_Task> task) {
                 auto dot = stem.rfind('.'); if (dot != std::string::npos) stem = stem.substr(0,dot);
                 std::string title = readOpt("  Titel (leer=" + stem + "): ");
                 if (title.empty()) title = stem;
-                targetDoc = Document::create(title, "other", task->targetEntityId);
+                targetDoc = Folder::create(title, "other", task->targetEntityId);
                 if (!opOk(targetDoc->save())) { std::cout << "  >> Fehler.\n"; return; }
-                std::cout << "  >> Akte angelegt: " << targetDoc->documentId << "\n";
+                std::cout << "  >> Akte angelegt: " << targetDoc->folderId << "\n";
             } else {
-                auto docs = Document::loadForEntity("f22", task->targetEntityId);
+                auto docs = Folder::loadForEntity("f22", task->targetEntityId);
                 if (docs.empty()) { std::cout << "  (keine Akten vorhanden)\n"; return; }
                 for (size_t i=0; i<docs.size(); ++i)
                     std::cout << "  " << std::setw(3) << (i+1) << ". "
-                              << docs[i]->documentId << "  " << docs[i]->title << "\n";
+                              << docs[i]->folderId << "  " << docs[i]->title << "\n";
                 int pick = readInt("Akte #", 1, (int)docs.size());
                 targetDoc = docs[pick-1];
             }
         }
 
         // Ensure inWork revision:
-        auto cur = DocumentRevision::currentRevision(targetDoc->documentId);
+        auto cur = FolderRevision::currentRevision(targetDoc->folderId);
         if (!cur) {
-            cur = DocumentRevision::createRevision(targetDoc->documentId, 1);
+            cur = FolderRevision::createRevision(targetDoc->folderId, 1);
             if (!cur) { std::cout << "  >> Revision konnte nicht angelegt werden.\n"; return; }
         }
         if (cur->revState != RevState::IN_WORK) {
@@ -124,11 +124,11 @@ static void executeTask(std::shared_ptr<F77_Task> task) {
         std::string label = readOpt("  Bezeichnung (leer=Dateiname): ");
         std::string desc  = readOpt("  Beschreibung: ");
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = DocumentObject::importFile(
-            targetDoc->documentId, cur->rev, task->filePath, res, label, desc);
+        auto obj = FolderObject::importFile(
+            targetDoc->folderId, cur->rev, task->filePath, res, label, desc);
         if (opOk(res) && obj) {
             std::cout << "  >> Importiert: " << obj->displayName() << "\n";
-            task->complete("Datei einer Akte zugewiesen: " + targetDoc->documentId);
+            task->complete("Datei einer Akte zugewiesen: " + targetDoc->folderId);
             std::cout << "  >> Aufgabe abgeschlossen.\n";
         } else {
             std::cout << "  >> " << opResultMessage(res) << "\n";
@@ -151,7 +151,7 @@ static void executeTask(std::shared_ptr<F77_Task> task) {
 // ── cmdTasks ─────────────────────────────────────────────────────────────
 void cmdTasks(const std::vector<std::string>& args) {
     // No args: show open tasks
-    auto open = F77_Task::loadOpen();
+    auto open = F77Task::loadOpen();
 
     if (args.empty() || args[0] == "-o" || args[0] == "--open") {
         printTaskList(open, "Offene F77-Aufgaben");
@@ -165,13 +165,13 @@ void cmdTasks(const std::vector<std::string>& args) {
 
     // -a / --all: show all tasks
     if (args[0] == "-a" || args[0] == "--all") {
-        auto all = F77_Task::loadAll(200);
+        auto all = F77Task::loadAll(200);
         printTaskList(all, "Alle F77-Aufgaben");
         return;
     }
 
     // Direct ID:
-    auto task = F77_Task::loadById(args[0]);
+    auto task = F77Task::loadById(args[0]);
     if (task) { executeTask(task); return; }
 
     printErr("Unbekanntes Argument: " + args[0]);

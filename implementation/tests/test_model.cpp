@@ -5,8 +5,8 @@
 #include <fstream>
 #include "TestFixtures.h"
 #include "../src/core/OperationResult.h"
-#include "../src/repository/ArchiveStore.h"
-#include "../src/repository/DocumentRevision.h"
+#include "../src/model/akt/ArchiveStore.h"
+#include "../src/model/akt/FolderRevision.h"
 #include "../src/model/Utils.h"
 #include "../src/model/f18/F18Operation.h"
 #include "../src/workflow/F77Workflow.h"
@@ -70,14 +70,14 @@ void testSuiteModel() {
         CHECK(chk->leadId == p1.person->personId, "reassignLead persisted");
     }
 
-    // ── ProjectF16 ──────────────────────────────────────────
-    SECTION("ProjectF16 — create, EV, QTCS, MFS");
+    // ── F16 ──────────────────────────────────────────
+    SECTION("F16 — create, EV, QTCS, MFS");
     {
         ProjectFixture fix("Test-Vorgang Alpha","OV","large");
-        CHECK(opOk(fix.project->save()), "ProjectF16::save()");
+        CHECK(opOk(fix.project->save()), "F16::save()");
         CHECK(!fix.project->regNumber.toString().empty(), "regNumber valid");
 
-        auto loaded = R::ProjectF16::loadById(fix.project->projectId);
+        auto loaded = R::F16::loadById(fix.project->projectId);
         CHECK(loaded != nullptr, "loadById returns result");
         CHECK(loaded->title == "Test-Vorgang Alpha", "title matches");
 
@@ -95,39 +95,39 @@ void testSuiteModel() {
         CHECK(opOk(fix.project->reassignLead(newLead.person->personId)), "reassignLead");
         CHECK(opOk(fix.project->reassignSponsor(newLead.person->personId)), "reassignSponsor");
 
-        auto all = R::ProjectF16::loadAll();
+        auto all = R::F16::loadAll();
         CHECK(!all.empty(), "loadAll returns results");
-        auto byStatus = R::ProjectF16::loadByStatus("in_work");
+        auto byStatus = R::F16::loadByStatus("in_work");
         CHECK(!byStatus.empty(), "loadByStatus(in_work) returns results");
     }
 
-    // ── TaskF22 ─────────────────────────────────────────────
-    SECTION("TaskF22 — hierarchy, reassign, convert");
+    // ── F22 ─────────────────────────────────────────────
+    SECTION("F22 — hierarchy, reassign, convert");
     {
         TaskFixture fix("Haupt-Aufgabe");
-        CHECK(opOk(fix.task->save()), "TaskF22::save()");
+        CHECK(opOk(fix.task->save()), "F22::save()");
         CHECK(fix.task->taskId.find("/F22/") != std::string::npos,
               "Task ID contains /F22/");
 
-        auto child = R::TaskF22::create(fix.projFix.project->projectId,
+        auto child = R::F22::create(fix.projFix.project->projectId,
                                          "Kind-Aufgabe", "", fix.task->taskId);
         child->wbsCode = "1.1.1";
         CHECK(opOk(child->save()), "Child task saved");
 
-        auto children = R::TaskF22::loadChildren(fix.task->taskId);
+        auto children = R::F22::loadChildren(fix.task->taskId);
         CHECK(!children.empty(), "loadChildren returns subtask");
 
         // addTime/addCost take dimension IDs
         // Just verify the task saves with updated percentComplete
         fix.task->percentComplete = 25;
         fix.task->effortActualHrs = 20.0;
-        CHECK(opOk(fix.task->save()), "TaskF22 update save");
+        CHECK(opOk(fix.task->save()), "F22 update save");
 
         PersonFixture p2("Dirk","Wolf","dw@test.de","internal");
         CHECK(opOk(fix.task->reassignTo(p2.person->personId)), "reassignTo");
         CHECK(opOk(fix.task->reassignParent("")), "reassignParent (detach)");
 
-        auto forProj = R::TaskF22::loadForProject(fix.projFix.project->projectId);
+        auto forProj = R::F22::loadForProject(fix.projFix.project->projectId);
         CHECK(!forProj.empty(), "loadForProject returns tasks");
     }
 
@@ -136,18 +136,18 @@ void testSuiteModel() {
     {
         ProjectFixture pfix;
         // F18 belongs to a task — create one first
-        auto task = R::TaskF22::create("F18-Test-Aufgabe", "spec", pfix.project->projectId);
+        auto task = R::F22::create("F18-Test-Aufgabe", "spec", pfix.project->projectId);
         task->save();
 
         auto inc = R::F18Operation::create(task->taskId, "Test-Vorfall",
                                            R::F18OperationType::INCIDENT);
         CHECK(inc != nullptr, "F18Operation incident created");
-        CHECK(!inc->vorgangId.empty(), "Incident has vorgangId");
-        CHECK(inc->vorgangType == "incident", "vorgangType=incident");
+        CHECK(!inc->operationId.empty(), "Incident has operationId");
+        CHECK(inc->operationType == "incident", "operationType=incident");
         inc->severity = "high";
         inc->incidentType = "technical";
         inc->update();
-        auto reloaded = R::F18Operation::loadById(inc->vorgangId);
+        auto reloaded = R::F18Operation::loadById(inc->operationId);
         CHECK(reloaded != nullptr, "Incident reloadable");
         CHECK(reloaded->severity == "high", "severity persisted");
         CHECK(reloaded->incidentType == "technical", "incidentType persisted");
@@ -155,12 +155,12 @@ void testSuiteModel() {
         auto risk = R::F18Operation::create(task->taskId, "Test-Risiko",
                                             R::F18OperationType::RISK);
         CHECK(risk != nullptr, "F18Operation risk created");
-        CHECK(risk->vorgangType == "risk", "vorgangType=risk");
+        CHECK(risk->operationType == "risk", "operationType=risk");
         risk->riskLevel = "high";
         risk->probabilityScore = 4;
         risk->impactScoreTime = 3;
         risk->update();
-        auto rreloaded = R::F18Operation::loadById(risk->vorgangId);
+        auto rreloaded = R::F18Operation::loadById(risk->operationId);
         CHECK(rreloaded != nullptr, "Risk reloadable");
         CHECK(rreloaded->riskLevel == "high", "riskLevel persisted");
         CHECK(rreloaded->probabilityScore == 4, "probabilityScore persisted");
@@ -174,35 +174,35 @@ void testSuiteModel() {
     {
         ProjectFixture pfix;
         // Create a task to attach documents to (docs now live on F22 or F18)
-        auto task = R::TaskF22::create("Charter-Aufgabe", "spec", pfix.project->projectId);
+        auto task = R::F22::create("Charter-Aufgabe", "spec", pfix.project->projectId);
         task->save();
-        auto d = R::Document::create("Projektcharter", "report", task->taskId);
+        auto d = R::Folder::create("Projektcharter", "report", task->taskId);
         d->format  = "pdf";
         d->version = "1.0";
-        CHECK(opOk(d->save()), "Document::save()");
-        CHECK(d->documentId.find("/AKT/") != std::string::npos,
+        CHECK(opOk(d->save()), "Folder::save()");
+        CHECK(d->folderId.find("/AKT/") != std::string::npos,
               "Document ID contains /AKT/");
 
-        auto docs = R::Document::loadForEntity("f22", task->taskId);
+        auto docs = R::Folder::loadForEntity("f22", task->taskId);
         CHECK(!docs.empty(), "loadForEntity(f22) returns documents");
 
         // Orphan document (no task) still saveable
-        auto orphan = R::Document::create("Orphan", "misc");
+        auto orphan = R::Folder::create("Orphan", "misc");
         orphan->save();
     }
 
-    SECTION("Document — version snapshot via DocumentRevision");
+    SECTION("Document — version snapshot via FolderRevision");
     {
         ProjectFixture pfix("Doc-Version-Test");
-        auto vTask = R::TaskF22::create("VerTask","spec",pfix.project->projectId);
+        auto vTask = R::F22::create("VerTask","spec",pfix.project->projectId);
         vTask->save();
-        auto doc = R::Document::create("Testdokument V1","report",vTask->taskId);
+        auto doc = R::Folder::create("Testdokument V1","report",vTask->taskId);
         doc->version = "1.0";
         doc->format  = "txt";
         CHECK(opOk(doc->save()), "Document saved before version test");
 
         // Write a real file so importLocalFile has something
-        std::string tmpPath = "/tmp/rosenholz_doc_ver_" + doc->documentId + ".txt";
+        std::string tmpPath = "/tmp/rosenholz_doc_ver_" + doc->folderId + ".txt";
         Rosenholz::FileOps::writeTextFile(tmpPath, "Testinhalt Version 1.0\n");
 
         auto imported = doc->importLocalFile(tmpPath);
@@ -235,13 +235,13 @@ void testSuiteModel() {
     }
 
     // ── Milestone ───────────────────────────────────────────
-    SECTION("ProjectF16 — milestones free-text field");
+    SECTION("F16 — milestones free-text field");
     {
         ProjectFixture pfix("Milestone-Text-Test");
         // Milestone tracking is now a free-text field on F16
         pfix.project->milestones = "2026-06-01: Kick-off abgeschlossen\n2026-08-01: Design-Freeze";
         pfix.project->update();
-        auto reloaded = R::ProjectF16::loadById(pfix.project->projectId);
+        auto reloaded = R::F16::loadById(pfix.project->projectId);
         CHECK(reloaded != nullptr, "Project reloadable");
         CHECK(!reloaded->milestones.empty(), "milestones field persisted");
         CHECK(reloaded->milestones.find("Kick-off") != std::string::npos,
@@ -250,17 +250,17 @@ void testSuiteModel() {
 
     // ── Trackable ────────────────────────────────────────────
 
-    SECTION("F18Operation — all major vorgangTypes");
+    SECTION("F18Operation — all major operationTypes");
     {
         ProjectFixture pfix("F18-Types-Test");
-        auto task = R::TaskF22::create("Types-Task", "spec", pfix.project->projectId);
+        auto task = R::F22::create("Types-Task", "spec", pfix.project->projectId);
         task->save();
 
         // Generic
         auto gen = R::F18Operation::create(task->taskId, "Generischer Workflow",
                                            R::F18OperationType::GENERIC);
         CHECK(gen != nullptr, "Generic F18Operation created");
-        CHECK(gen->vorgangType == "generic", "vorgangType=generic");
+        CHECK(gen->operationType == "generic", "operationType=generic");
 
         // Measure
         auto measure = R::F18Operation::create(task->taskId, "Korrekturmassnahme",
@@ -269,7 +269,7 @@ void testSuiteModel() {
         measure->measureCategory = "corrective";
         measure->plannedDate     = "2026-05-01";
         measure->update();
-        auto mr = R::F18Operation::loadById(measure->vorgangId);
+        auto mr = R::F18Operation::loadById(measure->operationId);
         CHECK(mr != nullptr, "Measure reloadable");
         CHECK(mr->measureCategory == "corrective", "measureCategory persisted");
 
@@ -280,7 +280,7 @@ void testSuiteModel() {
         qg->phase       = "design";
         qg->gateResult  = "passed";
         qg->update();
-        auto qgr = R::F18Operation::loadById(qg->vorgangId);
+        auto qgr = R::F18Operation::loadById(qg->operationId);
         CHECK(qgr != nullptr, "QualityGate reloadable");
         CHECK(qgr->phase == "design", "phase persisted");
 
@@ -296,11 +296,11 @@ void testSuiteModel() {
         auto co = R::F18Operation::create(task->taskId, "Scope-Umsetzung",
                                           R::F18OperationType::CHANGE_OBJECT);
         CHECK(co != nullptr, "ChangeObject F18Operation created");
-        co->parentVorgangId = cr->vorgangId;
+        co->parentVorgangId = cr->operationId;
         co->update();
-        auto cor = R::F18Operation::loadById(co->vorgangId);
+        auto cor = R::F18Operation::loadById(co->operationId);
         CHECK(cor != nullptr, "ChangeObject reloadable");
-        CHECK(cor->parentVorgangId == cr->vorgangId, "parentVorgangId links to CR");
+        CHECK(cor->parentVorgangId == cr->operationId, "parentVorgangId links to CR");
 
         // DecisionLog
         auto dl = R::F18Operation::create(task->taskId, "Datenbankentscheidung",
@@ -309,7 +309,7 @@ void testSuiteModel() {
         dl->decisionType = "architectural";
         dl->rationale    = "SQLite passt besser als PostgreSQL";
         dl->update();
-        auto dlr = R::F18Operation::loadById(dl->vorgangId);
+        auto dlr = R::F18Operation::loadById(dl->operationId);
         CHECK(dlr != nullptr, "DecisionLog reloadable");
         CHECK(dlr->decisionType == "architectural", "decisionType persisted");
 
@@ -325,7 +325,7 @@ void testSuiteModel() {
     SECTION("F18OperationStep — addStep creates Init/End bookends");
     {
         ProjectFixture pfix("F18-Step-Test");
-        auto task_step = R::TaskF22::create("Step-Task", "spec", pfix.project->projectId);
+        auto task_step = R::F22::create("Step-Task", "spec", pfix.project->projectId);
         task_step->save();
         auto v = R::F18Operation::create(task_step->taskId, "Step-Test-Workflow",
                                          R::F18OperationType::GENERIC);
@@ -368,7 +368,7 @@ void testSuiteModel() {
         c16->update();
 
         // F22
-        auto taskComm = R::TaskF22::create(pfix.project->projectId, "Comm-Task", "", "");
+        auto taskComm = R::F22::create(pfix.project->projectId, "Comm-Task", "", "");
         taskComm->save();
         auto c22 = Comm::create(taskComm->taskId, "f22", "Sprint Review", "meeting");
         CHECK(c22 != nullptr, "Communication for F22 created");
@@ -379,7 +379,7 @@ void testSuiteModel() {
 
         // complete()
         c16->complete("Meeting abgeschlossen", "Aktionsplan erstellt");
-        auto reloaded = Comm::loadById(c16->commId);
+        auto reloaded = Comm::loadById(c16->communicationId);
         CHECK(reloaded != nullptr, "Communication reloadable after complete");
         CHECK(reloaded->status == R::CommStatus::COMPLETED, "status=completed after complete()");
         CHECK(!reloaded->decisions.empty(), "decisions persisted");
@@ -389,7 +389,7 @@ void testSuiteModel() {
     {
         // F18 belongs exclusively to F22. All loading is task-scoped.
         ProjectFixture pfix("F18-Filter-Test");
-        auto task = R::TaskF22::create("Filter-Task", "spec", pfix.project->projectId);
+        auto task = R::F22::create("Filter-Task", "spec", pfix.project->projectId);
         task->save();
 
         R::F18Operation::create(task->taskId, "Incident-A", R::F18OperationType::INCIDENT);
@@ -404,7 +404,7 @@ void testSuiteModel() {
         auto risks = R::F18Operation::loadForTask(task->taskId, R::F18OperationType::RISK);
         CHECK(risks.size() >= 2, "loadForTask with type filter returns 2 risks");
         for (auto& r : risks)
-            CHECK(r->vorgangType == "risk", "filtered result has type=risk");
+            CHECK(r->operationType == "risk", "filtered result has type=risk");
 
         // All F18 ops have taskId set (no projectId in v4)
         CHECK(!all[0]->taskId.empty(), "F18 has taskId set");
@@ -425,11 +425,11 @@ void testSuiteModel() {
     SECTION("Lifecycle — F22 starts without WFI, startDefault creates one");
     {
         ProjectFixture pfix("Lifecycle-F22-Test");
-        auto task = R::TaskF22::create(pfix.project->projectId, "Lifecycle-Task", "", "");
+        auto task = R::F22::create(pfix.project->projectId, "Lifecycle-Task", "", "");
         task->save();
-        CHECK(task->workflowInstanceId.empty(), "F22 starts with no workflow");
+        CHECK(task->releaseWorkflowId.empty(), "F22 starts with no workflow");
         CHECK(task->status == R::EntityStatus::IN_WORK, "F22 status=in_work");
-        auto wf = R::F77_Engine::startDefault("f22", task->taskId);
+        auto wf = R::F77Engine::startDefault("f22", task->taskId);
         CHECK(wf != nullptr, "startDefault creates F77 workflow for F22");
         if (wf) CHECK(wf->entityType == "f22", "WF entityType=f22");
     }
@@ -437,13 +437,13 @@ void testSuiteModel() {
     SECTION("Lifecycle — F18Operation starts without WFI, startDefault creates one");
     {
         ProjectFixture pfix("Lifecycle-F18-Test");
-        auto task = R::TaskF22::create("Lifecycle-Task", "spec", pfix.project->projectId);
+        auto task = R::F22::create("Lifecycle-Task", "spec", pfix.project->projectId);
         task->save();
         auto v = R::F18Operation::create(task->taskId, "Lifecycle-Vorgang",
                                          R::F18OperationType::RISK);
         CHECK(v != nullptr, "F18Operation created");
         CHECK(v->releaseWorkflowId.empty(), "F18 starts with no workflow");
-        auto wf = R::F77_Engine::startDefault("f18", v->vorgangId);
+        auto wf = R::F77Engine::startDefault("f18", v->operationId);
         CHECK(wf != nullptr, "startDefault creates F77 workflow for F18");
         if (wf) CHECK(wf->entityType == "f18", "WF entityType=f18");
     }
@@ -451,15 +451,15 @@ void testSuiteModel() {
     SECTION("Lifecycle — canRelease mit pending Mid-Schritt");
     {
         ProjectFixture pfix("Release-Block-Test");
-        auto task = R::TaskF22::create(pfix.project->projectId, "Release-Block-Task", "", "");
+        auto task = R::F22::create(pfix.project->projectId, "Release-Block-Task", "", "");
         task->save();
-        auto mainWf = R::F77_Engine::startDefault("f22", task->taskId);
+        auto mainWf = R::F77Engine::startDefault("f22", task->taskId);
         CHECK(mainWf != nullptr, "Workflow gestartet");
         if (!mainWf) return;
-        auto refused = R::F77_Engine::startDefault("f22", task->taskId);
+        auto refused = R::F77Engine::startDefault("f22", task->taskId);
         CHECK(refused == nullptr, "Zweiter Workflow korrekt verweigert");
         int blockers = 0;
-        bool canRel = R::F77_Engine::canRelease("f22", task->taskId,
+        bool canRel = R::F77Engine::canRelease("f22", task->taskId,
                                                  mainWf->workflowId, blockers);
         // Workflow is active but not yet ticked — all steps pending
         CHECK(!canRel, "canRelease=false solange Workflow aktiv");
@@ -468,44 +468,44 @@ void testSuiteModel() {
     SECTION("Lifecycle — lockAll (kein anderer Workflow)");
     {
         ProjectFixture pfix("Lock-Test");
-        auto task = R::TaskF22::create(pfix.project->projectId, "Lock-Task", "", "");
+        auto task = R::F22::create(pfix.project->projectId, "Lock-Task", "", "");
         task->save();
-        auto mainWf = R::F77_Engine::startDefault("f22", task->taskId);
+        auto mainWf = R::F77Engine::startDefault("f22", task->taskId);
         CHECK(mainWf != nullptr, "Workflow gestartet");
         if (!mainWf) return;
-        int locked = R::F77_Engine::lockAll("f22", task->taskId, mainWf->workflowId, true);
+        int locked = R::F77Engine::lockAll("f22", task->taskId, mainWf->workflowId, true);
         CHECK(locked == 0, "lockAll: kein anderer Workflow zu sperren");
         int blockers = 0;
-        bool canRel = R::F77_Engine::canRelease("f22", task->taskId, mainWf->workflowId, blockers);
+        bool canRel = R::F77Engine::canRelease("f22", task->taskId, mainWf->workflowId, blockers);
         CHECK(!canRel, "canRelease false solange Workflow aktiv");
     }
 
     SECTION("Lifecycle — applyTargetState sets status=released on F22");
     {
         ProjectFixture pfix("Release-Test");
-        auto task = R::TaskF22::create(pfix.project->projectId, "Release-Task", "", "");
+        auto task = R::F22::create(pfix.project->projectId, "Release-Task", "", "");
         task->save();
         CHECK(task->status == R::EntityStatus::IN_WORK, "starts in_work");
-        auto wf = R::F77_Engine::startDefault("f22", task->taskId);
+        auto wf = R::F77Engine::startDefault("f22", task->taskId);
         CHECK(wf != nullptr, "WF created");
         if (!wf) return;
         wf->targetState = R::EntityStatus::RELEASED;
-        bool ok = R::F77_Engine::applyTargetState(*wf);
+        bool ok = R::F77Engine::applyTargetState(*wf);
         CHECK(ok, "applyTargetState succeeds");
-        auto reloaded = R::TaskF22::loadById(task->taskId);
+        auto reloaded = R::F22::loadById(task->taskId);
         CHECK(reloaded != nullptr, "reloaded after release");
         CHECK(reloaded->status == R::EntityStatus::RELEASED, "status=released after applyTargetState");
     }
 
 
-    SECTION("DocumentRevision — createRevision initial state");
+    SECTION("FolderRevision — createRevision initial state");
     {
         // Every new document starts with rev=1, in_work, superseded=false
         ProjectFixture pfix("DocRev-Init-Test");
-        auto doc = R::Document::create("DocRev-Test-Doc","report");
+        auto doc = R::Folder::create("DocRev-Test-Doc","report");
         doc->save();
 
-        auto rev = R::DocumentRevision::createRevision(doc->documentId, 0,
+        auto rev = R::FolderRevision::createRevision(doc->folderId, 0,
                                                         "test-user", "Initial creation");
         CHECK(rev != nullptr, "createRevision returns non-null");
         CHECK(rev->rev == 1, "First revision is rev=1");
@@ -513,7 +513,7 @@ void testSuiteModel() {
         CHECK(rev->parentRev == 0, "Initial rev has parentRev=0");
 
         // Superseded flag: first rev must be active (superseded=false)
-        auto current = R::DocumentRevision::currentRevision(doc->documentId);
+        auto current = R::FolderRevision::currentRevision(doc->folderId);
         CHECK(current != nullptr, "currentRevision finds the initial rev");
         if (current) {
             CHECK(!current->superseded, "Initial rev is active (superseded=false)");
@@ -521,11 +521,11 @@ void testSuiteModel() {
         }
     }
 
-    SECTION("DocumentRevision — state machine: allowed transitions");
+    SECTION("FolderRevision — state machine: allowed transitions");
     {
         // Test all valid transitions from the spec (using string constants directly)
         auto allowed = [](const std::string& f, const std::string& t) {
-            return R::DocumentRevision::isTransitionAllowed(
+            return R::FolderRevision::isTransitionAllowed(
         R::revStateFromString(f), R::revStateFromString(t), false);
         };
         // in_work → pre_released, locked, closed
@@ -553,25 +553,25 @@ void testSuiteModel() {
         CHECK(!allowed("closed","locked"),       "closed→locked BLOCKED");
     }
 
-    SECTION("DocumentRevision — transitionState persists and updates superseded");
+    SECTION("FolderRevision — transitionState persists and updates superseded");
     {
         ProjectFixture pfix("DocRev-Transition-Test");
-        auto doc = R::Document::create("Transition-Doc","report");
+        auto doc = R::Folder::create("Transition-Doc","report");
         doc->save();
-        auto rev = R::DocumentRevision::createRevision(doc->documentId, 0, "u1", "v1");
+        auto rev = R::FolderRevision::createRevision(doc->folderId, 0, "u1", "v1");
         CHECK(rev != nullptr, "rev created");
 
         // in_work → pre_released
         bool ok = rev->transitionState("pre_released");
         CHECK(ok, "in_work→pre_released succeeds");
-        auto r2 = R::DocumentRevision::loadByRev(doc->documentId, 1);
+        auto r2 = R::FolderRevision::loadByRev(doc->folderId, 1);
         CHECK(r2 != nullptr, "reload after transition");
         if (r2) CHECK(r2->revStateStr() == "pre_released", "revState=pre_released persisted");
 
         // pre_released → released
         ok = rev->transitionState("released");
         CHECK(ok, "pre_released→released succeeds");
-        auto r3 = R::DocumentRevision::loadByRev(doc->documentId, 1);
+        auto r3 = R::FolderRevision::loadByRev(doc->folderId, 1);
         if (r3) CHECK(r3->revStateStr() == "released", "revState=released persisted");
 
         // released → closed (only valid path from released)
@@ -583,31 +583,31 @@ void testSuiteModel() {
         CHECK(!ok, "closed→in_work blocked (terminal)");
     }
 
-    SECTION("DocumentRevision — superseded invariant with multiple revisions");
+    SECTION("FolderRevision — superseded invariant with multiple revisions");
     {
         ProjectFixture pfix("DocRev-Superseded-Test");
-        auto doc = R::Document::create("Multi-Rev-Doc","spec");
+        auto doc = R::Folder::create("Multi-Rev-Doc","spec");
         doc->save();
 
         // Create rev 1
-        auto r1 = R::DocumentRevision::createRevision(doc->documentId, 0, "u1", "rev 1");
+        auto r1 = R::FolderRevision::createRevision(doc->folderId, 0, "u1", "rev 1");
         CHECK(r1 != nullptr, "rev 1 created");
 
         // Create rev 2 (based on rev 1)
-        auto r2 = R::DocumentRevision::createRevision(doc->documentId, 1, "u1", "rev 2");
+        auto r2 = R::FolderRevision::createRevision(doc->folderId, 1, "u1", "rev 2");
         CHECK(r2 != nullptr, "rev 2 created");
         CHECK(r2->rev == 2, "second revision is rev=2");
         CHECK(r2->parentRev == 1, "parentRev=1 for rev 2");
 
         // Exactly one should be active (superseded=false)
-        auto all = R::DocumentRevision::loadAllRevisions(doc->documentId);
+        auto all = R::FolderRevision::loadAllRevisions(doc->folderId);
         CHECK(all.size() == 2, "two revisions exist");
         int activeCount = 0;
         for (auto& r : all) if (!r->superseded) activeCount++;
         CHECK(activeCount == 1, "exactly one active revision (superseded=false)");
 
         // Current should be rev 2 (latest non-locked/non-closed)
-        auto cur = R::DocumentRevision::currentRevision(doc->documentId);
+        auto cur = R::FolderRevision::currentRevision(doc->folderId);
         CHECK(cur != nullptr, "currentRevision exists");
         if (cur) CHECK(cur->rev == 2, "currentRevision is rev=2 (latest)");
 
@@ -617,12 +617,12 @@ void testSuiteModel() {
         // latest released = rev 1. So superseded switches to rev 1.
         r1->transitionState("pre_released");
         r1->transitionState("released");
-        auto cur2 = R::DocumentRevision::currentRevision(doc->documentId);
+        auto cur2 = R::FolderRevision::currentRevision(doc->folderId);
         CHECK(cur2 != nullptr, "currentRevision after release");
         if (cur2) CHECK(cur2->rev == 1, "rev 1 is now current (released has priority)");
 
         // Re-verify invariant: still exactly one active
-        auto all2 = R::DocumentRevision::loadAllRevisions(doc->documentId);
+        auto all2 = R::FolderRevision::loadAllRevisions(doc->folderId);
         int activeCount2 = 0;
         for (auto& r : all2) if (!r->superseded) activeCount2++;
         CHECK(activeCount2 == 1, "still exactly one active after release");
@@ -686,15 +686,15 @@ void testSuiteModel() {
     SECTION("Document — Revision 1 auto-created on save");
     {
         ProjectFixture pfix("DocRev-AutoCreate-Test");
-        auto t2 = R::TaskF22::create("AutoRev-Aufgabe","spec",pfix.project->projectId);
+        auto t2 = R::F22::create("AutoRev-Aufgabe","spec",pfix.project->projectId);
         t2->save();
-        auto doc = R::Document::create("AutoRev-Doc","spec",t2->taskId);
+        auto doc = R::Folder::create("AutoRev-Doc","spec",t2->taskId);
         doc->save();
         doc->revise("Revision 1 — Test");
         doc->ensureReleaseWorkflow();
 
         // Revision 1 must exist
-        auto rev1 = R::DocumentRevision::loadByRev(doc->documentId, 1);
+        auto rev1 = R::FolderRevision::loadByRev(doc->folderId, 1);
         CHECK(rev1 != nullptr, "Rev 1 exists after ensureRevision1");
         if (rev1) {
             CHECK(rev1->revStateStr() == "in_work", "Rev 1 starts in_work");
@@ -702,29 +702,29 @@ void testSuiteModel() {
         }
 
         // currentRevision returns Rev 1
-        auto cur = R::DocumentRevision::currentRevision(doc->documentId);
+        auto cur = R::FolderRevision::currentRevision(doc->folderId);
         CHECK(cur != nullptr, "currentRevision returns Rev 1");
         if (cur) CHECK(cur->rev == 1, "currentRevision is Rev 1");
 
         // Calling ensureRevision1 again is idempotent
         doc->revise("Revision 1 — Test");
-        auto all = R::DocumentRevision::loadAllRevisions(doc->documentId);
+        auto all = R::FolderRevision::loadAllRevisions(doc->folderId);
         CHECK(all.size() == 1, "ensureRevision1 is idempotent — still 1 revision");
 
         // F77 WFI exists
-        auto fresh = R::Document::loadById(doc->documentId);
+        auto fresh = R::Folder::loadById(doc->folderId);
         CHECK(fresh != nullptr, "Document reloadable");
-        if (fresh) CHECK(!fresh->releaseWorkflowId.empty(), "Main WFI created");
+        if (fresh) CHECK(!fresh->workflowId.empty(), "Main WFI created");
     }
 
-    SECTION("Document — 5-state machine via DocumentRevision");
+    SECTION("Document — 5-state machine via FolderRevision");
     {
         ProjectFixture pfix("DocState-Test");
-        auto doc = R::Document::create("StateTest-Doc","report");
+        auto doc = R::Folder::create("StateTest-Doc","report");
         doc->save();
         doc->revise("Revision 1 — Test");
 
-        auto rev = R::DocumentRevision::currentRevision(doc->documentId);
+        auto rev = R::FolderRevision::currentRevision(doc->folderId);
         CHECK(rev != nullptr, "current revision exists");
         if (!rev) return;
 

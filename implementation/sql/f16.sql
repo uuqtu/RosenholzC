@@ -11,9 +11,6 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 CREATE TABLE IF NOT EXISTS projects (
     project_id                  TEXT PRIMARY KEY,
-    workflow_instance_id        TEXT,
-    workflow_status             TEXT,
-    workflow_current_state      TEXT,
     -- release_workflow_id removed in v5: F16 has no lifecycle workflow
     archived                    INTEGER DEFAULT 0,   -- 0=active 1=soft-deleted
     reg_number                  TEXT,
@@ -27,7 +24,6 @@ CREATE TABLE IF NOT EXISTS projects (
     title                       TEXT NOT NULL,
     project_type                TEXT,
     size_class                  TEXT,
-    status                      TEXT DEFAULT 'in_work',
     phase                       TEXT,
     start_date_planned          TEXT,
     start_date_actual           TEXT,
@@ -49,7 +45,6 @@ CREATE TABLE IF NOT EXISTS projects (
     estimate_at_completion      REAL DEFAULT 0,
     estimate_to_complete        REAL DEFAULT 0,
     variance_at_completion      REAL DEFAULT 0,
-    communication_plan_id       TEXT,
     currency                    TEXT DEFAULT 'EUR',
     scope_statement             TEXT,
     scope_version               TEXT,
@@ -59,7 +54,6 @@ CREATE TABLE IF NOT EXISTS projects (
     priority                    TEXT,
     complexity                  TEXT,
     strategic_alignment         TEXT,
-    quality_gate_id             TEXT,
     methodology                 TEXT,
     classification              TEXT,
     external_ref                TEXT,
@@ -70,11 +64,4 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at                  TEXT
 );
 
--- QTCS dimension links for F16
-CREATE TABLE IF NOT EXISTS project_quality (project_id TEXT NOT NULL, quality_id TEXT NOT NULL, PRIMARY KEY(project_id, quality_id));
-CREATE TABLE IF NOT EXISTS project_time    (project_id TEXT NOT NULL, time_id    TEXT NOT NULL, PRIMARY KEY(project_id, time_id));
-CREATE TABLE IF NOT EXISTS project_cost    (project_id TEXT NOT NULL, cost_id    TEXT NOT NULL, PRIMARY KEY(project_id, cost_id));
-CREATE TABLE IF NOT EXISTS project_scope   (project_id TEXT NOT NULL, scope_id   TEXT NOT NULL, PRIMARY KEY(project_id, scope_id));
 
-
-CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);

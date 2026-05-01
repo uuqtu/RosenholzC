@@ -66,7 +66,7 @@ std::vector<Migration> MigrationEngine::registry() {
          // SQLite < 3.35 has no DROP COLUMN — recreate table without project_id
          R"SQL(
             CREATE TABLE IF NOT EXISTS akten_v5 AS
-                SELECT document_id, release_workflow_id, task_id,
+                SELECT folder_id, workflow_id, task_id,
                        f18_operation_id, f18_step_id, author_id, approved_by,
                        doc_type, doc_category, title, version,
                        date_created, date_modified, date_approved, date_expires,
@@ -74,21 +74,21 @@ std::vector<Migration> MigrationEngine::registry() {
                        format, file_path, file_size, file_hash, file_url,
                        external_ref, tags, summary, links, notes,
                        created_at, updated_at
-                FROM akten;
-            DROP TABLE akten;
-            ALTER TABLE akten_v5 RENAME TO akten;
+                FROM folders;
+            DROP TABLE folders;
+            ALTER TABLE akten_v5 RENAME TO folders;
          )SQL"
         },
         {"akt", 6,
-         "v6: source_url added to akt_objekte for URL-based objects",
-         "ALTER TABLE akt_objekte ADD COLUMN source_url TEXT;"
+         "v6: source_url added to folder_objects for URL-based objects",
+         "ALTER TABLE folder_objects ADD COLUMN source_url TEXT;"
         },
         {"akt", 7,
-         "v7: file_url removed from documents — URL belongs to DocumentObjects only",
+         "v7: file_url removed from documents — URL belongs to FolderObjects only",
          // SQLite < 3.35: recreate table without file_url
          R"SQL(
             CREATE TABLE IF NOT EXISTS akten_v7 AS
-                SELECT document_id, release_workflow_id, task_id,
+                SELECT folder_id, workflow_id, task_id,
                        f18_operation_id, f18_step_id, author_id, approved_by,
                        doc_type, doc_category, title, version,
                        date_created, date_modified, date_approved, date_expires,
@@ -96,9 +96,9 @@ std::vector<Migration> MigrationEngine::registry() {
                        format, file_path, file_size, file_hash,
                        external_ref, tags, summary, links, notes,
                        created_at, updated_at
-                FROM akten;
-            DROP TABLE akten;
-            ALTER TABLE akten_v7 RENAME TO akten;
+                FROM folders;
+            DROP TABLE folders;
+            ALTER TABLE akten_v7 RENAME TO folders;
          )SQL"
         },
     }; // end registry

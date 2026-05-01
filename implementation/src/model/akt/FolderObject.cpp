@@ -1,8 +1,8 @@
 // ============================================================
-// DocumentObject.cpp
+// FolderObject.cpp
 // ============================================================
 #include <regex>
-#include "DocumentObject.h"
+#include "FolderObject.h"
 #ifdef _WIN32
 #  include <windows.h>
 #  include <shellapi.h>
@@ -11,7 +11,7 @@
 #include "../Utils.h"
 #include "../../core/FileOps.h"
 #include "../../core/Config.h"
-#include "../../repository/ArchiveStore.h"
+#include "../../model/akt/ArchiveStore.h"
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -23,17 +23,17 @@ namespace Rosenholz {
 static auto t_(const std::string& s) { return BindParam::text(s); }
 static auto i_(int64_t v)             { return BindParam::int64(v); }
 
-Database* DocumentObject::db() {
+Database* FolderObject::db() {
     return DatabasePool::instance().get("akt");
 }
 
 // ── CRUD + internal helpers ─────────────────────────────────────────────────
-std::string DocumentObject::sanitiseForFilename(const std::string& s) {
+std::string FolderObject::sanitiseForFilename(const std::string& s) {
     return FileOps::sanitizeFilename(s);
 }
 
 // ── CRUD ─────────────────────────────────────────────────────
-void DocumentObject::fromRow(const Row& r) {
+void FolderObject::fromRow(const Row& r) {
     auto g = [&](const char* k) -> std::string {
         auto it = r.find(k); return it != r.end() ? it->second : "";
     };
@@ -52,7 +52,7 @@ void DocumentObject::fromRow(const Row& r) {
     updatedAt     = g("updated_at");
 }
 
-OperationResult DocumentObject::save() const {
+OperationResult FolderObject::save() const {
     auto* d = db();
     if (!d) return OperationResult::DB_ERROR;
     bool ok = d->exec(R"(
@@ -71,9 +71,9 @@ OperationResult DocumentObject::save() const {
     return ok ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-OperationResult DocumentObject::update() const { return save(); }
+OperationResult FolderObject::update() const { return save(); }
 
-OperationResult DocumentObject::remove() const {
+OperationResult FolderObject::remove() const {
     auto* d = db();
     if (!d) return OperationResult::DB_ERROR;
     bool ok = d->exec("DELETE FROM folder_objects WHERE object_id=? AND folder_id=?;",
@@ -82,7 +82,7 @@ OperationResult DocumentObject::remove() const {
 }
 
 // ── Display ─────────────────────────────────────────────────────────────────
-std::string DocumentObject::summary() const {
+std::string FolderObject::summary() const {
     std::ostringstream ss;
     ss << std::left << std::setw(7) << objectId
        << "  " << std::setw(40) << originalName.substr(0,38)
@@ -92,7 +92,7 @@ std::string DocumentObject::summary() const {
 }
 
 // ── Queries ──────────────────────────────────────────────────
-std::shared_ptr<DocumentObject> DocumentObject::loadByDocAndId(
+std::shared_ptr<FolderObject> FolderObject::loadByDocAndId(
     const std::string& docId, const std::string& oid)
 {
     auto* d = db();
@@ -102,22 +102,22 @@ std::shared_ptr<DocumentObject> DocumentObject::loadByDocAndId(
     auto rows = d->query(
         "SELECT * FROM folder_objects WHERE object_id=?;", {t_(pk)});
     if (rows.empty()) return nullptr;
-    auto o = std::make_shared<DocumentObject>(); o->fromRow(rows[0]);
+    auto o = std::make_shared<FolderObject>(); o->fromRow(rows[0]);
     return o;
 }
 
-std::vector<std::shared_ptr<DocumentObject>> DocumentObject::loadForRevision(
+std::vector<std::shared_ptr<FolderObject>> FolderObject::loadForRevision(
     const std::string& docId, uint32_t revNum)
 {
     auto* d = db();
-    std::vector<std::shared_ptr<DocumentObject>> result;
+    std::vector<std::shared_ptr<FolderObject>> result;
     if (!d) return result;
     auto rows = d->query(
         "SELECT * FROM folder_objects "
         "WHERE folder_id=? AND rev=? ORDER BY original_name;",
         {t_(docId), i_(revNum)});
     for (auto& r : rows) {
-        auto o = std::make_shared<DocumentObject>(); o->fromRow(r);
+        auto o = std::make_shared<FolderObject>(); o->fromRow(r);
         result.push_back(o);
     }
     return result;
@@ -128,7 +128,7 @@ std::vector<std::shared_ptr<DocumentObject>> DocumentObject::loadForRevision(
 // Uses a counter stored in the DB: max seq +1.
 // Encoded as base-36: 0-9 A-Z
 // ── Private helpers (filename, objectId generation) ─────────────────────────
-std::string DocumentObject::nextObjectId(const std::string& docId) {
+std::string FolderObject::nextObjectId(const std::string& docId) {
     auto* d = db();
     if (!d) return "XXXXX";
 
@@ -155,7 +155,7 @@ std::string DocumentObject::nextObjectId(const std::string& docId) {
 }
 
 // ── MFS helpers ──────────────────────────────────────────────
-std::string DocumentObject::mfsRevDir(const std::string& docId, uint32_t revNum) {
+std::string FolderObject::mfsRevDir(const std::string& docId, uint32_t revNum) {
     const std::string& mfsRoot = Config::instance().mfsPath();
     std::string sane = docId;
     for (char& c : sane) if (c == '/') c = '_';
@@ -164,7 +164,7 @@ std::string DocumentObject::mfsRevDir(const std::string& docId, uint32_t revNum)
     return FileOps::joinPath(FileOps::joinPath(mfsRoot, "AKT"), folderName);
 }
 
-std::string DocumentObject::buildMfsFilename(
+std::string FolderObject::buildMfsFilename(
     const std::string& docRegNr,
     const std::string& oid,
     uint32_t            revNum,
@@ -182,7 +182,7 @@ std::string DocumentObject::buildMfsFilename(
 
 // ── Factory ──────────────────────────────────────────────────
 // ── Factory ─────────────────────────────────────────────────────────────────
-std::shared_ptr<DocumentObject> DocumentObject::importFile(
+std::shared_ptr<FolderObject> FolderObject::importFile(
     const std::string& docId,
     uint32_t            revNum,
     const std::string& srcPath,
@@ -224,7 +224,7 @@ std::shared_ptr<DocumentObject> DocumentObject::importFile(
     // PK in DB: folderId + ":" + objectId
     std::string pk = docId + ":" + oid;
 
-    auto obj = std::make_shared<DocumentObject>();
+    auto obj = std::make_shared<FolderObject>();
     obj->objectId     = pk;
     obj->folderId   = docId;
     obj->rev          = revNum;
@@ -257,7 +257,7 @@ std::shared_ptr<DocumentObject> DocumentObject::importFile(
 
 // ── Key file ─────────────────────────────────────────────────
 // ── MFS key-file ─────────────────────────────────────────────────────────────
-OperationResult DocumentObject::writeKeyFile(
+OperationResult FolderObject::writeKeyFile(
     const std::string& docId,
     uint32_t            revNum,
     const std::string& docTitle)
@@ -317,7 +317,7 @@ OperationResult DocumentObject::writeKeyFile(
 
 // ── LMDB commit ──────────────────────────────────────────────
 // ── LMDB archive ─────────────────────────────────────────────────────────────
-OperationResult DocumentObject::commitToLMDB() {
+OperationResult FolderObject::commitToLMDB() {
     if (mfsPath.empty() || !FileOps::fileExists(mfsPath)) {
         LOG_ERROR("[DocObject] commitToLMDB: MFS file not found: " + mfsPath);
         return OperationResult::DOC_FILE_NOT_FOUND;
@@ -352,7 +352,7 @@ OperationResult DocumentObject::commitToLMDB() {
     return OperationResult::OPERATION_ACK;
 }
 
-std::string DocumentObject::extractFromLMDB(const std::string& destDir) {
+std::string FolderObject::extractFromLMDB(const std::string& destDir) {
     auto& store = Rosenholz::Archive::ArchiveStore::instance();
     std::string outDir = destDir.empty() ? mfsRevDir(folderId, rev) : destDir;
     FileOps::makeDirs(outDir);
@@ -369,7 +369,7 @@ std::string DocumentObject::extractFromLMDB(const std::string& destDir) {
 
 // ── Object-level checkout ──────────────────────────────────────
 // ── Checkout / Checkin / Revert / Open ──────────────────────────────────────
-std::string DocumentObject::checkoutObject(const std::string& destDir) {
+std::string FolderObject::checkoutObject(const std::string& destDir) {
     if (checkedOut) {
         LOG_WARN("[DocObject] checkoutObject: already checked out: " + objectId);
         return checkoutPath;
@@ -401,7 +401,7 @@ std::string DocumentObject::checkoutObject(const std::string& destDir) {
 }
 
 // ── Object-level checkin ──────────────────────────────────────
-OperationResult DocumentObject::checkinObject(const std::string& srcPath) {
+OperationResult FolderObject::checkinObject(const std::string& srcPath) {
     // Fall back: use mfsPath if neither srcPath nor checkoutPath is set
     std::string path = srcPath.empty() ? checkoutPath : srcPath;
     if (path.empty() && !mfsPath.empty() && FileOps::fileExists(mfsPath))
@@ -431,12 +431,12 @@ OperationResult DocumentObject::checkinObject(const std::string& srcPath) {
 }
 
 // ── Object-level revert ──────────────────────────────────────
-OperationResult DocumentObject::revertObject(uint32_t parentRev) {
+OperationResult FolderObject::revertObject(uint32_t parentRev) {
     if (parentRev == 0) return OperationResult::DOC_NO_PARENT_REV;
 
     // Find same objectId in parent revision
     auto parentObjs = loadForRevision(folderId, parentRev);
-    std::shared_ptr<DocumentObject> parentObj;
+    std::shared_ptr<FolderObject> parentObj;
     std::string shortId = objectId;
     auto colon = shortId.rfind(':');
     if (colon != std::string::npos) shortId = shortId.substr(colon + 1);
@@ -463,7 +463,7 @@ OperationResult DocumentObject::revertObject(uint32_t parentRev) {
 }
 
 // ── Object open ──────────────────────────────────────────────
-std::string DocumentObject::openObject(bool inWork, bool& wasCheckedOut) {
+std::string FolderObject::openObject(bool inWork, bool& wasCheckedOut) {
     wasCheckedOut = false;
     auto openPath = [](const std::string& p) {
 #ifdef _WIN32
@@ -518,7 +518,7 @@ std::string DocumentObject::openObject(bool inWork, bool& wasCheckedOut) {
 
 // ── MFS scan for unregistered files ──────────────────────────
 // ── MFS folder scanner ───────────────────────────────────────────────────────
-std::vector<std::string> DocumentObject::scanForUnregisteredFiles(
+std::vector<std::string> FolderObject::scanForUnregisteredFiles(
     const std::string& docId, uint32_t rev)
 {
     std::vector<std::string> result;
@@ -556,20 +556,20 @@ std::vector<std::string> DocumentObject::scanForUnregisteredFiles(
 }
 
 
-// ── DocumentObject::loadById ─────────────────────────────────────────────
-std::shared_ptr<DocumentObject> DocumentObject::loadById(const std::string& objectId) {
+// ── FolderObject::loadById ─────────────────────────────────────────────
+std::shared_ptr<FolderObject> FolderObject::loadById(const std::string& objectId) {
     auto* db = DatabasePool::instance().get("akt");
     if (!db) return nullptr;
     auto rows = db->query("SELECT * FROM folder_objects WHERE object_id=?;",
                           {BindParam::text(objectId)});
     if (rows.empty()) return nullptr;
-    auto obj = std::make_shared<DocumentObject>();
+    auto obj = std::make_shared<FolderObject>();
     obj->fromRow(rows[0]);
     return obj;
 }
 
-// ── DocumentObject::updateFromUrl ────────────────────────────────────────
-OperationResult DocumentObject::updateFromUrl(const std::string& url) {
+// ── FolderObject::updateFromUrl ────────────────────────────────────────
+OperationResult FolderObject::updateFromUrl(const std::string& url) {
     std::string target = url.empty() ? sourceUrl : url;
     if (target.empty()) return OperationResult::IO_ERROR;
     if (!url.empty()) sourceUrl = url;

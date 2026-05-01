@@ -3,47 +3,47 @@
 // TreeBuilder.cpp
 // ============================================================
 #include "TreeBuilder.h"
-#include "f16/ProjectF16.h"
-#include "f22/TaskF22.h"
-#include "dok/Document.h"
+#include "f16/F16.h"
+#include "f22/F22.h"
+#include "akt/Folder.h"
 #include "f18/F18Operation.h"
 #include <sstream>
 
 namespace Rosenholz {
 
 TreeNode TreeBuilder::buildF16Tree(const std::string& projectId) {
-    auto p = ProjectF16::loadById(projectId);
+    auto p = F16::loadById(projectId);
     TreeNode root;
     if (!p) return root;
     root.ref = {EntityType::F16, p->projectId, p->title, p->regNumber.toString()};
     root.statusLabel = p->archived ? "archiviert" : "aktiv";
 
     // F22 tasks:
-    for (auto& t : TaskF22::loadForProject(projectId)) {
+    for (auto& t : F22::loadForProject(projectId)) {
         TreeNode tn;
         tn.ref = {EntityType::F22, t->taskId, t->title, t->regNumber.toString()};
         tn.statusLabel = entityStatusToString(t->status);
 
         // AKT under each F22:
-        for (auto& d : Document::loadForEntity("f22", t->taskId)) {
+        for (auto& d : Folder::loadForEntity("f22", t->taskId)) {
             TreeNode dn;
-            dn.ref = {EntityType::AKT, d->documentId, d->title, d->documentId};
+            dn.ref = {EntityType::AKT, d->folderId, d->title, d->folderId};
             dn.statusLabel = d->format;
             tn.children.push_back(std::move(dn));
         }
         // F18 under each F22:
         for (auto& v : F18Operation::loadForTask(t->taskId)) {
             TreeNode vn;
-            vn.ref = {EntityType::F18, v->vorgangId, v->title, v->vorgangId};
+            vn.ref = {EntityType::F18, v->operationId, v->title, v->operationId};
             vn.statusLabel = entityStatusToString(v->status);
             tn.children.push_back(std::move(vn));
         }
         root.children.push_back(std::move(tn));
     }
     // AKT directly on F16:
-    for (auto& d : Document::loadForEntity("f16", projectId)) {
+    for (auto& d : Folder::loadForEntity("f16", projectId)) {
         TreeNode dn;
-        dn.ref = {EntityType::AKT, d->documentId, d->title, d->documentId};
+        dn.ref = {EntityType::AKT, d->folderId, d->title, d->folderId};
         dn.statusLabel = d->format;
         root.children.push_back(std::move(dn));
     }
@@ -52,12 +52,12 @@ TreeNode TreeBuilder::buildF16Tree(const std::string& projectId) {
 
 std::vector<TreeNode> TreeBuilder::buildAllF16() {
     std::vector<TreeNode> result;
-    for (auto& p : ProjectF16::loadAll()) {
+    for (auto& p : F16::loadAll()) {
         TreeNode n;
         n.ref = {EntityType::F16, p->projectId, p->title, p->regNumber.toString()};
         n.statusLabel = p->archived ? "archiviert" : "aktiv";
         // Count children without loading full tree:
-        int f22c = (int)TaskF22::loadForProject(p->projectId).size();
+        int f22c = (int)F22::loadForProject(p->projectId).size();
         n.children.resize(f22c); // placeholder count
         result.push_back(std::move(n));
     }

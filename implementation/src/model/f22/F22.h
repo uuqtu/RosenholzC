@@ -1,0 +1,151 @@
+// ============================================================
+// F22.h  —  Task entity (Aufgabenkartei F22)
+//
+// DDR-Aktenzeichen: XV/F22/{seq}/{year}
+// Tasks belong to a project (projectId required)
+// Supports: WBS hierarchy (parentTaskId), effort tracking,
+//   cost tracking, and workflow attachment
+// ============================================================
+#pragma once
+#include <utility>
+
+#include "../Utils.h"
+#include "../../core/OperationResult.h"
+// ============================================================
+// F22.h  —  Task entity (F22 Vorgangskartei analogy)
+//
+// Tasks belong to Projects (F16). A task can have:
+//   - Child tasks (recursive subtask hierarchy)
+//   - Meetings (a task can have MANY meetings)
+//   - QTCS dimensions (multi-assignable, not mandatory)
+//   - Trackable items
+//
+// Supports conversion back to F16 (promotion).
+// ============================================================
+
+#include <string>
+#include <vector>
+#include <memory>
+#include "../../core/Database.h"
+#include "../../core/RegNumber.h"
+#include <nlohmann/json.hpp>
+
+namespace Rosenholz {
+
+class F22 {
+public:
+    // ── Identity ───────────────────────────────────────────
+    std::string taskId;
+    RegNumber   regNumber;
+    std::string projectId;         ///< Parent project (F16)
+    std::string parentTaskId;      ///< Parent task for subtask hierarchy
+    std::string taskCode;
+    std::string title;
+    std::string description;
+    std::string taskType;
+
+    // ── Assignment ────────────────────────────────────────
+    std::string assigneeId;
+    std::string assignedBy;
+
+    // ── Status / workflow ─────────────────────────────────
+    EntityStatus status { EntityStatus::IN_WORK }; ///< lifecycle via F77 — IN_WORK|LOCKED|RELEASED|CLOSEDI End step)
+    std::string releaseWorkflowId;    ///< WFI ID of the controlling Main Workflow
+    std::string priority;
+
+    // ── Time (QTCS) ───────────────────────────────────────
+    double      effortPlannedHrs   { 0.0 };
+    double      effortActualHrs    { 0.0 };
+    double      effortRemainingHrs { 0.0 };
+    std::string startDatePlanned;
+    std::string startDateActual;
+    std::string dueDatePlanned;
+    std::string dueDateActual;
+    int         scheduleVarianceDays { 0 };
+    int         percentComplete      { 0 };
+
+    // ── Cost (QTCS) ───────────────────────────────────────
+    double costPlanned { 0.0 };
+    double costActual  { 0.0 };
+
+    // ── Quality / Scope (QTCS) ────────────────────────────
+    std::string qualityCriteria;
+    std::string acceptanceCriteria;
+    std::string milestones; ///< Free-text milestone notes
+    std::string wbsCode;
+    std::string sprintOrPhase;
+
+
+    // ── Children ──────────────────────────────────────────
+    std::vector<std::shared_ptr<F22>> childTasks;  ///< Lazy loaded
+
+
+    // ── External ──────────────────────────────────────────
+    std::string externalRef;
+    std::string links;
+    std::string notes;   ///< JSON
+    std::string createdAt;
+    std::string updatedAt;
+
+
+    // ── State predicates ──────────────────────────────────────
+    bool isReleased()    const { return status == EntityStatus::RELEASED; }
+    bool isLocked()      const { return status == EntityStatus::LOCKED; }
+    bool isClosed()      const { return status == EntityStatus::CLOSED; }
+    bool isEditable()    const { return status == EntityStatus::IN_WORK; }
+    bool canEdit()        const { return status == EntityStatus::IN_WORK && !isWorkflowComplete(); }
+    bool canAddChildren() const { return status == EntityStatus::IN_WORK && !isWorkflowComplete(); }
+    /// True when the controlling F77 workflow has status="completed".
+    /// A completed workflow means the entity is permanently locked.
+    bool isWorkflowComplete() const;
+
+    // ── CRUD ──────────────────────────────────────────────
+    OperationResult save() const;
+    void ensureReleaseWorkflow();  ///< Creates Main WFI on first save
+    bool load(const std::string& id);
+    OperationResult remove();
+    OperationResult update();
+
+    // ── Factory ───────────────────────────────────────────
+    static int count();
+    static std::shared_ptr<F22> create(
+        const std::string& projectId,
+        const std::string& title,
+        const std::string& assigneeId  = "",
+        const std::string& parentTaskId = "");
+
+    static std::vector<std::shared_ptr<F22>> loadRecent(int n = 20);
+
+    /// Scan this task's MFS folder for files not registered as Akte objects.
+    /// Returns (filePath, suggestedTitle) pairs.
+    /// Canonical MFS folder for this F22 task (mfs/F22/<sanitised-reg>/)
+    std::string mfsDir() const;
+    std::vector<std::pair<std::string,std::string>> scanMfsForUnregistered() const;
+    static std::shared_ptr<F22> loadById(const std::string& taskId);
+    static std::vector<std::shared_ptr<F22>> loadForProject(const std::string& projectId);
+    static std::vector<std::shared_ptr<F22>> loadChildren(const std::string& parentTaskId);
+
+
+    // ── Reassign ─────────────────────────────────────────
+    OperationResult reassignTo(const std::string& newAssigneeId);
+    OperationResult reassignToProject(const std::string& newProjectId);
+    OperationResult reassignParent(const std::string& newParentTaskId);
+
+    // ── Conversion ────────────────────────────────────────
+    /// Promote this task to a full Project (F16).
+    /// Returns the new project ID. Task is NOT deleted.
+    std::string convertToProject(const std::string& projectType = "OV");
+
+    // ── Serialisation ─────────────────────────────────────
+    nlohmann::json toJson() const;
+    static std::shared_ptr<F22> fromJson(const nlohmann::json& j);
+
+    // ── MFS output ────────────────────────────────────────
+    bool writeMFSFile(const std::string& mfsRoot) const;
+
+    std::string mfsSchluesselText() const;
+private:
+    void fromRow(const Row& r);
+};
+
+} // namespace Rosenholz

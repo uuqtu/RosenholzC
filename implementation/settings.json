@@ -1,0 +1,43 @@
+{
+    "_comment": "Rosenholz PM — Konfigurationsdatei (settings.json)",
+    "_version": "6.0",
+    "basePath": "",
+    "projectName": "Rosenholz PM",
+    "logLevel": "INFO",
+    "logFile": "rosenholz.log",
+    "registratur": {
+        "diensteinheitKuerzel": "XV",
+        "aktenfuehrendeStelle": "Rosenholz-Referat XV",
+        "geschaeftszeichen": "GZ",
+        "archivSignatur": "BStU-MfS"
+    },
+    "mfs": {
+        "enabled": true,
+        "rootFolder": "mfs"
+    },
+    "db": {
+        "walMode": true,
+        "cacheSize": -64000
+    },
+    "storage": {
+        "saveSpace": false
+    },
+    "admin": {
+        "enabled": false
+    },
+    "ui": {
+        "defaultLoadRule": 1
+    },
+    "backup": {
+        "enabled": false,
+        "intervalHours": 24,
+        "maxCopies": 7,
+        "backupPath": ""
+    },
+    "github": {
+        "enabled": false,
+        "repoUrl": "",
+        "branch": "main",
+        "token": ""
+    }
+}

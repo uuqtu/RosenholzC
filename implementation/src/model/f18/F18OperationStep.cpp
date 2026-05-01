@@ -21,7 +21,7 @@ void F18OperationStep::fromRow(const Row& r) {
     auto gb = [&](const char* k) { return rowGetBool(r,k); };
 
     stepId            = g("step_id");
-    vorgangId         = g("vorgang_id");
+    operationId         = g("operation_id");
     tplStepId         = g("tpl_step_id");
     title             = g("title");
     description       = g("description");
@@ -63,7 +63,7 @@ bool F18OperationStep::save() const {
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f18_operation_steps
-        (step_id, vorgang_id, tpl_step_id, title, description, step_type,
+        (step_id, operation_id, tpl_step_id, title, description, step_type,
          sequence_order, predecessor_step_ids,
          is_initialize, is_final, is_free,
          assigned_to, required_role, due_date, started_date, completed_date,
@@ -78,7 +78,7 @@ bool F18OperationStep::save() const {
                ?,?,?, ?,?,?,?,
                ?,?,?)
     )SQL", {
-        BindParam::text(stepId), BindParam::text(vorgangId), BindParam::nullOrText(tplStepId), BindParam::text(title), BindParam::nullOrText(description), BindParam::text(stepType),
+        BindParam::text(stepId), BindParam::text(operationId), BindParam::nullOrText(tplStepId), BindParam::text(title), BindParam::nullOrText(description), BindParam::text(stepType),
         BindParam::int64(sequenceOrder), BindParam::nullOrText(predecessorStepIds),
         BindParam::int64(isInitialize?1:0), BindParam::int64(isFinal?1:0), BindParam::int64(isFree?1:0),
         BindParam::nullOrText(assignedTo), BindParam::nullOrText(requiredRole), BindParam::nullOrText(dueDate), BindParam::nullOrText(startedDate), BindParam::nullOrText(completedDate),
@@ -156,13 +156,13 @@ std::shared_ptr<F18OperationStep> F18OperationStep::loadById(const std::string& 
     return s;
 }
 
-std::vector<F18OperationStep> F18OperationStep::loadForVorgang(const std::string& vorgangId) {
+std::vector<F18OperationStep> F18OperationStep::loadForVorgang(const std::string& operationId) {
     auto* d = db();
     std::vector<F18OperationStep> result;
     if (!d) return result;
     auto rows = d->query(
-        "SELECT * FROM f18_operation_steps WHERE vorgang_id=? ORDER BY sequence_order,created_at;",
-        {BindParam::text(vorgangId)});
+        "SELECT * FROM f18_operation_steps WHERE operation_id=? ORDER BY sequence_order,created_at;",
+        {BindParam::text(operationId)});
     for (auto& r : rows) {
         F18OperationStep s; s.fromRow(r); result.push_back(s);
     }

@@ -1,14 +1,14 @@
 // ============================================================
-// TaskF22.cpp  —  Task entity implementation
+// F22.cpp  —  Task entity implementation
 // ============================================================
 
 #include <regex>
-#include "TaskF22.h"
+#include "F22.h"
 #include "../../core/Config.h"
 #include "../../core/FileOps.h"
 #include "../../core/Database.h"
 #include "../../workflow/F77Workflow.h"
-#include "../dok/Document.h"
+#include "../akt/Folder.h"
 #include "../../mfs/MFSWriter.h"
 #include "../../core/FileOps.h"
 #include "../../core/Logger.h"
@@ -25,14 +25,14 @@ namespace Rosenholz {
 
 
 // ── Factory ──────────────────────────────────────────────────
-std::shared_ptr<TaskF22> TaskF22::create(
+std::shared_ptr<F22> F22::create(
     const std::string& projectId_,
     const std::string& title_,
     const std::string& assigneeId_,
     const std::string& parentTaskId_)
 {
-    LOG_INFO("Creating TaskF22: " + title_ + " in project " + projectId_);
-    auto t = std::make_shared<TaskF22>();
+    LOG_INFO("Creating F22: " + title_ + " in project " + projectId_);
+    auto t = std::make_shared<F22>();
     t->taskId        = genId("F22");
     t->regNumber     = RegNumber::fromString(t->taskId);
     t->projectId     = projectId_;
@@ -43,7 +43,7 @@ std::shared_ptr<TaskF22> TaskF22::create(
     t->createdAt     = nowIso();
     t->updatedAt     = t->createdAt;
     t->notes         = "{}";
-    LOG_INFO("TaskF22 created: " + t->taskId + " reg=" + t->regNumber.toString());
+    LOG_INFO("F22 created: " + t->taskId + " reg=" + t->regNumber.toString());
     return t;
 }
 
@@ -58,27 +58,29 @@ std::shared_ptr<TaskF22> TaskF22::create(
 // Returns:
 //   true on success
 // ------------------------------
-OperationResult TaskF22::save() const {
+OperationResult F22::save() const {
     auto* db = DatabasePool::instance().get("f22");
-    if (!db) { LOG_ERROR("TaskF22::save — projects DB not available"); return OperationResult::DB_ERROR; }
-
+    if (!db) { LOG_ERROR("F22::save — f22 DB not available"); return OperationResult::DB_ERROR; }
+    db->beginTransaction();
     OperationResult ok = db->exec(R"(
         INSERT OR REPLACE INTO tasks (
-            task_id, workflow_instance_id, workflow_status, workflow_current_state, release_workflow_id,
-            reg_number, project_id, parent_task_id, assignee_id, assigned_by,
-            task_code, title, description, task_type, status, priority,
+            task_id, release_workflow_id, reg_number, project_id, parent_task_id,
+            assignee_id, assigned_by, task_code, title, description,
+            task_type, status, priority,
             effort_planned_hrs, effort_actual_hrs, effort_remaining_hrs,
             cost_planned, cost_actual,
             start_date_planned, start_date_actual, due_date_planned, due_date_actual,
             schedule_variance_days, percent_complete,
-            quality_criteria, acceptance_criteria, milestones,
-            wbs_code, sprint_or_phase, links, notes, created_at, updated_at
-        ) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?,?,?,?)
+            quality_criteria, acceptance_criteria, milestones, wbs_code, sprint_or_phase,
+            links, notes, created_at, updated_at
+        ) VALUES (
+            ?,?,?,?,?,  ?,?,?,?,?,  ?,?,?,
+            ?,?,?,  ?,?,
+            ?,?,?,?,  ?,?,
+            ?,?,?,?,?,  ?,?,?,?
+        )
     )", {
         BindParam::text(taskId),
-        BindParam::nullOrText(workflowInstanceId),
-        BindParam::nullOrText(workflowStatus),
-        BindParam::nullOrText(workflowCurrentState),
         BindParam::nullOrText(releaseWorkflowId),
         BindParam::text(regNumber.toString()),
         BindParam::text(projectId),
@@ -88,9 +90,9 @@ OperationResult TaskF22::save() const {
         BindParam::nullOrText(taskCode),
         BindParam::text(title),
         BindParam::nullOrText(description),
-        BindParam::nullOrText(taskType),
+        BindParam::text(taskType.empty() ? "task" : taskType),
         BindParam::text(entityStatusToString(status)),
-        BindParam::nullOrText(priority),
+        BindParam::text(priority.empty() ? "medium" : priority),
         BindParam::real(effortPlannedHrs),
         BindParam::real(effortActualHrs),
         BindParam::real(effortRemainingHrs),
@@ -113,15 +115,35 @@ OperationResult TaskF22::save() const {
         BindParam::text(nowIso())
     }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 
+    if (opOk(ok)) { db->commitTransaction(); LOG_DEBUG("F22 saved: " + taskId); }
+    else { db->rollbackTransaction(); LOG_ERROR("F22 save failed: " + taskId); }
+
+    // Auto-create "Allgemeine Akte" on first save if not already present
+    if (opOk(ok)) {
+        auto* aktDb = DatabasePool::instance().get("akt");
+        if (aktDb) {
+            auto existingCheck = aktDb->query(
+                "SELECT COUNT(*) as n FROM folders f "
+                "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
+                "WHERE ef.entity_type='f22' AND ef.entity_id=? AND f.doc_type='general';",
+                {BindParam::text(taskId)});
+            bool alreadyExists = !existingCheck.empty() &&
+                                  existingCheck[0].begin()->second != "0";
+            if (!alreadyExists) {
+                auto allgAkte = Rosenholz::Folder::create("Allgemeine Akte", "general", taskId, "");
+                if (opOk(allgAkte->save())) {
+                    allgAkte->attachToEntity("f22", taskId);
+                    LOG_INFO("[F22] Allgemeine Akte angelegt: " + allgAkte->folderId + " für " + taskId);
+                }
+            }
+        }
+    }
     return ok;
 }
 
-void TaskF22::fromRow(const Row& r) {
+void F22::fromRow(const Row& r) {
     taskId               = rowGet(r,"task_id");
-    workflowInstanceId   = rowGet(r,"workflow_instance_id");
     releaseWorkflowId       = rowGet(r,"release_workflow_id");
-    workflowStatus       = rowGet(r,"workflow_status");
-    workflowCurrentState = rowGet(r,"workflow_current_state");
     regNumber            = RegNumber::fromString(rowGet(r,"reg_number"));
     projectId            = rowGet(r,"project_id");
     parentTaskId         = rowGet(r,"parent_task_id");
@@ -155,19 +177,19 @@ void TaskF22::fromRow(const Row& r) {
     updatedAt            = rowGet(r,"updated_at");
 }
 
-bool TaskF22::load(const std::string& id) {
+bool F22::load(const std::string& id) {
     auto* db = DatabasePool::instance().get("f22");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM tasks WHERE task_id=?;", {BindParam::text(id)});
-    if (rows.empty()) { LOG_DEBUG("TaskF22 not found: " + id); return false; }
+    if (rows.empty()) { LOG_DEBUG("F22 not found: " + id); return false; }
     fromRow(rows[0]);
-        return true;
+    return true;
 }
 
-OperationResult TaskF22::remove() {
+OperationResult F22::remove() {
     auto* db = DatabasePool::instance().get("f22");
     if (!db) return OperationResult::DB_ERROR;
-    LOG_WARN("Removing TaskF22: " + taskId);
+    LOG_WARN("Removing F22: " + taskId);
     db->exec("DELETE FROM task_quality WHERE task_id=?;", {BindParam::text(taskId)});
     db->exec("DELETE FROM task_cost    WHERE task_id=?;", {BindParam::text(taskId)});
     db->exec("DELETE FROM task_time    WHERE task_id=?;", {BindParam::text(taskId)});
@@ -177,27 +199,27 @@ OperationResult TaskF22::remove() {
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-OperationResult TaskF22::update() {
+OperationResult F22::update() {
     if (isReleased()) {
         LOG_WARN("[F22] update() verweigert: Aufgabe ist released — " + taskId);
         return OperationResult::ENTITY_RELEASED;
     } updatedAt = nowIso(); return save(); }
 
-std::shared_ptr<TaskF22> TaskF22::loadById(const std::string& id) {
-    auto t = std::make_shared<TaskF22>();
+std::shared_ptr<F22> F22::loadById(const std::string& id) {
+    auto t = std::make_shared<F22>();
     if (!t->load(id)) return nullptr;
     return t;
 }
 
-std::vector<std::shared_ptr<TaskF22>> TaskF22::loadForProject(const std::string& pid) {
+std::vector<std::shared_ptr<F22>> F22::loadForProject(const std::string& pid) {
     auto* db = DatabasePool::instance().get("f22");
-    std::vector<std::shared_ptr<TaskF22>> result;
+    std::vector<std::shared_ptr<F22>> result;
     if (!db) return result;
     auto rows = db->query(
         "SELECT * FROM tasks WHERE project_id=? ORDER BY wbs_code, created_at;",
         {BindParam::text(pid)});
     for (auto& r : rows) {
-        auto t = std::make_shared<TaskF22>();
+        auto t = std::make_shared<F22>();
         t->fromRow(r);
         result.push_back(t);
     }
@@ -205,50 +227,33 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadForProject(const std::string&
     return result;
 }
 
-std::vector<std::shared_ptr<TaskF22>> TaskF22::loadChildren(const std::string& parentId) {
+std::vector<std::shared_ptr<F22>> F22::loadChildren(const std::string& parentId) {
     auto* db = DatabasePool::instance().get("f22");
-    std::vector<std::shared_ptr<TaskF22>> result;
+    std::vector<std::shared_ptr<F22>> result;
     if (!db) return result;
     auto rows = db->query(
         "SELECT * FROM tasks WHERE parent_task_id=? ORDER BY wbs_code;",
         {BindParam::text(parentId)});
     for (auto& r : rows) {
-        auto t = std::make_shared<TaskF22>();
+        auto t = std::make_shared<F22>();
         t->fromRow(r);
         result.push_back(t);
     }
     return result;
 }
 
-// ── QTCS ─────────────────────────────────────────────────────
-
-void TaskF22::loadQTCSLinks() {
-    auto* db = DatabasePool::instance().get("f22");
-    if (!db) return;
-    auto loadIds = [&](const std::string& table, const std::string& col) {
-        std::vector<std::string> ids;
-        auto rows = db->query("SELECT " + col + " FROM " + table + " WHERE task_id=?;",
-                              {BindParam::text(taskId)});
-        for (auto& r : rows) ids.push_back(r.begin()->second);
-        return ids;
-    };
-    qualityIds = loadIds("task_quality", "quality_id");
-    costIds    = loadIds("task_cost",    "cost_id");
-    timeIds    = loadIds("task_time",    "time_id");
-    scopeIds   = loadIds("task_scope",   "scope_id");
-}
 
 
 // ── Reassign ─────────────────────────────────────────────────
-OperationResult TaskF22::reassignTo(const std::string& newAssigneeId) {
+OperationResult F22::reassignTo(const std::string& newAssigneeId) {
     LOG_INFO("Reassigning task " + taskId + " to " + newAssigneeId);
     assigneeId = newAssigneeId; return update();
 }
-OperationResult TaskF22::reassignToProject(const std::string& newProjectId) {
+OperationResult F22::reassignToProject(const std::string& newProjectId) {
     LOG_INFO("Moving task " + taskId + " to project " + newProjectId);
     projectId = newProjectId; parentTaskId = ""; return update();
 }
-OperationResult TaskF22::reassignParent(const std::string& newParentTaskId) {
+OperationResult F22::reassignParent(const std::string& newParentTaskId) {
     parentTaskId = newParentTaskId; return update();
 }
 
@@ -260,15 +265,15 @@ OperationResult TaskF22::reassignParent(const std::string& newParentTaskId) {
 //   title                : new project title (empty = use task title)
 //
 // Behavior:
-//   Creates a ProjectF16 from this task's metadata
+//   Creates a F16 from this task's metadata
 //   Saves the new project and returns its ID
 //   Does NOT delete the original task
 //
 // Returns:
 //   New project ID, or "" on error
 // ------------------------------
-std::string TaskF22::convertToProject(const std::string& projectType_) {
-    LOG_INFO("Promoting TaskF22 " + taskId + " -> ProjectF16");
+std::string F22::convertToProject(const std::string& projectType_) {
+    LOG_INFO("Promoting F22 " + taskId + " -> F16");
     auto* db = DatabasePool::instance().get("f22");
     if (!db) return "";
 
@@ -303,7 +308,7 @@ std::string TaskF22::convertToProject(const std::string& projectType_) {
 }
 
 // ── Serialisation ─────────────────────────────────────────────
-json TaskF22::toJson() const {
+json F22::toJson() const {
     json j;
     j["taskId"]      = taskId;
     j["regNumber"]   = regNumber.toString();
@@ -316,8 +321,8 @@ json TaskF22::toJson() const {
     return j;
 }
 
-std::shared_ptr<TaskF22> TaskF22::fromJson(const json& j) {
-    auto t = std::make_shared<TaskF22>();
+std::shared_ptr<F22> F22::fromJson(const json& j) {
+    auto t = std::make_shared<F22>();
     t->taskId     = j.value("taskId",    "");
     t->projectId  = j.value("projectId", "");
     t->title      = j.value("title",     "");
@@ -327,23 +332,23 @@ std::shared_ptr<TaskF22> TaskF22::fromJson(const json& j) {
 }
 
 // ── MFS output ───────────────────────────────────────────────
-bool TaskF22::writeMFSFile(const std::string& mfsRoot) const {
+bool F22::writeMFSFile(const std::string& mfsRoot) const {
     return MFSWriter::writeTask(*this, mfsRoot);
 }
 
 // ------------------------------
 // loadRecent
-// Returns the n most recently created TaskF22 records.
+// Returns the n most recently created F22 records.
 // Parameters:
 //   n : maximum number of results (default 20)
 // ------------------------------
-std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
-    std::vector<std::shared_ptr<TaskF22>> result;
+std::vector<std::shared_ptr<F22>> F22::loadRecent(int n) {
+    std::vector<std::shared_ptr<F22>> result;
     auto* db = DatabasePool::instance().get("f22");
     if (!db) return result;
     auto rows = db->query("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?;", {BindParam::int64(n)});
     for (auto& r : rows) {
-        auto obj = std::make_shared<TaskF22>();
+        auto obj = std::make_shared<F22>();
         obj->fromRow(r);
         result.push_back(obj);
     }
@@ -351,16 +356,16 @@ std::vector<std::shared_ptr<TaskF22>> TaskF22::loadRecent(int n) {
 }
 
 
-bool TaskF22::isWorkflowComplete() const {
+bool F22::isWorkflowComplete() const {
     if (releaseWorkflowId.empty()) return false;
-    auto wf = Rosenholz::F77_Workflow::loadById(releaseWorkflowId);
+    auto wf = Rosenholz::F77W::loadById(releaseWorkflowId);
     return wf && wf->status == WorkflowStatus::COMPLETED;
 }
 
-void TaskF22::ensureReleaseWorkflow() {
+void F22::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
     // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
-    auto wf = Rosenholz::F77_Engine::startDefault("f22", taskId);
+    auto wf = Rosenholz::F77Engine::startDefault("f22", taskId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
     LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for f22/" + taskId);
@@ -368,7 +373,7 @@ void TaskF22::ensureReleaseWorkflow() {
 
 
 
-std::string TaskF22::mfsSchluesselText() const {
+std::string F22::mfsSchluesselText() const {
     std::ostringstream s;
     s << "  ID      : " << taskId << "\n"
       << "  Titel   : " << title << "\n"
@@ -384,19 +389,19 @@ std::string TaskF22::mfsSchluesselText() const {
     return s.str();
 }
 
-// ── TaskF22::mfsDir ──────────────────────────────────────────────────────
-std::string TaskF22::mfsDir() const {
+// ── F22::mfsDir ──────────────────────────────────────────────────────
+std::string F22::mfsDir() const {
     const std::string& root = Config::instance().mfsPath();
     if (root.empty()) return "";
     return FileOps::joinPath(FileOps::joinPath(root, "F22"),
                              sanitiseRegNr(regNumber.toString()));
 }
 
-// ── TaskF22::scanMfsForUnregistered ──────────────────────────────────────
+// ── F22::scanMfsForUnregistered ──────────────────────────────────────
 // Scan the MFS folder for this task for files not registered as Akte objects.
 // Returns (filePath, suggestedTitle) pairs for each unregistered file.
 std::vector<std::pair<std::string,std::string>>
-TaskF22::scanMfsForUnregistered() const {
+F22::scanMfsForUnregistered() const {
     std::string taskDir = mfsDir();
     if (!FileOps::dirExists(taskDir)) return {};
 
@@ -433,7 +438,7 @@ TaskF22::scanMfsForUnregistered() const {
 }
 
 
-int TaskF22::count() {
+int F22::count() {
     auto* d = DatabasePool::instance().get("f22");
     return d ? d->rowCount("tasks") : 0;
 }

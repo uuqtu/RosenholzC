@@ -13,12 +13,12 @@
 // ============================================================
 #include "cli_common.h"
 #include "../core/OperationResult.h"
-#include "../model/dok/DocumentObject.h"
+#include "../model/akt/FolderObject.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
 #include "../core/Logger.h"
 #include "../mfs/MFSWriter.h"
-#include "../repository/DocumentRevision.h"
+#include "../model/akt/FolderRevision.h"
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
@@ -34,7 +34,7 @@ using namespace Rosenholz;
 // available entities of that type for the user to pick from,
 // and finally calls createDocumentWizard with the chosen IDs.
 
-std::shared_ptr<Document> createDocumentWizardGuided() {
+std::shared_ptr<Folder> createDocumentWizardGuided() {
     hdr("AKT ANLEGEN — ENTITÄT WÄHLEN");
     std::cout << "  Wo soll das Dokument abgelegt werden?\n"
               << "  1.  F22 (Vorgangskartei)\n"
@@ -45,7 +45,7 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
 
     if (choice == 99 /* F16 parent no longer supported */) {
         // Pick from all projects
-        auto projects = ProjectF16::loadAll();
+        auto projects = F16::loadAll();
         if (projects.empty()) {
             std::cout << "  (keine F16-Karten vorhanden)\n";
             return nullptr;
@@ -61,7 +61,7 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
 
     if (choice == 2) {
         // First pick the project, then the task
-        auto projects = ProjectF16::loadAll();
+        auto projects = F16::loadAll();
         if (projects.empty()) {
             std::cout << "  (keine F16-Karten vorhanden)\n";
             return nullptr;
@@ -74,7 +74,7 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
         int ppick = readInt("F16-Nr", 1, (int)projects.size());
         auto& proj = projects[ppick - 1];
 
-        auto tasks = TaskF22::loadForProject(proj->projectId);
+        auto tasks = F22::loadForProject(proj->projectId);
         if (tasks.empty()) {
             std::cout << "  (keine F22-Vorgänge in diesem Projekt — lege unter Projekt ab)\n";
             return createDocumentWizard("", "");
@@ -98,14 +98,14 @@ std::shared_ptr<Document> createDocumentWizardGuided() {
         hdr("F18 WÄHLEN");
         for (int i = 0; i < (int)ops.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
-                      << "  " << std::setw(26) << ops[i]->vorgangId.substr(0, 24)
-                      << "  [" << std::setw(14) << ops[i]->vorgangType << "]  "
+                      << "  " << std::setw(26) << ops[i]->operationId.substr(0, 24)
+                      << "  [" << std::setw(14) << ops[i]->operationType << "]  "
                       << ops[i]->title.substr(0, 30) << "\n";
         int opick = readInt("F18-Nr", 1, (int)ops.size());
         auto& op = ops[opick - 1];
         auto doc = createDocumentWizard(op->taskId, "");
         if (doc) {
-            doc->f18OperationId = op->vorgangId;
+            doc->f18OperationId = op->operationId;
             { auto r = doc->update(); (void)r; }
         }
         return doc;
@@ -131,7 +131,7 @@ void cmdAkt(const std::vector<std::string>& args) {
 
     // No arguments: list 20 most recent documents
     if (args.empty()) {
-        auto all = Document::loadRecent(20);
+        auto all = Folder::loadRecent(20);
         if (all.empty()) { std::cout << "  (keine Akten)\n"; return; }
         std::cout << "  " << std::left
                   << std::setw(26) << "ID (für rh -akt <id>)"
@@ -140,7 +140,7 @@ void cmdAkt(const std::vector<std::string>& args) {
                   << "TITEL\n"
                   << "  " << std::string(70, '-') << "\n";
         for (auto& d : all)
-            std::cout << "  " << std::setw(26) << d->documentId.substr(0, 24)
+            std::cout << "  " << std::setw(26) << d->folderId.substr(0, 24)
                       << std::setw(14) << (std::string("[") + revStateToString(d->currentRevisionState()) + "]")
                       << std::setw(12) << ("v" + d->version)
                       << d->title.substr(0, 32) << "\n";
@@ -154,13 +154,13 @@ void cmdAkt(const std::vector<std::string>& args) {
         for (size_t i=1; i<args.size(); ++i) { if(!q.empty()) q+=" "; q+=args[i]; }
         if (q.empty()) { printErr("-s benoetigt einen Suchbegriff"); return; }
         std::string lq=q; for(char& c:lq) c=(char)std::tolower((unsigned char)c);
-        auto all = Document::loadRecent(9999);
+        auto all = Folder::loadRecent(9999);
         bool found=false;
         for (auto& d : all) {
-            std::string chk = d->title + " " + d->documentId;
+            std::string chk = d->title + " " + d->folderId;
             for(char& c:chk) c=(char)std::tolower((unsigned char)c);
             if (chk.find(lq)!=std::string::npos) {
-                std::cout << "  AKT  " << std::left << std::setw(28) << d->documentId
+                std::cout << "  AKT  " << std::left << std::setw(28) << d->folderId
                           << " " << d->title << "  [" << d->docType << "]\n";
                 found=true;
             }
@@ -171,13 +171,13 @@ void cmdAkt(const std::vector<std::string>& args) {
 
     if (args[0] == "-n" || args[0] == "--neu") {
         auto doc = createDocumentWizardGuided();
-        if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
+        if (doc) printOk("  >> Dokument angelegt: " + doc->folderId + "  " + doc->title);
         return;
     }
 
     // -f16  —  guided creation under F16 (skips entity-type question)
     if (args[0] == "-f16") {
-        auto projects = ProjectF16::loadAll();
+        auto projects = F16::loadAll();
         if (projects.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
         hdr("AKT ANLEGEN — F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
@@ -186,13 +186,13 @@ void cmdAkt(const std::vector<std::string>& args) {
                       << projects[i]->title.substr(0, 36) << "\n";
         int pick = readInt("F16-Nr", 1, (int)projects.size());
         auto doc = createDocumentWizard("", "");
-        if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
+        if (doc) printOk("  >> Dokument angelegt: " + doc->folderId + "  " + doc->title);
         return;
     }
 
     // -f22  —  guided creation under F22
     if (args[0] == "-f22") {
-        auto projects = ProjectF16::loadAll();
+        auto projects = F16::loadAll();
         if (projects.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
         hdr("AKT ANLEGEN — F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
@@ -201,11 +201,11 @@ void cmdAkt(const std::vector<std::string>& args) {
                       << projects[i]->title.substr(0, 36) << "\n";
         int ppick = readInt("F16-Nr", 1, (int)projects.size());
         auto& proj = projects[ppick - 1];
-        auto tasks = TaskF22::loadForProject(proj->projectId);
+        auto tasks = F22::loadForProject(proj->projectId);
         if (tasks.empty()) {
             std::cout << "  (keine F22-Vorgänge — lege unter Projekt ab)\n";
             auto doc = createDocumentWizard("", "");
-            if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
+            if (doc) printOk("  >> Dokument angelegt: " + doc->folderId + "  " + doc->title);
             return;
         }
         hdr("F22 WÄHLEN");
@@ -215,7 +215,7 @@ void cmdAkt(const std::vector<std::string>& args) {
                       << tasks[i]->title.substr(0, 36) << "\n";
         int tpick = readInt("F22-Nr", 1, (int)tasks.size());
         auto doc = createDocumentWizard(proj->projectId, tasks[tpick - 1]->taskId);
-        if (doc) printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
+        if (doc) printOk("  >> Dokument angelegt: " + doc->folderId + "  " + doc->title);
         return;
     }
 
@@ -226,16 +226,16 @@ void cmdAkt(const std::vector<std::string>& args) {
         hdr("AKT ANLEGEN — F18 WÄHLEN");
         for (int i = 0; i < (int)ops.size(); ++i)
             std::cout << "  " << std::setw(4)  << (i + 1)
-                      << "  " << std::setw(26) << ops[i]->vorgangId.substr(0, 24)
-                      << "  [" << std::setw(14) << ops[i]->vorgangType << "]  "
+                      << "  " << std::setw(26) << ops[i]->operationId.substr(0, 24)
+                      << "  [" << std::setw(14) << ops[i]->operationType << "]  "
                       << ops[i]->title.substr(0, 28) << "\n";
         int pick = readInt("F18-Nr", 1, (int)ops.size());
         auto& op = ops[pick - 1];
         auto doc = createDocumentWizard(op->taskId, "");
         if (doc) {
-            doc->f18OperationId = op->vorgangId;
+            doc->f18OperationId = op->operationId;
             { auto r = doc->update(); (void)r; }
-            printOk("  >> Dokument angelegt: " + doc->documentId + "  " + doc->title);
+            printOk("  >> Dokument angelegt: " + doc->folderId + "  " + doc->title);
         }
         return;
     }
@@ -245,20 +245,20 @@ void cmdAkt(const std::vector<std::string>& args) {
                             + "  (erwartet ID, -n, -f16, -f22, oder -f18)"); return; }
 
     // Try as document ID → open documentMenu
-    auto doc = Document::loadById(args[0]);
+    auto doc = Folder::loadById(args[0]);
     if (doc) {
         documentMenu(doc);
         return;
     }
 
     // Try as project ID
-    auto proj = ProjectF16::loadById(args[0]);
+    auto proj = F16::loadById(args[0]);
     if (!proj) { printErr("ID nicht gefunden: " + args[0]); return; }
 
     if (args.size() > 1) {
         // Additional argument → create document under this project
         auto d = createDocumentWizard("", "");
-        if (d) printOk("  >> Dokument angelegt: " + d->documentId + "  " + d->title);
+        if (d) printOk("  >> Dokument angelegt: " + d->folderId + "  " + d->title);
     } else {
         // Just a project ID → browse documents for this project
         documentBrowserMenu(proj->projectId);
@@ -271,7 +271,7 @@ void cmdAkt(const std::vector<std::string>& args) {
 // Parent project ID (and optionally task ID) must be provided.
 // Source: local file, URL download, or new empty file.
 
-std::shared_ptr<Rosenholz::Document> createDocumentWizard(
+std::shared_ptr<Rosenholz::Folder> createDocumentWizard(
     const std::string& taskId, const std::string& f18OpId)
 {
     using namespace Rosenholz;
@@ -295,7 +295,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
 
     // ── Dokument-Datensatz speichern (keine Datei — Objekte später hinzufügen) ──
     // URLs gehören zu Objekten, nicht zum Dokument-Container.
-    auto doc = Document::create(title, docType, taskId, f18OpId);
+    auto doc = Folder::create(title, docType, taskId, f18OpId);
     doc->format      = "pdf";  // default; overridden when a file is attached
     doc->dateCreated = nowIso();
 
@@ -309,7 +309,7 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
     if (doc->classification.empty()) doc->classification = "intern";
     { auto r = doc->update(); (void)r; }
 
-    std::cout << "  >> Dokument registriert: " << doc->documentId << "\n"
+    std::cout << "  >> Dokument registriert: " << doc->folderId << "\n"
               << "  >> Titel  : " << doc->title << "\n"
               << "  >> Dateien können über Option 5 (Objekt hinzufügen) im Dokumentmenü hinzugefügt werden.\n";
 
@@ -324,19 +324,19 @@ std::shared_ptr<Rosenholz::Document> createDocumentWizard(
 
 // ── revisionMenu (helper for documentMenu) ────────────────────
 //
-// Shows the current DocumentRevision lifecycle state and lets
+// Shows the current FolderRevision lifecycle state and lets
 // the user perform a state transition.
 // Called from documentMenu option 2 (Revisions-Lifecycle).
 
-static void revisionMenu(std::shared_ptr<Document> doc) {
+static void revisionMenu(std::shared_ptr<Folder> doc) {
     using namespace Rosenholz;
     while (true) {
-        auto rev = DocumentRevision::currentRevision(doc->documentId);
+        auto rev = FolderRevision::currentRevision(doc->folderId);
         if (!rev) {
             std::cout << "  (keine aktive Revision)\n";
             return;
         }
-        hdr("REVISION " + std::to_string(rev->rev) + "  — " + doc->documentId.substr(0, 22));
+        hdr("REVISION " + std::to_string(rev->rev) + "  — " + doc->folderId.substr(0, 22));
         std::cout << "  Zustand    : " << rev->revState << "\n";
         std::cout << "  Inhalt-SHA : " << (rev->contentHash.empty() ? "—" : rev->contentHash.substr(0, 20)) << "\n";
         std::cout << "  Groesse    : " << rev->contentSize << " Bytes\n";
@@ -352,7 +352,7 @@ static void revisionMenu(std::shared_ptr<Document> doc) {
         int ch = readInt("Zielzustand", 0, 5);
         if (ch == 0) return;
         std::string target = states[ch - 1];
-        if (!DocumentRevision::isTransitionAllowed(rev->revState,
+        if (!FolderRevision::isTransitionAllowed(rev->revState,
                 revStateFromString(target),
                 Config::instance().admin().enabled)) {
             std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_TRANSITION_NOT_ALLOWED)
@@ -381,12 +381,12 @@ static void revisionMenu(std::shared_ptr<Document> doc) {
 // Passed to every handler so each function has exactly the state it needs.
 // No handler looks up anything globally — all reads go through this struct.
 struct DocMenuCtx {
-    std::shared_ptr<Document>                    doc;
-    std::shared_ptr<DocumentRevision>            cur;
+    std::shared_ptr<Folder>                    doc;
+    std::shared_ptr<FolderRevision>            cur;
     bool                                          inWork;
     bool                                          immutable;
     uint32_t                                      curRevNum;
-    std::vector<std::shared_ptr<DocumentObject>> curObjs;
+    std::vector<std::shared_ptr<FolderObject>> curObjs;
 };
 
 // ch==1: dokHandleEditFields
@@ -397,7 +397,7 @@ static bool dokHandleEditFields(DocMenuCtx& ctx) {
         std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_NOT_IN_WORK) << "\n";
         return true;  // was: continue (handler)
     }
-    hdr("BEARBEITEN — " + ctx.doc->documentId.substr(0, 24));
+    hdr("BEARBEITEN — " + ctx.doc->folderId.substr(0, 24));
     auto s = [](const std::string& p) { return readOpt(p + " (leer=behalten): "); };
     auto apply = [](std::string& f, const std::string& v) { if (!v.empty()) f = v; };
     apply(ctx.doc->title,          s("Titel"));
@@ -418,7 +418,7 @@ static bool dokHandleNewRevision(DocMenuCtx& ctx) {
     // Neue Revision anlegen
     if (!ctx.doc->canRevise()) {
         std::cout << "  >> " << opResultMessage(OperationResult::DOC_REV_IS_IN_WORK) << "\n";
-        std::cout << "  >> Starten Sie: rh -f77 -start " << ctx.doc->documentId << "\n";
+        std::cout << "  >> Starten Sie: rh -f77 -start " << ctx.doc->folderId << "\n";
         return true;  // was: continue (handler)
     }
     std::string note = readLine("Revisionsnotiz (Pflicht): ");
@@ -429,7 +429,7 @@ static bool dokHandleNewRevision(DocMenuCtx& ctx) {
         std::cout << "  >> Revision " << newRev->rev << " angelegt (in_work).\n";
         // Navigate directly to the new in_work revision
         ctx.curRevNum = newRev->rev;
-        ctx.curObjs   = DocumentObject::loadForRevision(ctx.doc->documentId, ctx.curRevNum);
+        ctx.curObjs   = FolderObject::loadForRevision(ctx.doc->folderId, ctx.curRevNum);
         std::cout << "  >> Aktuelle Ansicht: Rev " << ctx.curRevNum << " [in_work]\n";
     } else {
         std::cout << "  >> " << opResultMessage(OperationResult::DOC_SAVE_FAILED) << "\n";
@@ -441,24 +441,24 @@ static bool dokHandleNewRevision(DocMenuCtx& ctx) {
 static bool dokHandleWorkflow(DocMenuCtx& ctx) {
 
     // Workflow starten / anzeigen
-    hdr("F77 / FREIGABE — " + ctx.doc->documentId.substr(0, 26));
-    if (ctx.doc->releaseWorkflowId.empty()) {
+    hdr("F77 / FREIGABE — " + ctx.doc->folderId.substr(0, 26));
+    if (ctx.doc->workflowId.empty()) {
         std::cout << "  Kein aktiver F77.\n";
         if (readInt("  1.F77 starten  0.Zurueck", 0, 1) == 1) {
-            std::string wid = startWfInstanceWizard("akt", ctx.doc->documentId);
+            std::string wid = startWfInstanceWizard("akt", ctx.doc->folderId);
             if (!wid.empty()) instanceMenu(wid);
         }
     } else {
-        auto wf = F77_Workflow::loadById(ctx.doc->releaseWorkflowId);
-        std::cout << "  F77-ID : " << ctx.doc->releaseWorkflowId.substr(0, 36) << "\n"
+        auto wf = F77W::loadById(ctx.doc->workflowId);
+        std::cout << "  F77-ID : " << ctx.doc->workflowId.substr(0, 36) << "\n"
                   << "  Status      : " << (wf ? toString(wf->status) : "unbekannt") << "\n";
         if (wf && wf->status == WorkflowStatus::ACTIVE) {
             if (readInt("  1.Oeffnen  0.Zurueck", 0, 1) == 1)
-                instanceMenu(ctx.doc->releaseWorkflowId);
+                instanceMenu(ctx.doc->workflowId);
         } else {
             std::cout << "  (F77 abgeschlossen/abgebrochen)\n";
             if (readInt("  1.Neuen F77 starten  0.Zurueck", 0, 1) == 1) {
-                std::string wid = startWfInstanceWizard("akt", ctx.doc->documentId);
+                std::string wid = startWfInstanceWizard("akt", ctx.doc->folderId);
                 if (!wid.empty()) instanceMenu(wid);
             }
         }
@@ -471,7 +471,7 @@ static bool dokHandleListObjects(DocMenuCtx& ctx) {
 
     // Objekte auflisten
     hdr("OBJEKTE — Rev " + std::to_string(ctx.curRevNum)
-        + " | " + ctx.doc->documentId.substr(0, 22));
+        + " | " + ctx.doc->folderId.substr(0, 22));
     if (ctx.curObjs.empty()) {
         std::cout << "  (keine Objekte in dieser Revision)\n";
         std::cout << "  Tipp: Option 5 um Dateien zu importieren (nur in in_work).\n";
@@ -524,11 +524,11 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
         std::string label1 = readOpt("  Bezeichnung (sprechend, leer=Dateiname): ");
         std::string desc1  = readOpt("  Beschreibung (optional): ");
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = DocumentObject::importFile(
-            ctx.doc->documentId, ctx.curRevNum, srcPath, res, label1, desc1);
+        auto obj = FolderObject::importFile(
+            ctx.doc->folderId, ctx.curRevNum, srcPath, res, label1, desc1);
         if (opOk(res) && obj)
             std::cout << "  >> Importiert: " << obj->displayName() << "\n"
-                      << "  >> MFS-Datei:  " << obj->mfsFilename << "\n";
+                      << "  >> MFS-Datei:  " << obj->storedFileName << "\n";
         else
             std::cout << "  >> " << opResultMessage(res) << "\n";
         return true;
@@ -578,13 +578,13 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
         std::string label2 = readOpt("  Bezeichnung (sprechend, leer=Dateiname): ");
         std::string desc2  = readOpt("  Beschreibung (optional): ");
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = DocumentObject::importFile(
-            ctx.doc->documentId, ctx.curRevNum, toImport, res, label2, desc2);
+        auto obj = FolderObject::importFile(
+            ctx.doc->folderId, ctx.curRevNum, toImport, res, label2, desc2);
         if (opOk(res) && obj) {
             obj->sourceUrl = url;
             obj->update();
             std::cout << "  >> Importiert: " << obj->displayName() << "\n"
-                      << "  >> MFS-Datei:  " << obj->mfsFilename << "\n";
+                      << "  >> MFS-Datei:  " << obj->storedFileName << "\n";
         } else {
             std::cout << "  >> " << opResultMessage(res) << "\n";
         }
@@ -619,7 +619,7 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
 
         // Build target path in MFS
         const std::string& mfs = Config::instance().mfsPath();
-        std::string sane     = sanitiseRegNr(ctx.doc->documentId);
+        std::string sane     = sanitiseRegNr(ctx.doc->folderId);
         std::string safeName = FileOps::sanitizeFilename(ctx.doc->title);
         if (safeName.size() > 40) safeName = safeName.substr(0, 40);
         std::string parentSane = sanitiseRegNr(
@@ -648,7 +648,7 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
             // Plain stub (only for txt; others stay empty binary)
             std::string stub = (ext == "txt")
                 ? "ROSENHOLZ PM — " + ctx.doc->title + "\n"
-                  "ID      : " + ctx.doc->documentId + "\n"
+                  "ID      : " + ctx.doc->folderId + "\n"
                   "Erstellt: " + Rosenholz::nowIso() + "\n--- Inhalt ---\n"
                 : "";
             if (ext == "txt")
@@ -663,13 +663,13 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
         // Name + Beschreibung
         std::string label3 = readOpt("  Bezeichnung (sprechend, leer=Dateiname): ");
         std::string desc3  = readOpt("  Beschreibung (optional): ");
-        // Import into DocumentObject
+        // Import into FolderObject
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = DocumentObject::importFile(
-            ctx.doc->documentId, ctx.curRevNum, fpath, res, label3, desc3);
+        auto obj = FolderObject::importFile(
+            ctx.doc->folderId, ctx.curRevNum, fpath, res, label3, desc3);
         if (opOk(res) && obj) {
             std::cout << "  >> Angelegt: " << obj->displayName() << "\n"
-                      << "  >> MFS-Datei: " << obj->mfsFilename << "\n";
+                      << "  >> MFS-Datei: " << obj->storedFileName << "\n";
             ctx.doc->openFile("edit");
         } else {
             std::cout << "  >> " << opResultMessage(res) << "\n";
@@ -823,7 +823,7 @@ static bool dokHandleCheckin(DocMenuCtx& ctx) {
         return true;  // was: continue (handler)
     }
     // List checked-out objects
-    std::vector<std::shared_ptr<DocumentObject>> coObjs;
+    std::vector<std::shared_ptr<FolderObject>> coObjs;
     for (auto& o : ctx.curObjs)
         if (o->checkedOut) coObjs.push_back(o);
     if (coObjs.empty()) {
@@ -911,7 +911,7 @@ static bool dokHandleMfsWrite(DocMenuCtx& ctx) {
 // ch==14: dokHandleDelete
 static bool dokHandleDelete(DocMenuCtx& ctx) {
 
-    std::cout << "  Dokument " << ctx.doc->documentId << " loeschen? (ja): ";
+    std::cout << "  Dokument " << ctx.doc->folderId << " loeschen? (ja): ";
     std::string c; std::getline(std::cin, c);
     if (c == "ja") { ctx.doc->remove(); std::cout << "  >> Geloescht.\n"; return false; }
     return true;
@@ -975,7 +975,7 @@ static bool dokHandlePrint(DocMenuCtx& ctx) {
 static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
 
     // ── Revision wechseln — zwischen Rev 1…N navigieren ─────────────
-    auto allRevs = DocumentRevision::loadAllRevisions(ctx.doc->documentId);
+    auto allRevs = FolderRevision::loadAllRevisions(ctx.doc->folderId);
     if (allRevs.size() <= 1) {
         std::cout << "  >> Nur eine Revision vorhanden.\n";
         return true;  // was: continue (handler)
@@ -990,7 +990,7 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
                       (int)allRevs.back()->rev);
     // Load the selected revision and set it as the view context for this
     // menu session — does NOT change superseded flag
-    auto selRev = DocumentRevision::loadByRev(ctx.doc->documentId, (uint32_t)sel);
+    auto selRev = FolderRevision::loadByRev(ctx.doc->folderId, (uint32_t)sel);
     if (!selRev) {
         std::cout << "  >> Revision " << sel << " nicht gefunden.\n";
         return true;  // was: continue (handler)
@@ -998,27 +998,27 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
     // Reload ctx.curObjs for the selected revision (changes local state for
     // this iteration; outer loop reloads from currentRevision)
     ctx.curRevNum = selRev->rev;
-    ctx.curObjs   = DocumentObject::loadForRevision(ctx.doc->documentId, ctx.curRevNum);
+    ctx.curObjs   = FolderObject::loadForRevision(ctx.doc->folderId, ctx.curRevNum);
     std::cout << "  >> Zeige Rev " << sel << "  [" << selRev->revState << "]"
               << "  " << ctx.curObjs.size() << " Objekt(e)\n";
     std::cout << "  Hinweis: Zustandsübergänge nur via F77 möglich.\n";
     return true;
 }
 
-void documentMenu(std::shared_ptr<Document> doc) {
+void documentMenu(std::shared_ptr<Folder> doc) {
     Rosenholz::NavigationStack::instance().push({
-        Rosenholz::EntityType::AKT, doc->documentId, doc->title, doc->documentId});
+        Rosenholz::EntityType::AKT, doc->folderId, doc->title, doc->folderId});
 
     while (true) {
-        if (auto fresh = Document::loadById(doc->documentId)) *doc = *fresh;
+        if (auto fresh = Folder::loadById(doc->folderId)) *doc = *fresh;
 
-        auto cur       = DocumentRevision::currentRevision(doc->documentId);
+        auto cur       = FolderRevision::currentRevision(doc->folderId);
         bool inWork    = doc->isEditable();
         bool immutable = !doc->isEditable();
         uint32_t curRevNum = cur ? cur->rev : 0;
         auto curObjs   = curRevNum > 0
-            ? DocumentObject::loadForRevision(doc->documentId, curRevNum)
-            : std::vector<std::shared_ptr<DocumentObject>>{};
+            ? FolderObject::loadForRevision(doc->folderId, curRevNum)
+            : std::vector<std::shared_ptr<FolderObject>>{};
 
         printDocument(*doc);
         if (cur)
@@ -1196,19 +1196,19 @@ void documentMenu(std::shared_ptr<Document> doc) {
 
 void documentBrowserMenu(const std::string& taskId, const std::string& f18OpId) {
     while (true) {
-        std::vector<std::shared_ptr<Document>> docs;
+        std::vector<std::shared_ptr<Folder>> docs;
         if (!taskId.empty())
-            docs = Document::loadForEntity("f22", taskId);
+            docs = Folder::loadForEntity("f22", taskId);
         else if (!f18OpId.empty())
-            docs = Document::loadForEntity("f18", f18OpId);
+            docs = Folder::loadForEntity("f18", f18OpId);
         else
-            docs = Document::loadRecent(50);
+            docs = Folder::loadRecent(50);
         
         listDocuments(docs, "DOKUMENTE (" + std::to_string(docs.size()) + ")");
         // Check parent released status
         bool parentReleased = false;
         if (!taskId.empty()) {
-            auto t = TaskF22::loadById(taskId);
+            auto t = F22::loadById(taskId);
             if (t) parentReleased = t->isReleased();
             // If task not found, silently continue — docs may still be linked
         } else if (!f18OpId.empty()) {

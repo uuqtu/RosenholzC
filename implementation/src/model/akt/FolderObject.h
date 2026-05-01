@@ -1,7 +1,7 @@
 // ============================================================
-// DocumentObject.h  —  Physical file inside a DocumentRevision
+// FolderObject.h  —  Physical file inside a FolderRevision
 //
-// A Document is a CONTAINER; DocumentObject is one physical file
+// A Document is a CONTAINER; FolderObject is one physical file
 // inside that container at a specific revision.
 //
 // Responsibilities (one place each):
@@ -23,7 +23,7 @@
 
 namespace Rosenholz {
 
-class DocumentObject {
+class FolderObject {
 public:
     // ── Identity ──────────────────────────────────────────────
     std::string objectId;       ///< 5-char alphanumeric, unique per document
@@ -57,7 +57,7 @@ public:
     // ── Factory ───────────────────────────────────────────────
     // Single entry point for all import sources (local file, URL-downloaded
     // tmp file, or freshly created empty file). docRegNr derived from docId.
-    static std::shared_ptr<DocumentObject> importFile(
+    static std::shared_ptr<FolderObject> importFile(
         const std::string& folderId,
         uint32_t            rev,
         const std::string& srcPath,
@@ -66,7 +66,7 @@ public:
         const std::string& description = "");
 
     // ── Queries ───────────────────────────────────────────────
-    static std::vector<std::shared_ptr<DocumentObject>> loadForRevision(
+    static std::vector<std::shared_ptr<FolderObject>> loadForRevision(
         const std::string& folderId, uint32_t rev);
 
     // MFS directory for a given document revision
@@ -78,7 +78,7 @@ public:
     OperationResult commitToLMDB();
     OperationResult updateFromUrl(const std::string& url = "");
 
-    static std::shared_ptr<DocumentObject> loadById(const std::string& objectId);
+    static std::shared_ptr<FolderObject> loadById(const std::string& objectId);
 
     // ── MFS key-file ──────────────────────────────────────────
     // Write/rewrite the _SCHLUESSEL.txt for a revision folder.
@@ -119,7 +119,7 @@ private:
                                            uint32_t rev,
                                            const std::string& ext);
     std::string          extractFromLMDB(const std::string& destDir = "");
-    static std::shared_ptr<DocumentObject> loadByDocAndId(
+    static std::shared_ptr<FolderObject> loadByDocAndId(
         const std::string& docId, const std::string& objId);
 };
 

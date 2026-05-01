@@ -5,7 +5,7 @@
 #include "../core/Database.h"
 #include "../core/FileOps.h"
 #include "../core/BackupManager.h"
-#include "../repository/ArchiveStore.h"
+#include "../model/akt/ArchiveStore.h"
 #include <iostream>
 
 namespace Rosenholz {

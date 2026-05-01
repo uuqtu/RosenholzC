@@ -12,10 +12,10 @@
 #include "../model/Utils.h"
 #include "../core/Config.h"
 #include "../core/Logger.h"
-#include "../model/f16/ProjectF16.h"
-#include "../model/f22/TaskF22.h"
+#include "../model/f16/F16.h"
+#include "../model/f22/F22.h"
 #include "../model/f18/F18Operation.h"
-#include "../model/dok/Document.h"
+#include "../model/akt/Folder.h"
 #include <algorithm>
 #include <iomanip>
 
@@ -27,7 +27,7 @@ using namespace Rosenholz;
 
 void cmdF77(const std::vector<std::string>& args) {
     if (args.empty()) {
-        auto wfs = F77_Workflow::loadActive();
+        auto wfs = F77W::loadActive();
         if (wfs.empty()) { std::cout << "  (keine aktiven Workflows)\n"; return; }
         std::cout << "  " << std::left
                   << std::setw(28) << "WORKFLOW-ID"
@@ -44,7 +44,7 @@ void cmdF77(const std::vector<std::string>& args) {
     }
 
     if (args[0] == "-tpl" || args[0] == "--templates") {
-        auto tpls = F77_WorkflowTemplate::loadAll();
+        auto tpls = F77W_Template::loadAll();
         if (tpls.empty()) { std::cout << "  (keine Vorlagen)\n"; return; }
         for (auto& t : tpls)
             std::cout << "  " << std::left << std::setw(28) << t->templateId
@@ -61,10 +61,10 @@ void cmdF77(const std::vector<std::string>& args) {
 
 
 // ── Draw step chain ──────────────────────────────────────────
-static void drawF77Chain(const std::vector<F77_WorkflowStep>& steps, bool compact = false) {
+static void drawF77Chain(const std::vector<F77W_Operation>& steps, bool compact = false) {
     auto sorted = steps;
     std::sort(sorted.begin(), sorted.end(),
-        [](const F77_WorkflowStep& a, const F77_WorkflowStep& b) {
+        [](const F77W_Operation& a, const F77W_Operation& b) {
             if (a.isInitialize) return true;
             if (b.isInitialize) return false;
             if (a.isFinal) return false;
@@ -103,11 +103,11 @@ static void drawF77Chain(const std::vector<F77_WorkflowStep>& steps, bool compac
 
 // ── List F77 workflows ────────────────────────────────────────
 void listWfInstances(const std::string& entityType, const std::string& entityId) {
-    std::vector<std::shared_ptr<F77_Workflow>> workflows;
+    std::vector<std::shared_ptr<F77W>> workflows;
     if (!entityType.empty() && !entityId.empty())
-        workflows = F77_Workflow::loadForEntity(entityType, entityId);
+        workflows = F77W::loadForEntity(entityType, entityId);
     else
-        workflows = F77_Workflow::loadActive();
+        workflows = F77W::loadActive();
 
     if (workflows.empty()) { std::cout << "  (keine F77-Workflows)\n"; return; }
 
@@ -134,7 +134,7 @@ void listWfInstances(const std::string& entityType, const std::string& entityId)
 // ── F77 workflow detail menu ──────────────────────────────────
 void instanceMenu(const std::string& workflowId) {
     while (true) {
-        auto wf = F77_Workflow::loadById(workflowId);
+        auto wf = F77W::loadById(workflowId);
         if (!wf) { std::cout << "  Workflow nicht gefunden: " << workflowId << "\n"; return; }
 
         hdr("F77  " + wf->templateName);
@@ -180,7 +180,7 @@ void instanceMenu(const std::string& workflowId) {
 
         if (action == 1) {
             // ── [ADMIN ONLY] Manuelles Step-Firing ──────────────────────────
-            std::vector<F77_WorkflowStep*> fireable;
+            std::vector<F77W_Operation*> fireable;
             for (auto& s : wf->steps)
                 if (!s.isInitialize && !s.isFinal && !s.isComplete())
                     fireable.push_back(&s);
@@ -203,7 +203,7 @@ void instanceMenu(const std::string& workflowId) {
             }
             std::string actor = readOpt("Bearbeiter (Person-ID, leer=System): ");
             if (actor.empty()) actor = "system";
-            if (F77_Engine::fireStep(*wf, stepId, decisions[dec-1], actor, comment))
+            if (F77Engine::fireStep(*wf, stepId, decisions[dec-1], actor, comment))
                 std::cout << "  >> Schritt ausgefuehrt.\n";
             else
                 std::cout << "  >> Fehler — Vorbedingungen nicht erfuellt?\n";
@@ -214,7 +214,7 @@ void instanceMenu(const std::string& workflowId) {
             if (wf->steps.empty()) { std::cout << "  Keine Schritte.\n"; continue; }
             hdr("VALIDIERUNG — " + wf->templateName);
             for (const auto& s : wf->steps) {
-                std::string result = F77_Engine::validateStep(*wf, s.stepId);
+                std::string result = F77Engine::validateStep(*wf, s.stepId);
                 std::cout << "  " << std::left << std::setw(22) << s.title.substr(0,21)
                           << "  " << result << "\n";
             }
@@ -241,7 +241,7 @@ void instanceMenu(const std::string& workflowId) {
             std::string desc  = readOpt("Beschreibung (optional): ");
 
             std::string ass = readOpt("Zugewiesen an Person-ID (leer=offen): ");
-            std::string opId = F77_Engine::addManualOperation(*wf, title, desc, ass);
+            std::string opId = F77Engine::addManualOperation(*wf, title, desc, ass);
             if (!opId.empty()) {
                 wf->loadSteps();
                 std::cout << "  >> Operation '" << title << "' angelegt.\n"
@@ -252,7 +252,7 @@ void instanceMenu(const std::string& workflowId) {
         }
 
         else if (action == 4) {
-            F77_Engine::tick(*wf);
+            F77Engine::tick(*wf);
             std::cout << "  >> Engine-Tick ausgefuehrt.\n";
         }
 
@@ -260,7 +260,7 @@ void instanceMenu(const std::string& workflowId) {
             // Workflow abbrechen
             std::string confirm = readOpt("F77 wirklich abbrechen? (ja/nein): ");
             if (confirm == "ja") {
-                F77_Engine::cancelWorkflow(*wf);
+                F77Engine::cancelWorkflow(*wf);
                 std::cout << "  >> F77 abgebrochen. Entität kann neuen F77 starten.\n";
                 break;
             }
@@ -278,10 +278,10 @@ std::string startWfInstanceWizard(const std::string& entityType,
     std::string effId = entityId.empty()
         ? readLine("Entitaets-ID: ") : entityId;
 
-    // One-workflow guard is enforced by F77_Engine::startDefault/startFromTemplate.
+    // One-workflow guard is enforced by F77Engine::startDefault/startFromTemplate.
 
-    auto templates = F77_WorkflowTemplate::loadForEntityType(effType);
-    std::shared_ptr<F77_Workflow> wf;
+    auto templates = F77W_Template::loadForEntityType(effType);
+    std::shared_ptr<F77W> wf;
 
     if (!templates.empty()) {
         std::cout << "\n  Verfuegbare Vorlagen:\n";
@@ -295,7 +295,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
         if (actor.empty()) actor = "system";
 
         if (choice <= (int)templates.size()) {
-            wf = F77_Engine::startFromTemplate(
+            wf = F77Engine::startFromTemplate(
                 templates[choice-1]->templateId, effType, effId, actor);
         } else {
             std::cout << "  1.in_work  2.pre_released  3.released  4.locked  5.closed\n";
@@ -304,7 +304,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
             EntityStatus::RELEASED, EntityStatus::LOCKED, EntityStatus::CLOSED
         };
             int si = readInt("Zielzustand", 1, 5);
-            wf = F77_Engine::startDefault(effType, effId, sts[si-1], actor);
+            wf = F77Engine::startDefault(effType, effId, sts[si-1], actor);
         }
     } else {
         std::string actor = readOpt("Gestartet von (Person-ID, leer=System): ");
@@ -315,12 +315,12 @@ std::string startWfInstanceWizard(const std::string& entityType,
             EntityStatus::RELEASED, EntityStatus::LOCKED, EntityStatus::CLOSED
         };
         int si = readInt("Zielzustand", 1, 5);
-        wf = F77_Engine::startDefault(effType, effId, sts[si-1], actor);
+        wf = F77Engine::startDefault(effType, effId, sts[si-1], actor);
     }
 
     if (!wf) { std::cout << "  >> FEHLER beim Starten.\n"; return ""; }
 
-    F77_Engine::attachWorkflow(effType, effId, wf->workflowId);
+    F77Engine::attachWorkflow(effType, effId, wf->workflowId);
     std::cout << "  >> F77 gestartet: " << wf->workflowId << "\n";
 
     // ── Optional: manuelle Schritte vor dem ersten Tick hinzufügen ────────────
@@ -334,7 +334,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
         std::string desc  = readOpt("  Beschreibung (optional): ");
         std::string ass   = readOpt("  Zugewiesen an Person-ID (leer=offen): ");
 
-        std::string opId = F77_Engine::addManualOperation(*wf, title, desc, ass);
+        std::string opId = F77Engine::addManualOperation(*wf, title, desc, ass);
         if (!opId.empty())
             std::cout << "  >> Operation '" << title << "' angelegt — F77-Task erstellt.\n"
                       << "  >> Erreichbar unter: rh -tasks\n";
@@ -343,14 +343,14 @@ std::string startWfInstanceWizard(const std::string& entityType,
         wf->loadSteps();
     }
 
-    // Run initial tick — End will be blocked until all F77_Tasks are closed
-    F77_Engine::tick(*wf);
+    // Run initial tick — End will be blocked until all F77Tasks are closed
+    F77Engine::tick(*wf);
     return wf->workflowId;
 }
 
 // ── Template management ───────────────────────────────────────
 static void templateMenu(const std::string& templateId) {
-    auto tpl = F77_WorkflowTemplate::loadById(templateId);
+    auto tpl = F77W_Template::loadById(templateId);
     if (!tpl) return;
     while (true) {
         hdr("F77-VORLAGE  " + tpl->name);
@@ -366,7 +366,7 @@ static void templateMenu(const std::string& templateId) {
         } else {
             auto sorted = tpl->steps;
             std::sort(sorted.begin(), sorted.end(),
-                [](const F77_WorkflowTemplateStep& a, const F77_WorkflowTemplateStep& b) {
+                [](const F77W_TemplateStep& a, const F77W_TemplateStep& b) {
                     if (a.isInitialize) return true;
                     if (b.isInitialize) return false;
                     if (a.isFinal) return false;
@@ -427,7 +427,7 @@ void workflowMenu() {
         int ch = readInt("Wahl", 0, 6); if (ch == 0) break;
 
         else if (ch == 1) {
-            auto templates = F77_WorkflowTemplate::loadAll();
+            auto templates = F77W_Template::loadAll();
             hdr("F77 VORLAGEN (" + std::to_string(templates.size()) + ")");
             if (templates.empty()) std::cout << "  (keine)\n";
             int n = 1;
@@ -451,7 +451,7 @@ void workflowMenu() {
             int si = readInt("Zielzustand", 1, 5);
             std::string entityTypes = readOpt("Entitaetstypen (z.B. f16,f22,akt, leer=alle): ");
             if (entityTypes.empty()) entityTypes = "f16,f22,f18,akt";
-            auto tpl = F77_WorkflowTemplate::create(name, sts[si-1], entityTypes);
+            auto tpl = F77W_Template::create(name, sts[si-1], entityTypes);
             tpl->description = readOpt("Beschreibung: ");
             tpl->save();
             // Auto-add Init + End bookends
@@ -466,7 +466,7 @@ void workflowMenu() {
         }
 
         else if (ch == 3) {
-            auto templates = F77_WorkflowTemplate::loadAll();
+            auto templates = F77W_Template::loadAll();
             if (templates.empty()) { std::cout << "  (keine Vorlagen)\n"; continue; }
             int n = 1;
             for (auto& t : templates)

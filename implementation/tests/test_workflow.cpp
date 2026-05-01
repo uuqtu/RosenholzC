@@ -17,12 +17,12 @@ using namespace Rosenholz::Test;
 
 void testSuiteWorkflow() {
     // ── F77 Template (declarative) ───────────────────────────
-    SECTION("F77_WorkflowTemplate — create, steps, save, load");
+    SECTION("F77W_Template — create, steps, save, load");
     {
-        auto tpl = R::F77_WorkflowTemplate::create("Test-Freigabe",R::EntityStatus::RELEASED,"f16,f22");
-        CHECK(tpl != nullptr, "F77_WorkflowTemplate::create");
+        auto tpl = R::F77W_Template::create("Test-Freigabe",R::EntityStatus::RELEASED,"f16,f22");
+        CHECK(tpl != nullptr, "F77W_Template::create");
         tpl->description = "Testvorlage";
-        CHECK(Rosenholz::opOk(tpl->save()), "F77_WorkflowTemplate::save");
+        CHECK(Rosenholz::opOk(tpl->save()), "F77W_Template::save");
 
         // Add template steps
         auto init = tpl->addTemplateStep("Init","sequential",true,false);
@@ -36,8 +36,8 @@ void testSuiteWorkflow() {
         end.save();
 
         // Reload and verify
-        auto loaded = R::F77_WorkflowTemplate::loadById(tpl->templateId);
-        CHECK(loaded != nullptr, "F77_WorkflowTemplate::loadById");
+        auto loaded = R::F77W_Template::loadById(tpl->templateId);
+        CHECK(loaded != nullptr, "F77W_Template::loadById");
         if (loaded) {
             CHECK(loaded->name == "Test-Freigabe", "template name persisted");
             CHECK(loaded->targetState == R::EntityStatus::RELEASED, "targetState persisted");
@@ -46,15 +46,15 @@ void testSuiteWorkflow() {
     }
 
     // ── F77 Workflow from template ────────────────────────────
-    SECTION("F77_Engine — startFromTemplate creates workflow with steps");
+    SECTION("F77Engine — startFromTemplate creates workflow with steps");
     {
         ProjectFixture pfix("F77-Template-Test");
 
         // Build a minimal template
         // Template uses f22 so mid-steps get F18 operations linked (v4: f22 only)
-        auto task = R::TaskF22::create("WF-Template-Task","spec",pfix.project->projectId);
+        auto task = R::F22::create("WF-Template-Task","spec",pfix.project->projectId);
         task->save();
-        auto tpl = R::F77_WorkflowTemplate::create("Minimal",R::EntityStatus::RELEASED,"f22");
+        auto tpl = R::F77W_Template::create("Minimal",R::EntityStatus::RELEASED,"f22");
         tpl->save();
         auto init = tpl->addTemplateStep("Init","sequential",true,false);
         init.save();
@@ -66,7 +66,7 @@ void testSuiteWorkflow() {
         end.autoApprove = true;
         end.save();
 
-        auto wf = R::F77_Engine::startFromTemplate(tpl->templateId,"f22",
+        auto wf = R::F77Engine::startFromTemplate(tpl->templateId,"f22",
                                                      task->taskId,"tester");
         CHECK(wf != nullptr, "startFromTemplate returns workflow");
         if (wf) {
@@ -89,21 +89,21 @@ void testSuiteWorkflow() {
 
     // ── F77 default workflow ──────────────────────────────────
     // ── F77 default workflow ──────────────────────────────────
-    SECTION("F77_Engine — startDefault creates minimal workflow");
+    SECTION("F77Engine — startDefault creates minimal workflow");
     {
         // F16 no longer supports F77 workflows (v5).
         // startDefault on F22 is tested in the fireStep section below.
     }
 
     // ── F77 fireStep ─────────────────────────────────────────
-    SECTION("F77_Engine — fireStep completes workflow and applies targetState");
+    SECTION("F77Engine — fireStep completes workflow and applies targetState");
     {
     try {
 
         ProjectFixture pfix("F77-Fire-Test");
-        auto task_fire = R::TaskF22::create(pfix.project->projectId,"Fire-Task","","");
+        auto task_fire = R::F22::create(pfix.project->projectId,"Fire-Task","","");
         task_fire->save();
-        auto wf = R::F77_Engine::startDefault("f22", task_fire->taskId,
+        auto wf = R::F77Engine::startDefault("f22", task_fire->taskId,
                                                R::EntityStatus::RELEASED, "system");
         CHECK(wf != nullptr, "workflow created");
         if (!wf) return;
@@ -117,25 +117,25 @@ void testSuiteWorkflow() {
                 toFire.push_back(s.stepId);
         }
         for (auto& sid : toFire)
-            R::F77_Engine::fireStep(*wf, sid, "approved", "tester", "ok");
-        auto wfDb = R::F77_Workflow::loadById(wf->workflowId);
+            R::F77Engine::fireStep(*wf, sid, "approved", "tester", "ok");
+        auto wfDb = R::F77W::loadById(wf->workflowId);
         bool ok = true;
         if (wfDb && wfDb->status == R::WorkflowStatus::ACTIVE) {
             // Now add a manual op and close its task:
-            std::string manualOpId = R::F77_Engine::addManualOperation(
+            std::string manualOpId = R::F77Engine::addManualOperation(
                 *wf, "Pruefung", "Test-Schritt", "tester");
             CHECK(!manualOpId.empty(), "manual operation added");
-            auto tasks = R::F77_Task::loadForOperation(manualOpId);
-            CHECK(!tasks.empty(), "F77_Task spawned for manual operation");
+            auto tasks = R::F77Task::loadForOperation(manualOpId);
+            CHECK(!tasks.empty(), "F77Task spawned for manual operation");
             if (!tasks.empty()) tasks[0]->complete("Test abgeschlossen");
-            R::F77_Engine::tick(*wf);
+            R::F77Engine::tick(*wf);
         } else {
             // Already completed — manual op/task checks would be skipped
             CHECK(true, "manual operation added");   // placeholder PASS
-            CHECK(true, "F77_Task spawned for manual operation"); // placeholder PASS
+            CHECK(true, "F77Task spawned for manual operation"); // placeholder PASS
         }
 
-        auto fresh = R::F77_Workflow::loadById(wf->workflowId);
+        auto fresh = R::F77W::loadById(wf->workflowId);
         CHECK(fresh != nullptr, "workflow reloadable");
         if (fresh) CHECK(fresh->status == R::WorkflowStatus::COMPLETED,
                          "workflow completed after End auto-approved");
@@ -150,11 +150,11 @@ void testSuiteWorkflow() {
 }
 
     // ── F77 snapshot isolation ────────────────────────────────
-    SECTION("F77_Engine — template changes don't affect running workflow");
+    SECTION("F77Engine — template changes don't affect running workflow");
     {
         ProjectFixture pfix("F77-Snapshot-Test");
 
-        auto tpl = R::F77_WorkflowTemplate::create("Snapshot-Test",R::EntityStatus::RELEASED,"f16");
+        auto tpl = R::F77W_Template::create("Snapshot-Test",R::EntityStatus::RELEASED,"f16");
         tpl->save();
         auto init = tpl->addTemplateStep("Init","sequential",true,false); init.save();
         auto mid  = tpl->addTemplateStep("Original Step","sequential",false,false);
@@ -162,9 +162,9 @@ void testSuiteWorkflow() {
         auto end  = tpl->addTemplateStep("End","sequential",false,true);
         end.predecessorTplStepIds=mid.tplStepId; end.autoApprove=true; end.save();
 
-        auto task_snap = R::TaskF22::create(pfix.project->projectId, "Snap-Task", "", "");
+        auto task_snap = R::F22::create(pfix.project->projectId, "Snap-Task", "", "");
         task_snap->save();
-        auto wf = R::F77_Engine::startFromTemplate(
+        auto wf = R::F77Engine::startFromTemplate(
             tpl->templateId, "f22", task_snap->taskId, "system");
         CHECK(wf != nullptr, "workflow started");
         if (!wf) return;
@@ -174,7 +174,7 @@ void testSuiteWorkflow() {
         extra.save();
 
         // Reload running workflow — should still have original 3 steps
-        auto fresh = R::F77_Workflow::loadById(wf->workflowId);
+        auto fresh = R::F77W::loadById(wf->workflowId);
         CHECK(fresh != nullptr, "workflow reloadable");
         if (fresh) {
             CHECK(fresh->steps.size() == 5, "running workflow has 5 steps (Init + mid + Objektverwaltung + DB schreiben + End)");
@@ -183,18 +183,18 @@ void testSuiteWorkflow() {
     }
 
     // ── F77 canRelease ────────────────────────────────────────
-    SECTION("F77_Engine — canRelease und lockAll");
+    SECTION("F77Engine — canRelease und lockAll");
     {
         // F16 has no F77 release workflow — this section is skipped in v5.
         // canRelease / lockAll tests are covered by F22 tests in test_model.cpp.
     }
 
 
-    SECTION("F77_Engine — seedDefaultTemplates is idempotent");
+    SECTION("F77Engine — seedDefaultTemplates is idempotent");
     {
-        R::F77_Engine::seedDefaultTemplates();
-        R::F77_Engine::seedDefaultTemplates(); // second call must not crash or duplicate
-        auto all = R::F77_WorkflowTemplate::loadAll();
+        R::F77Engine::seedDefaultTemplates();
+        R::F77Engine::seedDefaultTemplates(); // second call must not crash or duplicate
+        auto all = R::F77W_Template::loadAll();
         CHECK(!all.empty(), "templates exist after seed");
     }
 
@@ -224,16 +224,16 @@ void testSuiteWorkflow() {
         auto& cfg = R::Config::instance();
 
         // Orphan document must be refused
-        auto orphan = R::Document::create("Orphan","misc","");
+        auto orphan = R::Folder::create("Orphan","misc","");
         orphan->save();
         bool filed = Rosenholz::MFSWriter::writeDocument(*orphan, cfg.mfsPath());
         CHECK(!filed, "Orphan document refused by MFSWriter");
 
         // Document with task (F22) gets filed
         ProjectFixture pfix("MFS-AKT-Test");
-        auto task = R::TaskF22::create("MFS-Testaufgabe", "spec", pfix.project->projectId);
+        auto task = R::F22::create("MFS-Testaufgabe", "spec", pfix.project->projectId);
         task->save();
-        auto doc = R::Document::create("Testdokument","report", task->taskId);
+        auto doc = R::Folder::create("Testdokument","report", task->taskId);
         doc->save();
         bool ok = Rosenholz::MFSWriter::writeDocument(*doc, cfg.mfsPath());
         CHECK(ok, "Document with F22 task ref filed in MFS");
@@ -245,7 +245,7 @@ void testSuiteWorkflow() {
         // Verify the document subfolder: F22/<taskReg>/AKT/<docId>/
         {
             std::string taskReg  = Rosenholz::sanitiseRegNr(task->regNumber.toString());
-            std::string docSane  = Rosenholz::sanitiseRegNr(doc->documentId);
+            std::string docSane  = Rosenholz::sanitiseRegNr(doc->folderId);
             std::string docDir = Rosenholz::FileOps::joinPath(
                 Rosenholz::FileOps::joinPath(
                     Rosenholz::FileOps::joinPath(
@@ -283,7 +283,7 @@ void testSuiteReporting() {
     SECTION("F18Operation — LessonsLearned type");
     {
         ProjectFixture pfix("LL-F18-Test");
-        auto task_ll = Rosenholz::TaskF22::create("LL-Task", "spec", pfix.project->projectId);
+        auto task_ll = Rosenholz::F22::create("LL-Task", "spec", pfix.project->projectId);
         task_ll->save();
         auto ll = Rosenholz::F18Operation::create(
             task_ll->taskId, "Test-Lessons-Learned",
@@ -292,7 +292,7 @@ void testSuiteReporting() {
         ll->lessonType = "positive";
         ll->recommendation = "Structured reviews are effective";
         ll->update();
-        auto reloaded = Rosenholz::F18Operation::loadById(ll->vorgangId);
+        auto reloaded = Rosenholz::F18Operation::loadById(ll->operationId);
         CHECK(reloaded != nullptr, "LessonsLearned reloadable");
         CHECK(reloaded->lessonType == "positive", "lessonType persisted");
     }
@@ -300,7 +300,7 @@ void testSuiteReporting() {
     SECTION("F18Operation — DecisionLog type");
     {
         ProjectFixture pfix("DL-Test-Vorgang");
-        auto task_dl = Rosenholz::TaskF22::create("DL-Task", "spec", pfix.project->projectId);
+        auto task_dl = Rosenholz::F22::create("DL-Task", "spec", pfix.project->projectId);
         task_dl->save();
         // Create a DecisionLog F18 Operation
         auto dl = Rosenholz::F18Operation::create(
@@ -311,7 +311,7 @@ void testSuiteReporting() {
             dl->rationale = "Structured approach chosen";
             dl->decisionBy = "tester";
             dl->update();
-            auto reloaded = Rosenholz::F18Operation::loadById(dl->vorgangId);
+            auto reloaded = Rosenholz::F18Operation::loadById(dl->operationId);
             CHECK(reloaded != nullptr, "DecisionLog reloadable");
             if (reloaded)
                 CHECK(reloaded->rationale == "Structured approach chosen", "rationale persisted");

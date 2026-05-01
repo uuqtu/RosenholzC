@@ -9,7 +9,7 @@
 //
 // F18Operation is the single concrete class that represents all
 // types of workflow-based entities in Rosenholz PM.
-// The `vorgangType` field selects the semantic role and determines
+// The `operationType` field selects the semantic role and determines
 // which type-specific fields are populated.
 //
 // Hierarchy:
@@ -39,7 +39,7 @@ namespace Rosenholz {
 
 // ------------------------------
 // F18OperationType
-// All valid values for the vorgangType discriminator field.
+// All valid values for the operationType discriminator field.
 // ------------------------------
 namespace F18OperationType {
     constexpr const char* GENERIC              = "generic";
@@ -61,8 +61,8 @@ class F18OperationStep; // forward
 class F18Operation {
 public:
     // ── Identity ──────────────────────────────────────────────
-    std::string vorgangId;              // XV/F18/nnnn/yyyy
-    std::string vorgangType;            // see F18OperationType::*
+    std::string operationId;              // XV/F18/nnnn/yyyy
+    std::string operationType;            // see F18OperationType::*
     std::string taskId;                 // → F22 (required)
     std::string parentVorgangId;        // → F18 ChangeRequest (CO only)
 
@@ -193,7 +193,7 @@ public:
     //   type       : one of F18OperationType::*
     //   taskId     : owning F22 (optional)
     //
-    // Returns: saved F18Operation with generated vorgangId
+    // Returns: saved F18Operation with generated operationId
     // ------------------------------
     static int count();
     static std::shared_ptr<F18Operation> create(

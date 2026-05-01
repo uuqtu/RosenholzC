@@ -20,7 +20,7 @@ namespace Rosenholz {
 
 // ── EntityStatus ──────────────────────────────────────────────────────────
 // Shared lifecycle status for F16, F22, F18 entities.
-// Mirrors DocumentRevision::RevState but for non-document entities.
+// Mirrors FolderRevision::RevState but for non-document entities.
 // Stored as string in SQLite; convert with entityStatusToString / entityStatusFrom.
 enum class EntityStatus {
     IN_WORK = 0,
@@ -77,7 +77,7 @@ const char* commStatusToString(CommStatus s);
 CommStatus commStatusFrom(const std::string& s);
 
 // ── TemplateStatus ────────────────────────────────────────────────────────
-// Status of an F77_WorkflowTemplate.
+// Status of an F77W_Template.
 enum class TemplateStatus { ACTIVE = 0, INACTIVE };
 const char* templateStatusToString(TemplateStatus s);
 TemplateStatus templateStatusFrom(const std::string& s);

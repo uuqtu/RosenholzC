@@ -22,7 +22,7 @@ namespace Rosenholz {
 class Communication {
 public:
     // ── Identity ──────────────────────────────────────────────
-    std::string commId;             // XV/COM/nnnn/yyyy
+    std::string communicationId;             // XV/COM/nnnn/yyyy
     std::string ownerId;            // → F16.projectId | F22.taskId | F18OperationStep.stepId
     std::string ownerType;          // "project" | "task" | "f18step"
 

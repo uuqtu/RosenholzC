@@ -100,9 +100,9 @@ set(CORE_SOURCES
 set(MODEL_SOURCES
     src/model/person/Person.cpp
     src/model/team/Team.cpp
-    src/model/f16/ProjectF16.cpp
-    src/model/f22/TaskF22.cpp
-    src/model/dok/Document.cpp
+    src/model/f16/F16.cpp
+    src/model/f22/F22.cpp
+    src/model/akt/Folder.cpp
     src/model/Utils.cpp
     src/model/Note.cpp
     src/model/WatchPoller.cpp
@@ -110,7 +110,7 @@ set(MODEL_SOURCES
     src/model/TreeBuilder.cpp
     src/model/HistoryLog.cpp
     src/model/NavigationContext.cpp
-    src/model/dok/DocumentObject.cpp
+    src/model/akt/FolderObject.cpp
     src/model/f18/F18Operation.cpp
     src/model/f18/F18OperationStep.cpp
     src/model/f18/Communication.cpp
@@ -119,8 +119,8 @@ set(MODEL_SOURCES
 set(WORKFLOW_SOURCES
     src/workflow/F77Workflow.cpp
     src/workflow/F77Task.cpp
-    src/repository/ArchiveStore.cpp
-    src/repository/DocumentRevision.cpp
+    src/model/akt/ArchiveStore.cpp
+    src/model/akt/FolderRevision.cpp
 )
 
 set(MFS_SOURCES

@@ -1,19 +1,19 @@
 // ============================================================
-// DocumentRevision.cpp  —  Revision model + state machine
+// FolderRevision.cpp  —  Revision model + state machine
 // ============================================================
-#include "DocumentRevision.h"
-#include "../core/Database.h"
-#include "../core/Logger.h"
-#include "../core/Repository.h"
-#include "../model/Utils.h"
+#include "FolderRevision.h"
+#include "../../core/Database.h"
+#include "../../core/Logger.h"
+#include "../../core/Repository.h"
+#include "../../model/Utils.h"
 
 namespace Rosenholz {
 
-Database* DocumentRevision::db() {
+Database* FolderRevision::db() {
     return DatabasePool::instance().get("akt");
 }
 
-void DocumentRevision::fromRow(const Row& r) {
+void FolderRevision::fromRow(const Row& r) {
     auto g  = [&](const char* k) { return rowGet(r,k); };
     auto gi = [&](const char* k) { return rowGetInt(r,k); };
     auto gb = [&](const char* k) { return rowGetBool(r,k); };
@@ -33,7 +33,7 @@ void DocumentRevision::fromRow(const Row& r) {
 }
 
 // ── save ─────────────────────────────────────────────────────
-bool DocumentRevision::save() const {
+bool FolderRevision::save() const {
     auto* d = db(); if (!d) return false;
     auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
 
@@ -51,12 +51,12 @@ bool DocumentRevision::save() const {
     });
 }
 
-bool DocumentRevision::update() {
+bool FolderRevision::update() {
     updatedAt = nowIso();
     return save();
 }
 
-bool DocumentRevision::remove() const {
+bool FolderRevision::remove() const {
     auto* d = db(); if (!d) return false;
     return d->exec(
         "DELETE FROM folder_revisions WHERE folder_id=? AND rev=?;",
@@ -64,7 +64,7 @@ bool DocumentRevision::remove() const {
 }
 
 // ── Factory ───────────────────────────────────────────────────
-std::shared_ptr<DocumentRevision> DocumentRevision::createRevision(
+std::shared_ptr<FolderRevision> FolderRevision::createRevision(
     const std::string& folderId,
     uint32_t           baseRev,
     const std::string& createdBy,
@@ -73,7 +73,7 @@ std::shared_ptr<DocumentRevision> DocumentRevision::createRevision(
     // Determine the next rev number
     uint32_t nextRev = latestRevNumber(folderId) + 1;
 
-    auto r = std::make_shared<DocumentRevision>();
+    auto r = std::make_shared<FolderRevision>();
     r->folderId  = folderId;
     r->rev         = nextRev;
     r->parentRev   = baseRev;
@@ -97,7 +97,7 @@ std::shared_ptr<DocumentRevision> DocumentRevision::createRevision(
     return r;
 }
 
-std::shared_ptr<DocumentRevision> DocumentRevision::loadByRev(
+std::shared_ptr<FolderRevision> FolderRevision::loadByRev(
     const std::string& folderId, uint32_t rev)
 {
     auto* d = db();
@@ -106,29 +106,29 @@ std::shared_ptr<DocumentRevision> DocumentRevision::loadByRev(
         "SELECT * FROM folder_revisions WHERE folder_id=? AND rev=?;",
         {BindParam::text(folderId), BindParam::int64(rev)});
     if (rows.empty()) return nullptr;
-    auto r = std::make_shared<DocumentRevision>();
+    auto r = std::make_shared<FolderRevision>();
     r->fromRow(rows[0]);
     return r;
 }
 
-std::vector<std::shared_ptr<DocumentRevision>> DocumentRevision::loadAllRevisions(
+std::vector<std::shared_ptr<FolderRevision>> FolderRevision::loadAllRevisions(
     const std::string& folderId)
 {
     auto* d = db();
-    std::vector<std::shared_ptr<DocumentRevision>> result;
+    std::vector<std::shared_ptr<FolderRevision>> result;
     if (!d) return result;
     auto rows = d->query(
         "SELECT * FROM folder_revisions WHERE folder_id=? ORDER BY rev;",
         {BindParam::text(folderId)});
     for (auto& row : rows) {
-        auto r = std::make_shared<DocumentRevision>();
+        auto r = std::make_shared<FolderRevision>();
         r->fromRow(row);
         result.push_back(r);
     }
     return result;
 }
 
-std::shared_ptr<DocumentRevision> DocumentRevision::currentRevision(
+std::shared_ptr<FolderRevision> FolderRevision::currentRevision(
     const std::string& folderId)
 {
     auto* d = db();
@@ -137,12 +137,12 @@ std::shared_ptr<DocumentRevision> DocumentRevision::currentRevision(
         "SELECT * FROM folder_revisions WHERE folder_id=? AND superseded=0 LIMIT 1;",
         {BindParam::text(folderId)});
     if (rows.empty()) return nullptr;
-    auto r = std::make_shared<DocumentRevision>();
+    auto r = std::make_shared<FolderRevision>();
     r->fromRow(rows[0]);
     return r;
 }
 
-uint32_t DocumentRevision::latestRevNumber(const std::string& folderId) {
+uint32_t FolderRevision::latestRevNumber(const std::string& folderId) {
     auto* d = db();
     if (!d) return 0;
     auto rows = d->query(
@@ -154,7 +154,7 @@ uint32_t DocumentRevision::latestRevNumber(const std::string& folderId) {
 }
 
 // ── State machine ─────────────────────────────────────────────
-bool DocumentRevision::isTransitionAllowed(RevState from,
+bool FolderRevision::isTransitionAllowed(RevState from,
                                             RevState to,
                                             bool adminMode) {
     if (from == to) return false;
@@ -200,7 +200,7 @@ bool DocumentRevision::isTransitionAllowed(RevState from,
     return false;
 }
 
-bool DocumentRevision::transitionState(RevState target, bool f77Gated) {
+bool FolderRevision::transitionState(RevState target, bool f77Gated) {
     const std::string targetState = revStateToString(target);
     if (!isTransitionAllowed(revState, target, false)) {
         LOG_WARN("[DocRevision] Transition not allowed: " +
@@ -262,7 +262,7 @@ bool DocumentRevision::transitionState(RevState target, bool f77Gated) {
 //   2. Latest non-locked/non-closed revision
 //   3. Latest in_work revision
 // All operations in one transaction for atomicity.
-bool DocumentRevision::recomputeSuperseded() {
+bool FolderRevision::recomputeSuperseded() {
     auto* d = db();
     if (!d) return false;
 
@@ -271,7 +271,7 @@ bool DocumentRevision::recomputeSuperseded() {
     if (all.empty()) return true;
 
     // Determine which revision should be current (superseded=false)
-    DocumentRevision* chosen = nullptr;
+    FolderRevision* chosen = nullptr;
 
     // Priority order: released > locked > pre_released > in_work > (closed fallback)
     // Single loop per priority; adding a new state = adding one entry here.

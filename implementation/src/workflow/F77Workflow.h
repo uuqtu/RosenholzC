@@ -6,12 +6,12 @@
 // Two object groups:
 //
 //   DECLARATIVE (admin-time, never changed during execution):
-//     F77_WorkflowTemplate      — named template with target state
-//     F77_WorkflowTemplateStep  — step definition in a template
+//     F77W_Template      — named template with target state
+//     F77W_TemplateStep  — step definition in a template
 //
 //   RUNTIME (created from template snapshot on start):
-//     F77_Workflow              — running instance; template changes don't affect it
-//     F77_WorkflowStep          — running step; each backed by one F18_Operation
+//     F77W              — running instance; template changes don't affect it
+//     F77W_Operation          — running step; each backed by one F18_Operation
 //
 // Step execution model:
 //   - Init step: auto-approved immediately on workflow start
@@ -31,14 +31,14 @@
 
 namespace Rosenholz {
 
-// ── F77_WorkflowTemplateStep ──────────────────────────────────
+// ── F77W_TemplateStep ──────────────────────────────────
 // SystemAction — what a system step (isSystem=true) does when auto-approved.
 // Replaces the fragile `title == "Create DB Objects"` magic string.
 // Adding a new system action: add an enum value + a case in executeSystemStep().
 enum class SystemAction {
     NONE,               // Not a system step (default)
-    COMMIT_DB_OBJECTS,      // Commit all uncommitted DocumentObjects to LMDB archive
-    SCAN_UNREGISTERED_FILES, // Scan entity MFS folder; spawn F77_Task per loose file
+    COMMIT_DB_OBJECTS,      // Commit all uncommitted FolderObjects to LMDB archive
+    SCAN_UNREGISTERED_FILES, // Scan entity MFS folder; spawn F77Task per loose file
 };
 
 // ── WorkflowStatus / StepStatus ──────────────────────────────
@@ -75,8 +75,8 @@ WorkflowSymbol workflowSymbol(WorkflowStatus s);
 
 
 
-struct F77_WorkflowTemplateStep {
-    // Mirror of F77_WorkflowStep.systemAction — set when defining the template.
+struct F77W_TemplateStep {
+    // Mirror of F77W_Operation.systemAction — set when defining the template.
     std::string tplStepId;
     std::string templateId;
     std::string title;
@@ -103,8 +103,8 @@ struct F77_WorkflowTemplateStep {
     void fromRow(const Row& r);
 };
 
-// ── F77_WorkflowTemplate ─────────────────────────────────────
-struct F77_WorkflowTemplate {
+// ── F77W_Template ─────────────────────────────────────
+struct F77W_Template {
     std::string templateId;
     std::string name;
     std::string version         { "1.0" };
@@ -116,7 +116,7 @@ struct F77_WorkflowTemplate {
     std::string createdAt;
     std::string updatedAt;
 
-    std::vector<F77_WorkflowTemplateStep> steps;
+    std::vector<F77W_TemplateStep> steps;
 
     OperationResult save()   const;
     OperationResult remove() const;
@@ -125,28 +125,28 @@ struct F77_WorkflowTemplate {
     void fromRow(const Row& r);
 
     /// Add a step to this template (admin-time only).
-    F77_WorkflowTemplateStep addTemplateStep(
+    F77W_TemplateStep addTemplateStep(
         const std::string& title,
         const std::string& executionMode = "sequential",
         bool isInit  = false,
         bool isFinal = false);
 
-    static std::shared_ptr<F77_WorkflowTemplate> create(
+    static std::shared_ptr<F77W_Template> create(
         const std::string& name,
         EntityStatus targetState = EntityStatus::RELEASED,
         const std::string& entityTypes = "f22,f18,akt");
-    static std::shared_ptr<F77_WorkflowTemplate> loadById(const std::string& id);
-    static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadAll();
-    static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadForEntityType(
+    static std::shared_ptr<F77W_Template> loadById(const std::string& id);
+    static std::vector<std::shared_ptr<F77W_Template>> loadAll();
+    static std::vector<std::shared_ptr<F77W_Template>> loadForEntityType(
         const std::string& entityType);
 
 private:
     static Database* db();
 };
 
-// ── F77_WorkflowOperation ──────────────────────────────────────
-// A single operation within a running F77_Workflow. (Was: F77_WorkflowStep)
-struct F77_WorkflowOperation {
+// ── F77W_Operation ──────────────────────────────────────
+// A single operation within a running F77W. (Was: F77W_Operation)
+struct F77W_Operation {
     std::string stepId;
     std::string workflowId;
     std::string tplStepId;      // soft ref; snapshot source (template may have changed)
@@ -178,14 +178,14 @@ struct F77_WorkflowOperation {
     }
 
     /// Check if all predecessor steps are complete.
-    bool canStart(const std::vector<F77_WorkflowOperation>& allSteps) const;
+    bool canStart(const std::vector<F77W_Operation>& allSteps) const;
 
     OperationResult save()   const;
     OperationResult remove() const;
     void fromRow(const Row& r);
 
-    static std::shared_ptr<F77_WorkflowOperation> loadById(const std::string& id);
-    static std::vector<F77_WorkflowOperation>     loadForWorkflow(const std::string& workflowId);
+    static std::shared_ptr<F77W_Operation> loadById(const std::string& id);
+    static std::vector<F77W_Operation>     loadForWorkflow(const std::string& workflowId);
 
     StepSymbol     stepSymbol()     const; ///< canonical symbol — UI maps to string/icon
 
@@ -193,11 +193,11 @@ private:
     static Database* db();
 };
 
-/// Backward-compat alias so existing code using F77_WorkflowStep still compiles
-using F77_WorkflowStep = F77_WorkflowOperation;
+/// Backward-compat alias so existing code using F77W_Operation still compiles
+using F77W_Operation = F77W_Operation;
 
-// ── F77_Workflow ──────────────────────────────────────────────
-struct F77_Workflow {
+// ── F77W ──────────────────────────────────────────────
+struct F77W {
     std::string workflowId;
     std::string templateId;     // soft ref only; template may have changed
     std::string templateName;   // snapshot of name at start
@@ -212,7 +212,7 @@ struct F77_Workflow {
     std::string createdAt;
     std::string updatedAt;
 
-    std::vector<F77_WorkflowOperation> steps;
+    std::vector<F77W_Operation> steps;
 
     OperationResult save()   const;
     OperationResult update() const;
@@ -221,40 +221,40 @@ struct F77_Workflow {
     void fromRow(const Row& r);
 
     bool isComplete() const { return status == WorkflowStatus::COMPLETED; }
-    std::vector<F77_WorkflowOperation*> readySteps();
+    std::vector<F77W_Operation*> readySteps();
 
-    static std::shared_ptr<F77_Workflow> create(
+    static std::shared_ptr<F77W> create(
         const std::string& entityType,
         const std::string& entityId,
         const std::string& templateName = "Standard-Freigabe",
         EntityStatus targetState = EntityStatus::RELEASED,
         const std::string& initiatedBy  = "system");
 
-    static std::shared_ptr<F77_Workflow> loadById(const std::string& id);
+    static std::shared_ptr<F77W> loadById(const std::string& id);
     WorkflowSymbol workflowSymbol() const; ///< canonical symbol — UI maps to string/icon
-    static std::vector<std::shared_ptr<F77_Workflow>> loadForEntity(
+    static std::vector<std::shared_ptr<F77W>> loadForEntity(
         const std::string& entityType, const std::string& entityId);
-    static std::vector<std::shared_ptr<F77_Workflow>> loadActive();
+    static std::vector<std::shared_ptr<F77W>> loadActive();
 
 private:
     static Database* db();
 };
 
-// ── F77_Engine ────────────────────────────────────────────────
+// ── F77Engine ────────────────────────────────────────────────
 // Stateless coordinator. All methods are static.
-class F77_Engine {
+class F77Engine {
 public:
-    /// Start a F77_Workflow from a named template.
+    /// Start a F77W from a named template.
     /// Snapshots the template; template changes won't affect the running workflow.
-    static std::shared_ptr<F77_Workflow> startFromTemplate(
+    static std::shared_ptr<F77W> startFromTemplate(
         const std::string& templateId,
         const std::string& entityType,
         const std::string& entityId,
         const std::string& initiatedBy = "system");
 
-    /// Start a minimal F77_Workflow (Init → "Freigabe vorbereiten" → End).
+    /// Start a minimal F77W (Init → "Freigabe vorbereiten" → End).
     /// Used when no template is configured for the entity type.
-    static std::shared_ptr<F77_Workflow> startDefault(
+    static std::shared_ptr<F77W> startDefault(
         const std::string& entityType,
         const std::string& entityId,
         EntityStatus targetState = EntityStatus::RELEASED,
@@ -262,13 +262,13 @@ public:
 
     /// Engine tick: auto-approve Init/autoApprove steps, sync F18 status,
     /// spawn wait-condition F18 Operations, auto-approve End when all done.
-    static bool tick(F77_Workflow& wf);
+    static bool tick(F77W& wf);
 
     /// Fire (approve/reject/skip) a specific step of a running workflow.
     /// Validates prerequisites (canStart, wait condition done), then
     /// sets status on the linked F18_Operation.
     static bool fireStep(
-        F77_Workflow& wf,
+        F77W& wf,
         const std::string& stepId,
         const std::string& decision,    // approved|rejected|skipped
         const std::string& actorId,
@@ -284,7 +284,7 @@ public:
     static void detachWorkflow(const std::string& entityType,
                                 const std::string& entityId);
     // Cancel a running workflow: sets status=cancelled, detaches from entity.
-    static void cancelWorkflow(F77_Workflow& wf);
+    static void cancelWorkflow(F77W& wf);
 
     static bool canRelease(
         const std::string& entityType,
@@ -301,7 +301,7 @@ public:
 
 
 // ── OperationSpec ─────────────────────────────────────────────────────────
-// Declarative description of one F77_WorkflowOperation in the default chain.
+// Declarative description of one F77W_Operation in the default chain.
 // Adding a new system step = adding one OperationSpec to the entity's list.
 struct OperationSpec {
     std::string  title;
@@ -316,9 +316,9 @@ struct OperationSpec {
 /// This is the single place to add/remove/reorder system steps per entity.
 static std::vector<OperationSpec> defaultOperations(const std::string& entityType);
 
-    /// Add a manual F77_WorkflowOperation to a running workflow.
-    /// Creates a F77_Task (not an F18) as the actionable work item.
-    /// The operation blocks End until the F77_Task is closed.
+    /// Add a manual F77W_Operation to a running workflow.
+    /// Creates a F77Task (not an F18) as the actionable work item.
+    /// The operation blocks End until the F77Task is closed.
     /// Returns the new stepId, or empty string on failure.
     /// Scan an entity's MFS folder for unregistered files.
     /// Each entity type knows its own scan logic. F77 does not know internals.
@@ -326,7 +326,7 @@ static std::vector<OperationSpec> defaultOperations(const std::string& entityTyp
         scanLooseFiles(const std::string& entityType, const std::string& entityId);
 
     static std::string addManualOperation(
-        F77_Workflow&      wf,
+        F77W&      wf,
         const std::string& title,
         const std::string& description = "",
         const std::string& assignedTo  = "");
@@ -334,11 +334,11 @@ static std::vector<OperationSpec> defaultOperations(const std::string& entityTyp
     /// Validate whether a step can be fired — dry-run, no state change.
     /// Returns a human-readable status string starting with "OK:" or "BLOCKED:".
     static std::string validateStep(
-        const F77_Workflow& wf,
+        const F77W& wf,
         const std::string& stepId);
 
     /// Apply the target state to the entity (called automatically by tick on End).
-    static bool applyTargetState(const F77_Workflow& wf);
+    static bool applyTargetState(const F77W& wf);
 
     /// Seed built-in templates (idempotent).
     static void seedDefaultTemplates();
@@ -346,9 +346,9 @@ static std::vector<OperationSpec> defaultOperations(const std::string& entityTyp
 private:
     static Database* db();
     static void spawnWaitConditionF18(
-        F77_WorkflowStep& step,
+        F77W_Operation& step,
         const std::string& projectId);
-    static bool checkAndComplete(F77_Workflow& wf);
+    static bool checkAndComplete(F77W& wf);
 };
 
 

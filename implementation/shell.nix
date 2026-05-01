@@ -1,105 +1,67 @@
-# shell.nix — Nix development shell for Rosenholz PM
+# ============================================================
+# shell.nix — Rosenholz PM Development Environment
 #
 # Usage:
-#   nix-shell            # enter the dev shell
-#   nix-shell --run "cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build -j$(nproc)"
+#   nix-shell          # enter dev shell
+#   nix-shell --run "cmake -B build -S . && cmake --build build"
 #
-# Provides:
-#   - GCC + Clang (choose either)
-#   - CMake (default build system)
-#   - SQLite3 (library + headers)
-#   - nlohmann-json (header-only, C++17 JSON)
-#   - pkg-config (used by CMakeLists.txt)
-#   - curl + wget (used by FileOps::downloadUrl)
-#   - wkhtmltopdf (used by Document::archiveWebsite for PDF archiving)
-#   - gdb + valgrind (debugging)
-#   - clang-tools (clangd LSP, clang-format, clang-tidy)
-#   - git (for GitHub state writing feature)
-#   - zip/unzip (for packaging)
-
+# Provides all dependencies to build, test and run Rosenholz PM:
+#   C++17, CMake, SQLite3, LMDB, OpenSSL, nlohmann_json,
+#   readline (CLI), Python3 (schema embedding), pkg-config
+# ============================================================
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
-  name = "rosenholz-dev";
+  name = "rosenholz-pm";
 
-  # ── Build tools ────────────────────────────────────────────────
-  nativeBuildInputs = with pkgs; [
-    # Compilers — both available, CMake will prefer GCC by default.
-    # To use clang: CC=clang CXX=clang++ cmake -B build
-    gcc
-    clang
-
-    # Build system
-    cmake
-    # ninja       # optional: faster incremental builds
-    pkg-config
-    gnumake        # cmake --build delegates to make by default
-  ];
-
-  # ── Runtime / link-time libraries ──────────────────────────────
   buildInputs = with pkgs; [
-    # Core dependencies
-    sqlite         # libsqlite3 + sqlite3.h
-    nlohmann_json  # header-only JSON (nlohmann/json.hpp)
-    lmdb           # Lightning Memory-Mapped Database (file archive store)
-    openssl        # SHA-256 for content-addressed chunk storage
-    readline       # GNU Readline: Ctrl+C handling, tab-completion, history
+    # ── Toolchain ───────────────────────────────────────────
+    gcc                   # C++17 compiler
+    cmake                 # build system (>= 3.16 required)
+    gnumake               # make backend for cmake
+    pkg-config            # locate system libraries
 
-    # Download & archiving (used by FileOps + Document)
-    curl
-    wget
-    wkhtmltopdf    # website → PDF archiving (Document::archiveWebsite)
+    # ── Core runtime dependencies ───────────────────────────
+    sqlite                # SQLite3 — primary structured storage
+    lmdb                  # LMDB — binary archive store (file content)
+    openssl               # OpenSSL — SHA-256 hashing for file integrity
 
-    # Debugging
-    gdb
-    valgrind
+    # ── JSON ────────────────────────────────────────────────
+    nlohmann_json         # header-only JSON library
 
-    # LSP + formatting (works with clangd in VS Code / neovim)
-    clang-tools    # clangd, clang-format, clang-tidy
+    # ── CLI ─────────────────────────────────────────────────
+    readline              # line-editing and history for the CLI
 
-    # Utilities
-    git
-    zip
-    unzip
-    ripgrep        # fast codebase search
-    jq             # inspect the JSON settings files + DB JSON fields
+    # ── Build tools ─────────────────────────────────────────
+    python3               # SQL schema embedding (scripts/gen_schema_files.py)
+
+    # ── Development utilities ────────────────────────────────
+    gdb                   # debugger
+    valgrind              # memory analysis
+    git                   # version control
   ];
 
-  # ── Shell hook ─────────────────────────────────────────────────
+  # Environment variables for the development shell
   shellHook = ''
     echo ""
-    echo "  Rosenholz PM — Nix dev shell"
-    echo "  ──────────────────────────────────────────────"
-    echo "  Compiler : $(g++ --version | head -1)"
-    echo "  CMake    : $(cmake --version | head -1)"
-    echo "  SQLite   : $(sqlite3 --version)"
-    echo "  LMDB     : available (file archive)"
+    echo "  ╔══════════════════════════════════════════╗"
+    echo "  ║       Rosenholz PM — Dev Shell           ║"
+    echo "  ║       C++17 · SQLite · LMDB · OpenSSL   ║"
+    echo "  ╚══════════════════════════════════════════╝"
     echo ""
     echo "  Quick start:"
-    echo "    cmake -B build -DCMAKE_BUILD_TYPE=Debug"
-    echo "    cmake --build build -j\$(nproc)"
-    echo "    ./build/rosenholz --basepath ~/rosenholz-data"
-    echo ""
-    echo "  Release build:"
-    echo "    cmake -B build-rel -DCMAKE_BUILD_TYPE=Release"
-    echo "    cmake --build build-rel -j\$(nproc)"
-    echo ""
-    echo "  Clang build:"
-    echo "    CC=clang CXX=clang++ cmake -B build-clang"
-    echo "    cmake --build build-clang -j\$(nproc)"
+    echo "    cmake -B build -S .    # configure"
+    echo "    cmake --build build    # compile"
+    echo "    ./build/rosenholz_cli  # run CLI"
+    echo "    ./build/rosenholz_test # run tests"
     echo ""
 
-    # Convenience aliases
-    alias rhbuild='cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build -j$(nproc)'
-    alias rhtest='./build/rosenholz --basepath /tmp/rh-test-$(date +%s)'
-    alias rhclean='rm -rf build && echo "build/ removed"'
+    # Put the built binaries on PATH if they exist
+    if [ -d "$PWD/build" ]; then
+      export PATH="$PWD/build:$PATH"
+    fi
+
+    # Default settings file for the dev environment
+    export ROSENHOLZ_SETTINGS="$PWD/settings.json"
   '';
-
-  # ── Environment variables ──────────────────────────────────────
-  # Tell CMake where nlohmann_json lives so find_package() succeeds
-  # without falling back to FetchContent (which needs network in Nix)
-  CMAKE_PREFIX_PATH = "${pkgs.nlohmann_json}";
-
-  # C++17 standard enforced
-  NIX_CFLAGS_COMPILE = "-std=c++17";
 }

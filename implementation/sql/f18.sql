@@ -22,10 +22,10 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 -- ── F18 Workflow (unified entity table) ──────────────────────
 CREATE TABLE IF NOT EXISTS f18_operations (
-    vorgang_id          TEXT PRIMARY KEY,
-    vorgang_type        TEXT NOT NULL DEFAULT 'generic',
+    operation_id          TEXT PRIMARY KEY,
+    operation_type        TEXT NOT NULL DEFAULT 'generic',
     task_id             TEXT NOT NULL,  -- → F22 (required: F18 always belongs to a task)
-    parent_vorgang_id   TEXT,           -- → F18 (CO only, → ChangeRequest)
+    parent_operation_id   TEXT,           -- → F18 (CO only, → ChangeRequest)
     release_workflow_id    TEXT,           -- WFI ID of controlling Main Workflow
     title               TEXT NOT NULL,
     description         TEXT,
@@ -122,15 +122,15 @@ CREATE TABLE IF NOT EXISTS f18_operations (
     updated_at          TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_f18_task       ON f18_operations(task_id, vorgang_type);
-CREATE INDEX IF NOT EXISTS idx_f18_parent     ON f18_operations(parent_vorgang_id);
+CREATE INDEX IF NOT EXISTS idx_f18_task       ON f18_operations(task_id, operation_type);
+CREATE INDEX IF NOT EXISTS idx_f18_parent     ON f18_operations(parent_operation_id);
 CREATE INDEX IF NOT EXISTS idx_f18_status     ON f18_operations(status);
-CREATE INDEX IF NOT EXISTS idx_f18_type       ON f18_operations(vorgang_type);
+CREATE INDEX IF NOT EXISTS idx_f18_type       ON f18_operations(operation_type);
 
 -- ── F18 Workflow Steps ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS f18_operation_steps (
     step_id             TEXT PRIMARY KEY,
-    vorgang_id          TEXT NOT NULL REFERENCES f18_operations(vorgang_id),
+    operation_id          TEXT NOT NULL REFERENCES f18_operations(vorgang_id),
     tpl_step_id         TEXT,           -- soft ref to template step
     title               TEXT NOT NULL,
     description         TEXT,
@@ -184,13 +184,13 @@ CREATE TABLE IF NOT EXISTS f18_operation_steps (
     updated_at          TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_f18step_vorgang  ON f18_operation_steps(vorgang_id, sequence_order);
+CREATE INDEX IF NOT EXISTS idx_f18step_vorgang  ON f18_operation_steps(operation_id, sequence_order);
 CREATE INDEX IF NOT EXISTS idx_f18step_status   ON f18_operation_steps(status);
 CREATE INDEX IF NOT EXISTS idx_f18step_assigned ON f18_operation_steps(assigned_to);
 
 -- ── Communication (replaces meetings) ────────────────────────
 CREATE TABLE IF NOT EXISTS communications (
-    comm_id         TEXT PRIMARY KEY,
+    communication_id TEXT PRIMARY KEY,
     owner_id        TEXT NOT NULL,
     owner_type      TEXT NOT NULL
                          CHECK(owner_type IN ('f16','f22','f18','f18step')),

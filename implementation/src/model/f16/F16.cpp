@@ -1,5 +1,5 @@
 // ============================================================
-// ProjectF16.cpp  —  Project entity implementation
+// F16.cpp  —  Project entity implementation
 //
 // F16 has NO lifecycle state machine:
 //   - It is always editable.
@@ -7,10 +7,10 @@
 //   - F77 workflows are NOT attached to F16.
 // ============================================================
 
-#include "ProjectF16.h"
+#include "F16.h"
 #include "../../mfs/MFSWriter.h"
-#include "../dok/Document.h"
-#include "../f22/TaskF22.h"
+#include "../akt/Folder.h"
+#include "../f22/F22.h"
 #include "../../core/OperationResult.h"
 #include "../../core/Database.h"
 #include "../../core/Logger.h"
@@ -27,13 +27,13 @@ using json = nlohmann::json;
 namespace Rosenholz {
 
 // ── Factory ──────────────────────────────────────────────────
-std::shared_ptr<ProjectF16> ProjectF16::create(
+std::shared_ptr<F16> F16::create(
     const std::string& title,
     const std::string& projectType,
     const std::string& sizeClass,
     const std::string& /*createdBy*/)
 {
-    auto project = std::make_shared<ProjectF16>();
+    auto project = std::make_shared<F16>();
     project->projectId   = genId("F16");
     project->regNumber   = RegNumber::fromString(project->projectId);
     project->title       = title;
@@ -43,19 +43,18 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
     project->createdAt   = nowIso();
     project->updatedAt   = project->createdAt;
     project->notes       = "{}";
-    LOG_INFO("ProjectF16 created: " + project->projectId);
+    LOG_INFO("F16 created: " + project->projectId);
     return project;
 }
 
 // ── CRUD ─────────────────────────────────────────────────────
-OperationResult ProjectF16::save() const {
+OperationResult F16::save() const {
     auto* db = DatabasePool::instance().get("f16");
-    if (!db) { LOG_ERROR("ProjectF16::save — f16 DB not available"); return OperationResult::DB_ERROR; }
+    if (!db) { LOG_ERROR("F16::save — f16 DB not available"); return OperationResult::DB_ERROR; }
     db->beginTransaction();
     OperationResult result = db->exec(R"(
         INSERT OR REPLACE INTO projects (
-            project_id, workflow_instance_id, workflow_status, workflow_current_state,
-            archived, reg_number, reg_dept, reg_sequence, reg_year,
+            project_id,             archived, reg_number, reg_dept, reg_sequence, reg_year,
             title, codename, project_type, size_class,
             owner_team_id, lead_id, sponsor_id,
             phase, methodology, classification, priority, complexity, strategic_alignment,
@@ -66,20 +65,25 @@ OperationResult ProjectF16::save() const {
             earned_value, planned_value, actual_cost,
             estimate_at_completion, estimate_to_complete, variance_at_completion,
             scope_statement, scope_version, scope_last_changed, scope_change_reason, scope_change_count,
-            quality_gate_id, communication_plan_id,
-            currency, external_ref, links, milestones, notes,
+                        currency, external_ref, links, milestones, notes,
             created_at, updated_at
         ) VALUES (
-            ?,?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?,
-            ?,?,?,?,?,?, ?,?,?,?, ?,?,?, ?,?,?,?,?,
-            ?,?, ?,?,?, ?,?,?, ?,?,?,?,?, ?,?,
-            ?,?,?,?,?, ?,?
+            ?,?,?,?,?,?,
+            ?,?,?,?,
+            ?,?,?,
+            ?,?,?,?,?,?,
+            ?,?,?,?,
+            ?,?,?,
+            ?,?,?,?,?,
+            ?,?,
+            ?,?,?,
+            ?,?,?,
+            ?,?,?,?,?,
+            ?,?,?,?,?,
+            ?,?
         )
     )", {
         BindParam::text(projectId),
-        BindParam::nullOrText(workflowInstanceId),
-        BindParam::nullOrText(workflowStatus),
-        BindParam::nullOrText(workflowCurrentState),
         BindParam::int64(archived ? 1 : 0),
         BindParam::text(regNumber.toString()),
         BindParam::text(regNumber.dept),
@@ -123,8 +127,6 @@ OperationResult ProjectF16::save() const {
         BindParam::nullOrText(scopeLastChanged),
         BindParam::nullOrText(scopeChangeReason),
         BindParam::int64(scopeChangeCount),
-        BindParam::nullOrText(qualityGateId),
-        BindParam::nullOrText(communicationPlanId),
         BindParam::text(currency),
         BindParam::nullOrText(externalRef),
         BindParam::nullOrText(links),
@@ -134,16 +136,13 @@ OperationResult ProjectF16::save() const {
         BindParam::text(nowIso())
     }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 
-    if (opOk(result)) { db->commitTransaction(); LOG_DEBUG("ProjectF16 saved: " + projectId); }
-    else { db->rollbackTransaction(); LOG_ERROR("ProjectF16 save failed: " + projectId); }
+    if (opOk(result)) { db->commitTransaction(); LOG_DEBUG("F16 saved: " + projectId); }
+    else { db->rollbackTransaction(); LOG_ERROR("F16 save failed: " + projectId); }
     return result;
 }
 
-void ProjectF16::fromRow(const Row& row) {
+void F16::fromRow(const Row& row) {
     projectId            = rowGet(row, "project_id");
-    workflowInstanceId   = rowGet(row, "workflow_instance_id");
-    workflowStatus       = rowGet(row, "workflow_status");
-    workflowCurrentState = rowGet(row, "workflow_current_state");
     archived             = rowGetBool(row, "archived");
     regNumber.dept       = rowGet(row, "reg_dept");
     regNumber.sequence   = rowGetInt(row, "reg_sequence");
@@ -186,8 +185,6 @@ void ProjectF16::fromRow(const Row& row) {
     scopeLastChanged     = rowGet(row, "scope_last_changed");
     scopeChangeReason    = rowGet(row, "scope_change_reason");
     scopeChangeCount     = rowGetInt(row, "scope_change_count");
-    qualityGateId        = rowGet(row, "quality_gate_id");
-    communicationPlanId  = rowGet(row, "communication_plan_id");
     currency             = rowGet(row, "currency");
     externalRef          = rowGet(row, "external_ref");
     links                = rowGet(row, "links");
@@ -197,30 +194,30 @@ void ProjectF16::fromRow(const Row& row) {
     updatedAt            = rowGet(row, "updated_at");
 }
 
-bool ProjectF16::load(const std::string& id) {
+bool F16::load(const std::string& id) {
     auto* db = DatabasePool::instance().get("f16");
     if (!db) return false;
     auto rows = db->query("SELECT * FROM projects WHERE project_id=?;", {BindParam::text(id)});
-    if (rows.empty()) { LOG_WARN("ProjectF16 not found: " + id); return false; }
+    if (rows.empty()) { LOG_WARN("F16 not found: " + id); return false; }
     fromRow(rows[0]);
-        return true;
+    return true;
 }
 
-OperationResult ProjectF16::update() {
+OperationResult F16::update() {
     updatedAt = nowIso();
     return save();
 }
 
-OperationResult ProjectF16::updateScope(const std::string& scopeText) {
+OperationResult F16::updateScope(const std::string& scopeText) {
     scopeStatement   = scopeText;
     scopeLastChanged = nowIso();
     return update();
 }
 
-OperationResult ProjectF16::remove() {
+OperationResult F16::remove() {
     auto* db = DatabasePool::instance().get("f16");
     if (!db) return OperationResult::DB_ERROR;
-    LOG_WARN("Removing ProjectF16: " + projectId);
+    LOG_WARN("Removing F16: " + projectId);
     db->exec("DELETE FROM project_quality WHERE project_id=?;", {BindParam::text(projectId)});
     db->exec("DELETE FROM project_cost    WHERE project_id=?;", {BindParam::text(projectId)});
     db->exec("DELETE FROM project_time    WHERE project_id=?;", {BindParam::text(projectId)});
@@ -230,109 +227,69 @@ OperationResult ProjectF16::remove() {
 }
 
 // ── Queries ───────────────────────────────────────────────────
-std::shared_ptr<ProjectF16> ProjectF16::loadById(const std::string& id) {
-    auto project = std::make_shared<ProjectF16>();
+std::shared_ptr<F16> F16::loadById(const std::string& id) {
+    auto project = std::make_shared<F16>();
     return project->load(id) ? project : nullptr;
 }
 
-std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadAll() {
+std::vector<std::shared_ptr<F16>> F16::loadAll() {
     auto* db = DatabasePool::instance().get("f16");
-    std::vector<std::shared_ptr<ProjectF16>> result;
+    std::vector<std::shared_ptr<F16>> result;
     if (!db) return result;
     for (auto& row : db->query("SELECT * FROM projects WHERE archived=0 ORDER BY created_at DESC;")) {
-        auto project = std::make_shared<ProjectF16>();
+        auto project = std::make_shared<F16>();
         project->fromRow(row);
         result.push_back(project);
     }
     return result;
 }
 
-std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadRecent(int maxCount) {
+std::vector<std::shared_ptr<F16>> F16::loadRecent(int maxCount) {
     auto* db = DatabasePool::instance().get("f16");
-    std::vector<std::shared_ptr<ProjectF16>> result;
+    std::vector<std::shared_ptr<F16>> result;
     if (!db) return result;
     for (auto& row : db->query(
             "SELECT * FROM projects ORDER BY created_at DESC LIMIT ?;",
             {BindParam::int64(maxCount)})) {
-        auto project = std::make_shared<ProjectF16>();
+        auto project = std::make_shared<F16>();
         project->fromRow(row);
         result.push_back(project);
     }
     return result;
 }
 
-std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadWithDates() {
+std::vector<std::shared_ptr<F16>> F16::loadWithDates() {
     auto* db = DatabasePool::instance().get("f16");
-    std::vector<std::shared_ptr<ProjectF16>> result;
+    std::vector<std::shared_ptr<F16>> result;
     if (!db) return result;
     for (auto& row : db->query(
             "SELECT * FROM projects "
             "WHERE (start_date_planned != '' OR end_date_planned != '') "
             "  AND archived=0 ORDER BY start_date_planned;", {})) {
-        auto project = std::make_shared<ProjectF16>();
+        auto project = std::make_shared<F16>();
         project->fromRow(row);
         result.push_back(project);
     }
     return result;
 }
 
-std::vector<std::shared_ptr<ProjectF16>> ProjectF16::loadByStatus(const std::string& /*unused*/) {
+std::vector<std::shared_ptr<F16>> F16::loadByStatus(const std::string& /*unused*/) {
     // F16 has no lifecycle status — returns all active (non-archived) projects.
     return loadAll();
 }
 
-int ProjectF16::count() {
+int F16::count() {
     auto* db = DatabasePool::instance().get("f16");
     return db ? db->rowCount("projects") : 0;
 }
 
-// ── QTCS links ───────────────────────────────────────────────
-void ProjectF16::loadQTCSLinks() {
-    auto* db = DatabasePool::instance().get("f16");
-    if (!db) return;
-    auto loadIds = [&](const std::string& tableName, const std::string& columnName) {
-        std::vector<std::string> ids;
-        for (auto& row : db->query(
-            "SELECT " + columnName + " FROM " + tableName + " WHERE project_id=?;",
-            {BindParam::text(projectId)}))
-            ids.push_back(row.begin()->second);
-        return ids;
-    };
-    qualityIds = loadIds("project_quality", "quality_id");
-    costIds    = loadIds("project_cost",    "cost_id");
-    timeIds    = loadIds("project_time",    "time_id");
-    scopeIds   = loadIds("project_scope",   "scope_id");
-}
-
-// ── Earned value ──────────────────────────────────────────────
-void ProjectF16::recalcEarnedValue() {
-    if (actualCost > 0.0 && earnedValue > 0.0)
-        costPerformanceIndex = earnedValue / actualCost;
-    if (plannedValue > 0.0 && earnedValue > 0.0)
-        schedulePerformanceIndex = earnedValue / plannedValue;
-    estimateAtCompletion = (costPerformanceIndex != 0.0)
-        ? budgetPlanned / costPerformanceIndex
-        : budgetPlanned;
-    estimateToComplete   = estimateAtCompletion - actualCost;
-    varianceAtCompletion = budgetPlanned - estimateAtCompletion;
-    costVariance         = earnedValue - actualCost;
-    LOG_DEBUG("EV recalculated: " + projectId
-        + " CostPI=" + std::to_string(costPerformanceIndex)
-        + " SchedulePI=" + std::to_string(schedulePerformanceIndex));
-}
-
-// ── Reassign ──────────────────────────────────────────────────
-OperationResult ProjectF16::reassignLead(const std::string& newLeadId) {
-    leadId = newLeadId; return update(); }
-OperationResult ProjectF16::reassignTeam(const std::string& newTeamId) {
+OperationResult F16::reassignTeam(const std::string& newTeamId) {
     ownerTeamId = newTeamId; return update(); }
-OperationResult ProjectF16::reassignSponsor(const std::string& newSponsorId) {
+OperationResult F16::reassignSponsor(const std::string& newSponsorId) {
     sponsorId = newSponsorId; return update(); }
-OperationResult ProjectF16::reassignWorkflowInstance(const std::string& newInstanceId) {
-    workflowInstanceId = newInstanceId; return update(); }
 
 // ── Convert to Task ───────────────────────────────────────────
-std::string ProjectF16::convertToTask(const std::string& parentProjectId) {
+std::string F16::convertToTask(const std::string& parentProjectId) {
     auto* db = DatabasePool::instance().get("f22");
     if (!db) return "";
     RegNumber taskRegNumber = RegNumberGenerator::next(RegDept::TASK);
@@ -364,7 +321,7 @@ std::string ProjectF16::convertToTask(const std::string& parentProjectId) {
 }
 
 // ── Serialisation ─────────────────────────────────────────────
-json ProjectF16::toJson() const {
+json F16::toJson() const {
     json j;
     j["projectId"]                = projectId;
     j["regNumber"]                = regNumber.toString();
@@ -380,15 +337,11 @@ json ProjectF16::toJson() const {
     j["budgetActual"]             = budgetActual;
     j["costPerformanceIndex"]     = costPerformanceIndex;
     j["schedulePerformanceIndex"] = schedulePerformanceIndex;
-    j["qualityIds"]               = qualityIds;
-    j["costIds"]                  = costIds;
-    j["timeIds"]                  = timeIds;
-    j["scopeIds"]                 = scopeIds;
     return j;
 }
 
-std::shared_ptr<ProjectF16> ProjectF16::fromJson(const json& j) {
-    auto project = std::make_shared<ProjectF16>();
+std::shared_ptr<F16> F16::fromJson(const json& j) {
+    auto project = std::make_shared<F16>();
     project->projectId                = j.value("projectId",   "");
     project->title                    = j.value("title",       "");
     project->codename                 = j.value("codename",    "");
@@ -401,18 +354,18 @@ std::shared_ptr<ProjectF16> ProjectF16::fromJson(const json& j) {
 }
 
 // ── MFS output ────────────────────────────────────────────────
-bool ProjectF16::writeMFSFile(const std::string& mfsRoot) const {
+bool F16::writeMFSFile(const std::string& mfsRoot) const {
     return MFSWriter::writeProject(*this, mfsRoot);
 }
 
-std::string ProjectF16::mfsSchluesselText() const {
+std::string F16::mfsSchluesselText() const {
     std::ostringstream text;
     text << "  ID       : " << projectId  << "\n"
          << "  Titel    : " << title       << "\n"
          << "  Typ      : " << projectType << "\n"
          << "  Groesse  : " << sizeClass   << "\n"
          << "  Archiv   : " << (archived ? "ja" : "nein") << "\n";
-    auto tasks = Rosenholz::TaskF22::loadForProject(projectId);
+    auto tasks = Rosenholz::F22::loadForProject(projectId);
     if (!tasks.empty()) {
         text << "  F22      :";
         for (auto& task : tasks) text << " " << task->taskId;
@@ -420,5 +373,26 @@ std::string ProjectF16::mfsSchluesselText() const {
     }
     return text.str();
 }
+
+// ── Earned value recalculation ────────────────────────────────
+void F16::recalcEarnedValue() {
+    if (actualCost > 0.0 && earnedValue > 0.0)
+        costPerformanceIndex = earnedValue / actualCost;
+    if (plannedValue > 0.0 && earnedValue > 0.0)
+        schedulePerformanceIndex = earnedValue / plannedValue;
+    estimateAtCompletion = (costPerformanceIndex != 0.0)
+        ? budgetPlanned / costPerformanceIndex
+        : budgetPlanned;
+    estimateToComplete   = estimateAtCompletion - actualCost;
+    varianceAtCompletion = budgetPlanned - estimateAtCompletion;
+    costVariance         = earnedValue - actualCost;
+    LOG_DEBUG("EV recalculated: " + projectId
+        + " CostPI=" + std::to_string(costPerformanceIndex)
+        + " SchedulePI=" + std::to_string(schedulePerformanceIndex));
+}
+
+
+OperationResult F16::reassignLead(const std::string& newLeadId) {
+    leadId = newLeadId; return update(); }
 
 } // namespace Rosenholz

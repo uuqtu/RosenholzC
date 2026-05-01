@@ -14,13 +14,13 @@
 #include "../core/Config.h"
 #include "../core/FileOps.h"
 #include "../core/Logger.h"
-#include "../model/f16/ProjectF16.h"
-#include "../model/f22/TaskF22.h"
-#include "../model/dok/Document.h"
+#include "../model/f16/F16.h"
+#include "../model/f22/F22.h"
+#include "../model/akt/Folder.h"
 #include "../model/f18/F18Operation.h"
 #include "../workflow/F77Workflow.h"
 #include <sstream>
-#include "../repository/DocumentRevision.h"
+#include "../model/akt/FolderRevision.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -165,7 +165,7 @@ bool yesno(const std::string& prompt) {
 
 // ── Entity print functions ─────────────────────────────────────
 
-void printProject(const ProjectF16& p) {
+void printProject(const F16& p) {
     hdr("F16 " + p.regNumber.toString() + "  " + p.title.substr(0,38));
     std::cout << "  ID:" << p.projectId
               << "  Status:" << (p.archived ? "archiviert" : "aktiv") << "/" << p.sizeClass << "\n";
@@ -176,7 +176,7 @@ void printProject(const ProjectF16& p) {
         std::cout << "  " << (p.startDatePlanned.empty()?"—":p.startDatePlanned.substr(0,10))
                   << " → " << (p.endDatePlanned.empty()?"—":p.endDatePlanned.substr(0,10)) << "\n";
 }
-void printTask(const TaskF22& t) {
+void printTask(const F22& t) {
     hdr("F22 " + t.regNumber.toString() + "  " + t.title.substr(0,38));
     std::cout << "  ID:" << t.taskId
               << "  " << entityStatusToString(t.status) << "/" << t.priority
@@ -190,26 +190,27 @@ void printTask(const TaskF22& t) {
     if (!t.releaseWorkflowId.empty())
         std::cout << "  WFI:" << t.releaseWorkflowId.substr(0,36) << "\n";
 }
-void printDocument(const Document& d) {
-    hdr("AKT " + d.documentId.substr(0,26) + "  " + d.title.substr(0,28));
-    auto curRev = Rosenholz::DocumentRevision::currentRevision(d.documentId);
+void printDocument(const Folder& d) {
+    hdr("AKT " + d.folderId.substr(0,26) + "  " + d.title.substr(0,28));
+    auto curRev = Rosenholz::FolderRevision::currentRevision(d.folderId);
     std::cout << "  " << d.docType << "/" << d.format
               << "  Rev:" << (curRev ? std::to_string(curRev->rev) + "[" + curRev->revStateStr() + "]" : "—")
               << "  v" << d.version << "\n";
     if (!d.taskId.empty()) std::cout << "  F22:" << d.taskId.substr(0,26);
     std::cout << "\n";
-    if (!d.releaseWorkflowId.empty())
-        std::cout << "  WFI:" << d.releaseWorkflowId.substr(0,36) << "\n";
+    if (!d.workflowId.empty())
+        std::cout << "  WFI:" << d.workflowId.substr(0,36) << "\n";
+
 }
 
 
-void listDocuments(const std::vector<std::shared_ptr<Document>>& docs,
+void listDocuments(const std::vector<std::shared_ptr<Folder>>& docs,
                    const std::string& title) {
     hdr(title.empty() ? "AKTEN" : title);
     if (docs.empty()) { std::cout << "  (keine Akten)\n"; return; }
     int n=1;
     for (auto& d : docs) {
-        auto cur = DocumentRevision::currentRevision(d->documentId);
+        auto cur = FolderRevision::currentRevision(d->folderId);
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << std::left << std::setw(28) << d->title.substr(0,26)
                   << "  " << std::setw(12) << d->currentRevisionState()
@@ -224,7 +225,7 @@ void listDocuments(const std::vector<std::shared_ptr<Document>>& docs,
 // ── List display functions ─────────────────────────────────────
 
 void listProjects() {
-    auto all = ProjectF16::loadAll();
+    auto all = F16::loadAll();
     if (all.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
 
     std::cout << "  " << std::left
@@ -255,7 +256,7 @@ void listProjects() {
 }
 
 void listTasks(const std::string& projectId) {
-    auto tasks = TaskF22::loadForProject(projectId);
+    auto tasks = F22::loadForProject(projectId);
     if (tasks.empty()) { std::cout << "  (keine F22-Vorgänge)\n"; return; }
 
     std::cout << "  " << std::left

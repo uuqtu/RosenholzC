@@ -9,12 +9,12 @@
 namespace Rosenholz {
 
 // ── Internal helpers ─────────────────────────────────────────
-Database* F77_Task::db() {
+Database* F77Task::db() {
     return DatabasePool::instance().get("f77task");
 }
 
 // ── CRUD ─────────────────────────────────────────────────────
-void F77_Task::fromRow(const Row& r) {
+void F77Task::fromRow(const Row& r) {
     auto g = [&](const std::string& k) {
         auto it = r.find(k); return it != r.end() ? it->second : "";
     };
@@ -35,7 +35,7 @@ void F77_Task::fromRow(const Row& r) {
     completionNote     = g("completion_note");
 }
 
-OperationResult F77_Task::save() const {
+OperationResult F77Task::save() const {
     auto* d = db();
     if (!d) return OperationResult::DB_ERROR;
     bool ok = d->exec(
@@ -63,9 +63,9 @@ OperationResult F77_Task::save() const {
     return ok ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-OperationResult F77_Task::update() const { return save(); }
+OperationResult F77Task::update() const { return save(); }
 
-OperationResult F77_Task::remove() const {
+OperationResult F77Task::remove() const {
     auto* d = db();
     if (!d) return OperationResult::DB_ERROR;
     d->exec("DELETE FROM f77_tasks WHERE task_id=?;", {BindParam::text(taskId)});
@@ -73,79 +73,79 @@ OperationResult F77_Task::remove() const {
 }
 
 // ── Lifecycle ────────────────────────────────────────────────
-OperationResult F77_Task::complete(const std::string& note) {
+OperationResult F77Task::complete(const std::string& note) {
     status         = "completed";
     completedAt    = nowIso();
     completionNote = note;
     return update();
-    // Note: caller (CLI/engine) should call F77_Engine::tick() after close
+    // Note: caller (CLI/engine) should call F77Engine::tick() after close
     // to advance the workflow. F77Task does not call the engine directly.
 }
 
-OperationResult F77_Task::skip(const std::string& reason) {
+OperationResult F77Task::skip(const std::string& reason) {
     status         = "skipped";
     completedAt    = nowIso();
     completionNote = reason;
     return update();
 }
 
-OperationResult F77_Task::cancel() {
+OperationResult F77Task::cancel() {
     status      = "cancelled";
     completedAt = nowIso();
     return update();
 }
 
 // ── Queries ──────────────────────────────────────────────────
-std::shared_ptr<F77_Task> F77_Task::loadById(const std::string& id) {
+std::shared_ptr<F77Task> F77Task::loadById(const std::string& id) {
     auto* d = db();
     if (!d) return nullptr;
     auto rows = d->query("SELECT * FROM f77_tasks WHERE task_id=?;",
                          {BindParam::text(id)});
     if (rows.empty()) return nullptr;
-    auto t = std::make_shared<F77_Task>(); t->fromRow(rows[0]); return t;
+    auto t = std::make_shared<F77Task>(); t->fromRow(rows[0]); return t;
 }
 
-std::vector<std::shared_ptr<F77_Task>> F77_Task::loadOpen() {
+std::vector<std::shared_ptr<F77Task>> F77Task::loadOpen() {
     auto* d = db(); if (!d) return {};
     auto rows = d->query(
         "SELECT * FROM f77_tasks WHERE status='open'"
         " ORDER BY created_at ASC;", {});
-    std::vector<std::shared_ptr<F77_Task>> v;
-    for (auto& r : rows) { auto t = std::make_shared<F77_Task>(); t->fromRow(r); v.push_back(t); }
+    std::vector<std::shared_ptr<F77Task>> v;
+    for (auto& r : rows) { auto t = std::make_shared<F77Task>(); t->fromRow(r); v.push_back(t); }
     return v;
 }
 
-std::vector<std::shared_ptr<F77_Task>> F77_Task::loadAll(int limit) {
+std::vector<std::shared_ptr<F77Task>> F77Task::loadAll(int limit) {
     auto* d = db(); if (!d) return {};
     auto rows = d->query(
         "SELECT * FROM f77_tasks ORDER BY created_at DESC LIMIT ?;",
         {BindParam::int64(limit)});
-    std::vector<std::shared_ptr<F77_Task>> v;
-    for (auto& r : rows) { auto t = std::make_shared<F77_Task>(); t->fromRow(r); v.push_back(t); }
+    std::vector<std::shared_ptr<F77Task>> v;
+    for (auto& r : rows) { auto t = std::make_shared<F77Task>(); t->fromRow(r); v.push_back(t); }
     return v;
 }
 
-std::vector<std::shared_ptr<F77_Task>> F77_Task::loadForWorkflow(const std::string& wfId) {
+std::vector<std::shared_ptr<F77Task>> F77Task::loadForWorkflow(const std::string& wfId) {
     auto* d = db(); if (!d) return {};
     auto rows = d->query(
         "SELECT * FROM f77_tasks WHERE workflow_id=? ORDER BY created_at ASC;",
         {BindParam::text(wfId)});
-    std::vector<std::shared_ptr<F77_Task>> v;
-    for (auto& r : rows) { auto t = std::make_shared<F77_Task>(); t->fromRow(r); v.push_back(t); }
+    std::vector<std::shared_ptr<F77Task>> v;
+    for (auto& r : rows) { auto t = std::make_shared<F77Task>(); t->fromRow(r); v.push_back(t); }
     return v;
 }
 
-std::vector<std::shared_ptr<F77_Task>> F77_Task::loadForOperation(const std::string& opId) {
+std::vector<std::shared_ptr<F77Task>> F77Task::loadForOperation(const std::string& opId) {
     auto* d = db(); if (!d) return {};
     auto rows = d->query(
         "SELECT * FROM f77_tasks WHERE operation_id=? ORDER BY created_at ASC;",
         {BindParam::text(opId)});
-    std::vector<std::shared_ptr<F77_Task>> v;
-    for (auto& r : rows) { auto t = std::make_shared<F77_Task>(); t->fromRow(r); v.push_back(t); }
+    std::vector<std::shared_ptr<F77Task>> v;
+    for (auto& r : rows) { auto t = std::make_shared<F77Task>(); t->fromRow(r); v.push_back(t); }
     return v;
 }
 
-std::vector<std::shared_ptr<F77_Task>> F77_Task::loadForEntity(
+std::vector<std::shared_ptr<F77Task>> F77Task::loadForEntity(
     const std::string& et, const std::string& eid)
 {
     auto* d = db(); if (!d) return {};
@@ -154,13 +154,13 @@ std::vector<std::shared_ptr<F77_Task>> F77_Task::loadForEntity(
         " WHERE target_entity_type=? AND target_entity_id=?"
         " ORDER BY created_at ASC;",
         {BindParam::text(et), BindParam::text(eid)});
-    std::vector<std::shared_ptr<F77_Task>> v;
-    for (auto& r : rows) { auto t = std::make_shared<F77_Task>(); t->fromRow(r); v.push_back(t); }
+    std::vector<std::shared_ptr<F77Task>> v;
+    for (auto& r : rows) { auto t = std::make_shared<F77Task>(); t->fromRow(r); v.push_back(t); }
     return v;
 }
 
 // ── Factory ──────────────────────────────────────────────────
-std::shared_ptr<F77_Task> F77_Task::create(
+std::shared_ptr<F77Task> F77Task::create(
     const std::string& workflowId,
     const std::string& operationId,
     const std::string& title,
@@ -171,7 +171,7 @@ std::shared_ptr<F77_Task> F77_Task::create(
     const std::string& fileName,
     const std::string& assignedTo)
 {
-    auto t = std::make_shared<F77_Task>();
+    auto t = std::make_shared<F77Task>();
     t->taskId           = genId("F77T");
     t->workflowId       = workflowId;
     t->operationId      = operationId;
@@ -194,9 +194,9 @@ std::shared_ptr<F77_Task> F77_Task::create(
     return t;
 }
 
-// ── F77_Task::checkOperationComplete ─────────────────────────────────────
+// ── F77Task::checkOperationComplete ─────────────────────────────────────
 // Pure query — no engine calls. Caller (tick) advances the workflow.
-bool F77_Task::checkOperationComplete(const std::string& operationId) {
+bool F77Task::checkOperationComplete(const std::string& operationId) {
     auto tasks = loadForOperation(operationId);
     if (tasks.empty()) return false;
     for (auto& t : tasks) if (t->isOpen()) return false;

@@ -24,7 +24,7 @@ class F18OperationStep {
 public:
     // ── Identity ──────────────────────────────────────────────
     std::string stepId;             // XV/WFS/nnnn/yyyy
-    std::string vorgangId;          // → F18Operation (parent)
+    std::string operationId;          // → F18Operation (parent)
     std::string tplStepId;          // → template step (optional)
 
     // ── Content ───────────────────────────────────────────────
@@ -112,7 +112,7 @@ public:
 
     // ── Factory ───────────────────────────────────────────────
     static std::shared_ptr<F18OperationStep> loadById(const std::string& id);
-    static std::vector<F18OperationStep>     loadForVorgang(const std::string& vorgangId);
+    static std::vector<F18OperationStep>     loadForVorgang(const std::string& operationId);
 
 private:
     void fromRow(const Row& r);

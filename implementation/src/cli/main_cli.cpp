@@ -126,14 +126,14 @@ static char** rhCompletion(const char* text, int /*start*/, int /*end*/) {
     // Helper: add F16 reg-nrs
     auto addF16 = [&]() {
         try {
-            auto all = Rosenholz::ProjectF16::loadAll();
+            auto all = Rosenholz::F16::loadAll();
             for (auto& p : all) g_candidates.push_back(p->regNumber.toString());
         } catch (...) {}
     };
     // Helper: add recent F22 reg-nrs
     auto addF22 = [&]() {
         try {
-            auto all = Rosenholz::TaskF22::loadRecent(50);
+            auto all = Rosenholz::F22::loadRecent(50);
             for (auto& t : all) g_candidates.push_back(t->regNumber.toString());
         } catch (...) {}
     };
@@ -141,20 +141,20 @@ static char** rhCompletion(const char* text, int /*start*/, int /*end*/) {
     auto addF18 = [&]() {
         try {
             auto all = Rosenholz::F18Operation::loadRecent(50);
-            for (auto& v : all) g_candidates.push_back(v->vorgangId);
+            for (auto& v : all) g_candidates.push_back(v->operationId);
         } catch (...) {}
     };
     // Helper: add recent DOK ids
     auto addDok = [&]() {
         try {
-            auto all = Rosenholz::Document::loadRecent(50);
-            for (auto& d : all) g_candidates.push_back(d->documentId);
+            auto all = Rosenholz::Folder::loadRecent(50);
+            for (auto& d : all) g_candidates.push_back(d->folderId);
         } catch (...) {}
     };
     // Helper: add active F77 workflow ids
     auto addF77 = [&]() {
         try {
-            auto all = Rosenholz::F77_Workflow::loadActive();
+            auto all = Rosenholz::F77W::loadActive();
             for (auto& w : all) g_candidates.push_back(w->workflowId);
         } catch (...) {}
     };
@@ -416,7 +416,7 @@ static void dispatch(const std::string& cmd, const std::vector<std::string>& res
     if (cmd == "-cal") {
         // Calendar view: F16 and F22 entries with dates
         std::cout << "\n  -- KALENDER --\n";
-        auto projs = Rosenholz::ProjectF16::loadWithDates();
+        auto projs = Rosenholz::F16::loadWithDates();
         if (projs.empty()) {
             std::cout << "  (keine Datumseintraege)\n";
         } else {

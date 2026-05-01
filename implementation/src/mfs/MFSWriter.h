@@ -27,9 +27,9 @@ class F18Operation;  // forward declaration
 
 
 // Forward declarations — avoids pulling in all model headers
-class ProjectF16;
-class TaskF22;
-class Document;
+class F16;
+class F22;
+class Folder;
 class Person;
 class Team;
 
@@ -45,8 +45,8 @@ public:
     // Content: all project metadata, ONLY reg-numbers for cross-refs
     //          (human names are kept only in owner_key.txt)
     // ------------------------------
-    static bool writeProject (const ProjectF16&   p,   const std::string& mfsRoot);
-    static bool writeTask    (const TaskF22&       t,   const std::string& mfsRoot);
+    static bool writeProject (const F16&   p,   const std::string& mfsRoot);
+    static bool writeTask    (const F22&       t,   const std::string& mfsRoot);
     // ------------------------------
     // Write a plaintext index card for a document into MFS.
     //
@@ -58,7 +58,7 @@ public:
     // Also copies the physical file (d.filePath) into the same
     // directory if the file exists on disk.
     // ------------------------------
-    static bool writeDocument(const Document&       d,   const std::string& mfsRoot);
+    static bool writeDocument(const Folder&       d,   const std::string& mfsRoot);
     static bool writeF18     (const F18Operation&    v,   const std::string& mfsRoot);
     static bool writeF77     (const std::string& wfiId, const std::string& entityType,
                               const std::string& entityTitle, const std::string& mfsRoot);

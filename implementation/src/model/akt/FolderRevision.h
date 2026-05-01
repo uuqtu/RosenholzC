@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// DocumentRevision.h  —  Document revision model
+// FolderRevision.h  —  Document revision model
 //
 // Each Document has N revisions identified by (folderId, rev).
 // One revision per folderId holds superseded = false — that is
@@ -26,11 +26,11 @@
 #include <vector>
 #include <cstdint>
 #include <memory>
-#include "../core/Database.h"
+#include "../../core/Database.h"
 
 namespace Rosenholz {
 
-// RevState — five states of a DocumentRevision
+// RevState — five states of a FolderRevision
 // Stored as string in SQLite; convert with revStateToString / revStateFromString.
 enum class RevState {
     IN_WORK,        // Mutable — objects in MFS, checkout allowed
@@ -68,9 +68,9 @@ inline std::ostream& operator<<(std::ostream& os, RevState s) {
 
 
 // ============================================================
-// DocumentRevision
+// FolderRevision
 // ============================================================
-class DocumentRevision {
+class FolderRevision {
 public:
     // ── Identity ──────────────────────────────────────────────
     std::string folderId;     // XV/AKT/…  (same as parent document)
@@ -115,25 +115,25 @@ public:
     //   baseRev    : revision to branch from (0 = initial creation)
     //   createdBy  : person ID
     //   note       : change note
-    // Returns: saved DocumentRevision, or nullptr on error
+    // Returns: saved FolderRevision, or nullptr on error
     // ------------------------------
-    static std::shared_ptr<DocumentRevision> createRevision(
+    static std::shared_ptr<FolderRevision> createRevision(
         const std::string& folderId,
         uint32_t           baseRev,
         const std::string& createdBy = "",
         const std::string& note      = "");
 
-    static std::shared_ptr<DocumentRevision> loadByRev(
+    static std::shared_ptr<FolderRevision> loadByRev(
         const std::string& folderId, uint32_t rev);
 
-    static std::vector<std::shared_ptr<DocumentRevision>> loadAllRevisions(
+    static std::vector<std::shared_ptr<FolderRevision>> loadAllRevisions(
         const std::string& folderId);
 
     // ------------------------------
     // currentRevision
     // Returns the revision with superseded = false for this docId.
     // ------------------------------
-    static std::shared_ptr<DocumentRevision> currentRevision(
+    static std::shared_ptr<FolderRevision> currentRevision(
         const std::string& folderId);
 
     // ── State machine ─────────────────────────────────────────

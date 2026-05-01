@@ -24,7 +24,7 @@ void WatchPoller::run(std::function<void(const std::string&)> onEvent,
     signal(SIGINT, watchSigint);
 
     // Baseline: current open task count
-    int prevOpen = (int)F77_Task::loadOpen().size();
+    int prevOpen = (int)F77Task::loadOpen().size();
 
     onEvent("Watch gestartet. Pruefe alle " +
             std::to_string(intervalSeconds) + "s. Ctrl+C zum Beenden.");
@@ -35,7 +35,7 @@ void WatchPoller::run(std::function<void(const std::string&)> onEvent,
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         if (s_watchStop.load()) break;
 
-        int nowOpen = (int)F77_Task::loadOpen().size();
+        int nowOpen = (int)F77Task::loadOpen().size();
         if (nowOpen != prevOpen) {
             std::ostringstream oss;
             int delta = nowOpen - prevOpen;

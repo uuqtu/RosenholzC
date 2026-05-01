@@ -11,9 +11,6 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 CREATE TABLE IF NOT EXISTS tasks (
     task_id                 TEXT PRIMARY KEY,
-    workflow_instance_id    TEXT,
-    workflow_status         TEXT,
-    workflow_current_state  TEXT,
     release_workflow_id     TEXT,
     reg_number              TEXT,
     project_id              TEXT NOT NULL,
@@ -52,9 +49,3 @@ CREATE INDEX IF NOT EXISTS idx_tasks_project  ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent   ON tasks(parent_task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status   ON tasks(status);
-
--- QTCS dimension links for F22
-CREATE TABLE IF NOT EXISTS task_quality (task_id TEXT NOT NULL, quality_id TEXT NOT NULL, PRIMARY KEY(task_id, quality_id));
-CREATE TABLE IF NOT EXISTS task_time    (task_id TEXT NOT NULL, time_id    TEXT NOT NULL, PRIMARY KEY(task_id, time_id));
-CREATE TABLE IF NOT EXISTS task_cost    (task_id TEXT NOT NULL, cost_id    TEXT NOT NULL, PRIMARY KEY(task_id, cost_id));
-CREATE TABLE IF NOT EXISTS task_scope   (task_id TEXT NOT NULL, scope_id   TEXT NOT NULL, PRIMARY KEY(task_id, scope_id));

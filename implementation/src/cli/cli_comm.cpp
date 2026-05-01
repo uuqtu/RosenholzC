@@ -20,7 +20,7 @@ using namespace Rosenholz;
 // ── Communication detail menu ─────────────────────────────────
 void commDetailMenu(std::shared_ptr<Communication> c) {
     while (true) {
-        hdr("COMMUNICATION — " + c->commId.substr(0,22));
+        hdr("COMMUNICATION — " + c->communicationId.substr(0,22));
         std::cout << "  Typ    : " << c->commType << "\n";
         std::cout << "  Titel  : " << c->title << "\n";
         std::cout << "  Status : " << commStatusToString(c->status) << "\n";
@@ -105,7 +105,7 @@ void communicationMenu(const std::string& ownerId, const std::string& ownerType)
                     if (yesno("")) c->notes = tpl;
                 }
                 c->update();
-                std::cout << "  >> Communication angelegt: " << c->commId << "\n";
+                std::cout << "  >> Communication angelegt: " << c->communicationId << "\n";
                 commDetailMenu(c);
             }
         } else if (ch==2) {

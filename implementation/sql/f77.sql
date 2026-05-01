@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS f77_workflows (
     template_id         TEXT,           -- reference only; template may change
     template_name       TEXT NOT NULL,  -- snapshot of template name at start
     entity_type         TEXT NOT NULL   -- 'f16','f22','f18','akt'
-                             CHECK(entity_type IN ('f16','f22','f18','akt')),
+                             CHECK(entity_type IN ('f22','f18','akt')),
     entity_id           TEXT NOT NULL,
     target_state        TEXT NOT NULL DEFAULT 'released'
                              CHECK(target_state IN ('in_work','pre_released','released','locked','closed')),

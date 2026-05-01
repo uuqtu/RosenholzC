@@ -1,12 +1,12 @@
 // ============================================================
-// Document.h  —  Document entity (DOK)
+// Folder.h  —  Document entity (DOK)
 //
 // DDR-Registriernummer: XV/DOK/{seq}/{year}
 // Mandatory: projectId (MFS filing requires a project).
 // Optional: taskId for task-scoped documents.
 //
-// A Document is a CONTAINER for DocumentObjects (physical files).
-// State is governed by DocumentRevision (5-state machine).
+// A Document is a CONTAINER for FolderObjects (physical files).
+// State is governed by FolderRevision (5-state machine).
 // All field mutations are guarded by canEdit() / update().
 // ============================================================
 #pragma once
@@ -18,7 +18,7 @@
 #include <memory>
 #include "../../core/Database.h"
 #include <nlohmann/json.hpp>
-#include "../../repository/DocumentRevision.h"
+#include "../../model/akt/FolderRevision.h"
 
 namespace Rosenholz {
 
@@ -31,10 +31,10 @@ enum class DocLoadRule {
     DATE_RELEASED,    // (3) Neueste released-Revision zum Stichtag
 };
 
-class Document {
+class Folder {
 public:
     std::string folderId;
-    std::string releaseWorkflowId;    ///< Main WFI controlling this doc lifecycle
+    std::string workflowId;           ///< F77W controlling this folder lifecycle
     std::string taskId;          ///< Filing parent — F22 (or empty for F18-scoped)
     std::string f18OperationId;  ///< F18 Operation (vorgang) reference
     std::string f18StepId;       ///< F18 Operation Step reference
@@ -98,7 +98,7 @@ public:
 
     /// Returns the current in_work revision, creating one (rev=1) if none exists.
     /// Returns nullptr only if the document is locked/released and cannot be revised.
-    std::shared_ptr<DocumentRevision> ensureWorkingRevision();
+    std::shared_ptr<FolderRevision> ensureWorkingRevision();
     bool canCheckout()  const;
     bool canCheckin()   const;
     bool canRevert()    const;
@@ -106,7 +106,7 @@ public:
 
     // ── MFS folder indexing ───────────────────────────────────
     /// Scan ALL revision folders of this document for files that are
-    /// not yet registered as DocumentObjects.
+    /// not yet registered as FolderObjects.
     /// Returns: list of (revNumber, fullFilePath) pairs for unregistered files.
     std::vector<std::pair<uint32_t,std::string>> indexMfsFolders() const;
 
@@ -133,22 +133,22 @@ public:
     //   Shared pointer to in-memory Document; call save() to persist.
     // ------------------------------
     static int count();
-    static std::shared_ptr<Document> create(
+    static std::shared_ptr<Folder> create(
         const std::string& title,
         const std::string& docType     = "report",
         const std::string& taskId      = "",
         const std::string& f18OpId     = "");
 
-    static std::vector<std::shared_ptr<Document>> loadRecent(
+    static std::vector<std::shared_ptr<Folder>> loadRecent(
         int n = 20,
         DocLoadRule rule   = DocLoadRule::LATEST_RELEASED,
         const std::string& targetDate = "");
-    static std::shared_ptr<Document> loadById(const std::string& id);
-    static std::vector<std::shared_ptr<Document>> loadForProject(
+    static std::shared_ptr<Folder> loadById(const std::string& id);
+    static std::vector<std::shared_ptr<Folder>> loadForProject(
         const std::string& projectId,
         DocLoadRule rule   = DocLoadRule::LATEST_RELEASED,
         const std::string& targetDate = "");
-    static std::vector<std::shared_ptr<Document>> loadForEntity(
+    static std::vector<std::shared_ptr<Folder>> loadForEntity(
         const std::string& entityType, const std::string& entityId);
 
     // ── URL download and archive ──────────────────────────
@@ -172,7 +172,7 @@ public:
     // Returns:
     //   nullptr on download failure
     // ------------------------------
-    static std::shared_ptr<Document> archiveFromUrl(
+    static std::shared_ptr<Folder> archiveFromUrl(
         const std::string& url,
         const std::string& projectId  = "",
         const std::string& authorId   = "");
@@ -206,13 +206,13 @@ public:
     //
     // All other revision-creating operations (ensureRevision1,
     // snapshotVersion, checkout) have been removed. revise() is the
-    // only method that calls DocumentRevision::createRevision.
+    // only method that calls FolderRevision::createRevision.
     //
     // Parameters:
     //   changeNote : description of why this revision was created
     //   createdBy  : Person-ID (optional)
     // Returns: new revision, or nullptr if rules prevent creation.
-    std::shared_ptr<DocumentRevision> revise(
+    std::shared_ptr<FolderRevision> revise(
         const std::string& changeNote = "",
         const std::string& createdBy  = "");
 
@@ -252,7 +252,7 @@ public:
     std::string checkout(const std::string& destDir = "");
 
     // checkin: stages+commits the local file to LMDB, creates a new
-    //   DocumentRevision (in_work). The local copy is removed after commit.
+    //   FolderRevision (in_work). The local copy is removed after commit.
     //   Returns false if no checked-out path or commit fails.
     bool checkin(const std::string& srcPath = "");
 

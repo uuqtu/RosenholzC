@@ -10,9 +10,9 @@
 //   - Forward declarations for every public CLI function
 // ============================================================
 
-#include "../model/f16/ProjectF16.h"
-#include "../model/f22/TaskF22.h"
-#include "../model/dok/Document.h"
+#include "../model/f16/F16.h"
+#include "../model/f22/F22.h"
+#include "../model/akt/Folder.h"
 #include "../model/person/Person.h"
 #include "../model/team/Team.h"
 #include "../model/f18/F18Operation.h"
@@ -109,19 +109,19 @@ void notesMenu(const std::string& entityType,
 // ── F16 project commands (cli_f16.cpp) ────────────────────────
 void cmdF16(const std::vector<std::string>& args);
 void listProjects();
-void printProject(const Rosenholz::ProjectF16& p);
-void projectMenu(std::shared_ptr<Rosenholz::ProjectF16> p);
-std::shared_ptr<Rosenholz::ProjectF16> createProjectWizard();
+void printProject(const Rosenholz::F16& p);
+void projectMenu(std::shared_ptr<Rosenholz::F16> p);
+std::shared_ptr<Rosenholz::F16> createProjectWizard();
 
 // ── F22 task commands (cli_f22.cpp) ───────────────────────────
 void cmdF22(const std::vector<std::string>& args);
 void listTasks(const std::string& projectId);
-void printTask(const Rosenholz::TaskF22& t);
-void taskMenu(std::shared_ptr<Rosenholz::TaskF22> t);
-std::shared_ptr<Rosenholz::TaskF22> createTaskWizard(const std::string& projectId);
+void printTask(const Rosenholz::F22& t);
+void taskMenu(std::shared_ptr<Rosenholz::F22> t);
+std::shared_ptr<Rosenholz::F22> createTaskWizard(const std::string& projectId);
 
 // Guided wizard: asks user to pick F16 from list, then creates F22.
-std::shared_ptr<Rosenholz::TaskF22> createTaskWizardGuided();
+std::shared_ptr<Rosenholz::F22> createTaskWizardGuided();
 
 // ── F18 operation commands (cli_f18.cpp) ──────────────────────
 void cmdF18(const std::vector<std::string>& args);
@@ -136,23 +136,23 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
 
 // ── Document commands (cli_dok.cpp) ───────────────────────────
 void cmdAkt(const std::vector<std::string>& args);
-void printDocument(const Rosenholz::Document& d);
-void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Document>>& docs,
+void printDocument(const Rosenholz::Folder& d);
+void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Folder>>& docs,
                    const std::string& title = "AKTEN");
-void documentMenu(std::shared_ptr<Rosenholz::Document> doc);
+void documentMenu(std::shared_ptr<Rosenholz::Folder> doc);
 void documentBrowserMenu(const std::string& taskId  = "",
                          const std::string& f18OpId = "");
 
 // Create document with known parent.
-std::shared_ptr<Rosenholz::Document> createDocumentWizard(
+std::shared_ptr<Rosenholz::Folder> createDocumentWizard(
     const std::string& taskId  = "",
     const std::string& f18OpId = "");
 
 // Guided: asks user which F16/F22/F18 to attach to.
-std::shared_ptr<Rosenholz::Document> createDocumentWizardGuided();
+std::shared_ptr<Rosenholz::Folder> createDocumentWizardGuided();
 
 // Attach-or-create dialog (called from entity menus).
-std::shared_ptr<Rosenholz::Document> attachDocumentDialog(
+std::shared_ptr<Rosenholz::Folder> attachDocumentDialog(
     const std::string& projectId = "",
     const std::string& taskId    = "");
 

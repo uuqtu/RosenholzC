@@ -10,9 +10,9 @@
 //   createTaskWizardGuided() — guided: pick F16 first, then create
 // ============================================================
 #include "cli_common.h"
-#include "../model/dok/Document.h"
-#include "../model/dok/DocumentObject.h"
-#include "../repository/DocumentRevision.h"
+#include "../model/akt/Folder.h"
+#include "../model/akt/FolderObject.h"
+#include "../model/akt/FolderRevision.h"
 #include "../core/OperationResult.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
@@ -31,7 +31,7 @@ using namespace Rosenholz;
 // Handles all field-editing for a task (F22).
 // Called from taskMenu when the task is not yet released.
 
-static void editMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
+static void editMenu(std::shared_ptr<Rosenholz::F22> t) {
     using namespace Rosenholz;
     hdr("F22 BEARBEITEN — " + t->regNumber.toString());
 
@@ -73,10 +73,10 @@ static void editMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
 // Shows the F77 release workflow sub-menu for a task.
 // Called from taskMenu option 6 (F77-Workflow).
 
-static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
+static void mainWorkflowMenu(std::shared_ptr<Rosenholz::F22> t) {
     using namespace Rosenholz;
     while (true) {
-        if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
+        if (auto fresh = F22::loadById(t->taskId)) *t = *fresh;
         hdr("F77 — " + t->taskId);
         std::cout << "  Status       : " << entityStatusToString(t->status) << "\n";
 
@@ -90,14 +90,14 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
             return;
         }
 
-        auto wf = F77_Workflow::loadById(t->releaseWorkflowId);
+        auto wf = F77W::loadById(t->releaseWorkflowId);
         WorkflowStatus wfStatus = wf ? wf->status : WorkflowStatus::CANCELLED;
         std::cout << "  F77-ID  : " << t->releaseWorkflowId.substr(0, 36) << "\n";
         std::cout << "  WF-Status    : " << toString(wfStatus) << "\n";
 
         if (wfStatus == WorkflowStatus::ACTIVE) {
             int blockers = 0;
-            F77_Engine::canRelease("f22", t->taskId, t->releaseWorkflowId, blockers);
+            F77Engine::canRelease("f22", t->taskId, t->releaseWorkflowId, blockers);
             std::cout << (blockers > 0
                 ? "  ! " + std::to_string(blockers) + " Schritte blockieren Freigabe\n"
                 : "  ✓ Freigabe moeglich\n");
@@ -117,7 +117,7 @@ static void mainWorkflowMenu(std::shared_ptr<Rosenholz::TaskF22> t) {
 // The project ID must be supplied by the caller (either directly
 // or via createTaskWizardGuided).
 
-std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
+std::shared_ptr<F22> createTaskWizard(const std::string& projectId) {
     hdr("F22 ANLEGEN (Vorgangskartei)");
     std::string title     = readLine("Titel: ");
     if (title.empty()) return nullptr;
@@ -131,7 +131,7 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
     double effort = 0.0;
     if (!effortStr.empty()) try { effort = std::stod(effortStr); } catch (...) {}
 
-    auto t = Rosenholz::TaskF22::create(projectId, title, assignee, "");
+    auto t = Rosenholz::F22::create(projectId, title, assignee, "");
     t->description       = desc;
     t->priority          = priority.empty() ? "medium" : priority;
     t->wbsCode           = wbs;
@@ -157,8 +157,8 @@ std::shared_ptr<TaskF22> createTaskWizard(const std::string& projectId) {
 // pick one by number, then runs the normal task creation wizard.
 // Invoked by 'rh -f22 -n'.
 
-std::shared_ptr<TaskF22> createTaskWizardGuided() {
-    auto projects = ProjectF16::loadAll();
+std::shared_ptr<F22> createTaskWizardGuided() {
+    auto projects = F16::loadAll();
     if (projects.empty()) {
         std::cout << "  (keine F16-Karten vorhanden — bitte zuerst ein F16 anlegen)\n";
         return nullptr;
@@ -194,7 +194,7 @@ void cmdF22(const std::vector<std::string>& args) {
 
     // No arguments: list 20 most recent tasks
     if (args.empty()) {
-        auto all = TaskF22::loadRecent(20);
+        auto all = F22::loadRecent(20);
         if (all.empty()) { std::cout << "  (keine F22-Vorgänge)\n"; return; }
         std::cout << "  " << std::left
                   << std::setw(24) << "REG-NR"
@@ -223,7 +223,7 @@ void cmdF22(const std::vector<std::string>& args) {
         for (size_t i=1; i<args.size(); ++i) { if(!q.empty()) q+=" "; q+=args[i]; }
         if (q.empty()) { printErr("-s benoetigt einen Suchbegriff"); return; }
         std::string lq=q; for(char& c:lq) c=(char)std::tolower((unsigned char)c);
-        auto all = TaskF22::loadRecent(9999);
+        auto all = F22::loadRecent(9999);
         bool found=false;
         for (auto& t : all) {
             std::string chk = t->title + " " + t->taskId;
@@ -243,14 +243,14 @@ void cmdF22(const std::vector<std::string>& args) {
                             + "  (erwartet ID, -n oder -s <q>)"); return; }
 
     // Try as task ID first
-    auto task = TaskF22::loadById(args[0]);
+    auto task = F22::loadById(args[0]);
     if (task) {
         taskMenu(task);
         return;
     }
 
     // Try as project ID
-    auto project = ProjectF16::loadById(args[0]);
+    auto project = F16::loadById(args[0]);
     if (!project) { printErr("ID nicht gefunden (weder F22 noch F16): " + args[0]); return; }
 
     if (args.size() > 1) {
@@ -266,38 +266,38 @@ void cmdF22(const std::vector<std::string>& args) {
 
 
 
-// ── void taskMenu(std::shared_ptr<TaskF22> t) handlers ──────────────────────────────────────────────
+// ── void taskMenu(std::shared_ptr<F22> t) handlers ──────────────────────────────────────────────
 // ── F22 taskMenu handlers ───────────────────────────────────────────────
 
-static bool f22_edit(std::shared_ptr<TaskF22> t) {
+static bool f22_edit(std::shared_ptr<F22> t) {
     editMenu(t); return true;
 }
 
-static bool f22_dok_list(std::shared_ptr<TaskF22> t) {
-    auto docs = Document::loadForEntity("f22", t->taskId);
+static bool f22_dok_list(std::shared_ptr<F22> t) {
+    auto docs = Folder::loadForEntity("f22", t->taskId);
     if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n = 1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "
-                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << std::left << std::setw(26) << d->folderId.substr(0,24)
                   << "  " << d->title.substr(0,30) << "  " << d->docType << "\n";
     return true;
 }
 
-static bool f22_dok_open(std::shared_ptr<TaskF22> t) {
-    auto docs = Document::loadForEntity("f22", t->taskId);
+static bool f22_dok_open(std::shared_ptr<F22> t) {
+    auto docs = Folder::loadForEntity("f22", t->taskId);
     if (docs.empty()) { std::cout << "  (keine Akten)\n"; return true; }
     int n=1;
     for (auto& d : docs)
         std::cout << "  " << std::setw(3) << n++ << ". "
-                  << std::left << std::setw(26) << d->documentId.substr(0,24)
+                  << std::left << std::setw(26) << d->folderId.substr(0,24)
                   << "  " << d->title.substr(0,30) << "\n";
     int pick = readInt("AKT #", 1, (int)docs.size());
     documentMenu(docs[pick-1]);
     return true;
 }
 
-static bool f22_dok_new(std::shared_ptr<TaskF22> t) {
+static bool f22_dok_new(std::shared_ptr<F22> t) {
     if (!t->canAddChildren()) {
         std::cout << "  >> " << opResultMessage(OperationResult::ENTITY_RELEASED) << "\n";
         return true;
@@ -307,32 +307,32 @@ static bool f22_dok_new(std::shared_ptr<TaskF22> t) {
     return true;
 }
 
-static bool f22_f18_list(std::shared_ptr<TaskF22> t) {
+static bool f22_f18_list(std::shared_ptr<F22> t) {
     auto items = F18Operation::loadForTask(t->taskId);
     if (items.empty()) { std::cout << "  (keine F18-Vorgaenge)\n"; return true; }
     int n = 1;
     for (auto& v : items)
         std::cout << "  " << std::setw(3) << n++ << ". "
-                  << "[" << std::left << std::setw(14) << v->vorgangType.substr(0,13) << "] "
+                  << "[" << std::left << std::setw(14) << v->operationType.substr(0,13) << "] "
                   << std::setw(28) << v->title.substr(0,26)
                   << "  " << entityStatusToString(v->status) << "\n";
     return true;
 }
 
-static bool f22_f18_open(std::shared_ptr<TaskF22> t) {
+static bool f22_f18_open(std::shared_ptr<F22> t) {
     auto items = F18Operation::loadForTask(t->taskId);
     if (items.empty()) { std::cout << "  (keine F18-Vorgaenge)\n"; return true; }
     int n=1;
     for (auto& v : items)
         std::cout << "  " << std::setw(3) << n++ << ". "
-                  << "[" << std::left << std::setw(14) << v->vorgangType.substr(0,13) << "] "
+                  << "[" << std::left << std::setw(14) << v->operationType.substr(0,13) << "] "
                   << v->title.substr(0,30) << "\n";
     int pick = readInt("F18 #", 1, (int)items.size());
     f18Menu(items[pick-1]);
     return true;
 }
 
-static bool f22_f18_new(std::shared_ptr<TaskF22> t) {
+static bool f22_f18_new(std::shared_ptr<F22> t) {
     if (!t->canAddChildren()) {
         std::cout << "  >> " << opResultMessage(OperationResult::ENTITY_RELEASED) << "\n";
         return true;
@@ -343,11 +343,11 @@ static bool f22_f18_new(std::shared_ptr<TaskF22> t) {
     return true;
 }
 
-static bool f22_kom_list(std::shared_ptr<TaskF22> t) {
+static bool f22_kom_list(std::shared_ptr<F22> t) {
     listComms(t->taskId, "f22"); return true;
 }
 
-static bool f22_kom_open(std::shared_ptr<TaskF22> t) {
+static bool f22_kom_open(std::shared_ptr<F22> t) {
     auto items = listComms(t->taskId, "f22");
     if (items.empty()) return true;
     int pick = readInt("KOM #", 1, (int)items.size());
@@ -355,17 +355,17 @@ static bool f22_kom_open(std::shared_ptr<TaskF22> t) {
     return true;
 }
 
-static bool f22_kom_new(std::shared_ptr<TaskF22> t) {
+static bool f22_kom_new(std::shared_ptr<F22> t) {
     communicationMenu(t->taskId, "f22"); return true;
 }
 
-static bool f22_f77(std::shared_ptr<TaskF22> t) {
+static bool f22_f77(std::shared_ptr<F22> t) {
     mainWorkflowMenu(t); return true;
 }
 
 
 // 12: F22 Nacherfassen — scan MFS folder for unregistered files
-static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
+static bool f22_nacherfassen(std::shared_ptr<F22> t) {
     using namespace Rosenholz;
     hdr("F22 NACHERFASSEN — " + t->taskId);
     std::cout << "  Scanne MFS-Ordner fuer nicht registrierte Dateien...\n";
@@ -385,7 +385,7 @@ static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
     }
 
     // For each file, ask what to do:
-    auto docs = Document::loadForEntity("f22", t->taskId);
+    auto docs = Folder::loadForEntity("f22", t->taskId);
 
     for (size_t i = 0; i < unregistered.size(); ++i) {
         auto& [fpath, suggestedTitle] = unregistered[i];
@@ -399,25 +399,25 @@ static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
         if (choice == 0) break;
         if (choice == 3) continue;
 
-        std::shared_ptr<Document> targetDoc;
+        std::shared_ptr<Folder> targetDoc;
 
         if (choice == 1) {
             // Create new Akte:
             std::string title = readOpt("  Titel (leer=" + suggestedTitle + "): ");
             if (title.empty()) title = suggestedTitle;
-            targetDoc = Document::create(title, "other", t->taskId);
+            targetDoc = Folder::create(title, "other", t->taskId);
             if (!opOk(targetDoc->save())) {
                 std::cout << "  >> Fehler beim Anlegen der Akte.\n";
                 continue;
             }
-            std::cout << "  >> Akte angelegt: " << targetDoc->documentId << "\n";
+            std::cout << "  >> Akte angelegt: " << targetDoc->folderId << "\n";
         } else {
             // Pick existing Akte:
             if (docs.empty()) {
                 std::cout << "  (keine Akten vorhanden — neue wird angelegt)\n";
                 std::string title = readOpt("  Titel (leer=" + suggestedTitle + "): ");
                 if (title.empty()) title = suggestedTitle;
-                targetDoc = Document::create(title, "other", t->taskId);
+                targetDoc = Folder::create(title, "other", t->taskId);
                 if (!opOk(targetDoc->save())) {
                     std::cout << "  >> Fehler beim Anlegen der Akte.\n";
                     continue;
@@ -425,7 +425,7 @@ static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
             } else {
                 for (size_t d = 0; d < docs.size(); ++d)
                     std::cout << "  " << std::setw(3) << (d+1) << ". "
-                              << docs[d]->documentId << "  " << docs[d]->title << "\n";
+                              << docs[d]->folderId << "  " << docs[d]->title << "\n";
                 int pick = readInt("Akte #", 1, (int)docs.size());
                 targetDoc = docs[pick-1];
             }
@@ -442,8 +442,8 @@ static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
         std::string label = readOpt("  Bezeichnung (leer=Dateiname): ");
         std::string desc  = readOpt("  Beschreibung (optional): ");
         OperationResult res = OperationResult::OPERATION_ACK;
-        auto obj = Rosenholz::DocumentObject::importFile(
-            targetDoc->documentId, cur->rev, fpath, res, label, desc);
+        auto obj = Rosenholz::FolderObject::importFile(
+            targetDoc->folderId, cur->rev, fpath, res, label, desc);
         if (opOk(res) && obj)
             std::cout << "  >> Importiert: " << obj->displayName() << "\n";
         else
@@ -452,7 +452,7 @@ static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
     return true;
 }
 
-using tskMenuFn = bool(*)(std::shared_ptr<TaskF22> t);
+using tskMenuFn = bool(*)(std::shared_ptr<F22> t);
 static const tskMenuFn tskMenuTable[13] = {
     nullptr,            // 0
     f22_edit,           // 1
@@ -469,11 +469,11 @@ static const tskMenuFn tskMenuTable[13] = {
     f22_nacherfassen,   // 12 Nicht registrierte Dateien erfassen
 };
 
-void taskMenu(std::shared_ptr<TaskF22> t) {
+void taskMenu(std::shared_ptr<F22> t) {
     Rosenholz::NavigationStack::instance().push({
         Rosenholz::EntityType::F22, t->taskId, t->title, t->regNumber.toString()});
     while (true) {
-        if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
+        if (auto fresh = F22::loadById(t->taskId)) *t = *fresh;
         printTask(*t);
         if (t->isReleased())
             std::cout << "  ⚠ RELEASED — keine weiteren Aenderungen moeglich\n";

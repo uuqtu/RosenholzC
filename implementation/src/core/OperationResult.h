@@ -59,7 +59,8 @@ enum class OperationResult {
     WF_DOCUMENT_REQUIRED,   ///< A document must be attached before firing this step
 
     // ── Entity state ─────────────────────────────────────────
-    ENTITY_RELEASED,        ///< Entity is released — no edits or child creation allowed
+    ENTITY_RELEASED,
+    ENTITY_LOCKED,    ///< operation refused because entity or its parent is locked        ///< Entity is released — no edits or child creation allowed
     ENTITY_WF_COMPLETE,     ///< Workflow is completed — entity is permanently locked
     ENTITY_NOT_FOUND,       ///< Entity not found in database
 

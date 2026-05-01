@@ -2,7 +2,8 @@
 // F18Operation.cpp  —  Implementation of the unified F18Operation entity
 // ============================================================
 #include "F18Operation.h"
-#include "../dok/Document.h"
+#include "../akt/Folder.h"
+#include "../f22/F22.h"
 #include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
 #include "F18OperationStep.h"
@@ -32,10 +33,10 @@ void F18Operation::fromRow(const Row& r) {
         auto s = rowGet(r,k); return s.empty() ? 0.0 : std::stod(s);
     };
 
-    vorgangId          = g("vorgang_id");
-    vorgangType        = g("vorgang_type");
+    operationId          = g("operation_id");
+    operationType        = g("operation_type");
     taskId             = g("task_id");
-    parentVorgangId    = g("parent_vorgang_id");
+    parentVorgangId    = g("parent_operation_id");
     releaseWorkflowId     = g("release_workflow_id");
     title              = g("title");
     description        = g("description");
@@ -137,11 +138,11 @@ OperationResult F18Operation::save() const {
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f18_operations
-        (vorgang_id, vorgang_type, task_id, parent_vorgang_id, release_workflow_id, title, description, status, owner_id, priority, incident_type, severity, occurred_date, resolved_date, root_cause, immediate_action, resolution, cost_impact, schedule_impact_days, scope_impact, quality_impact, risk_level, probability_score, impact_score_time, impact_score_cost, impact_score_quality, impact_score_scope, overall_risk_score, response_strategy, contingency_plan, trigger_condition, residual_risk_level, cost_reserve, schedule_reserve_days, measure_category, planned_date, actual_date, effectiveness, verification_method, verified_date, verified_by, phase, criteria, acceptance_criteria, findings, gate_result, gate_decision, ac_type, validated_date, validated_by, impact, audience, frequency, channel, responsible, lesson_type, recommendation, applicable_phases, decision_type, rationale, decision_date, decision_by, alternatives_considered, change_type, justification, cr_impact, raised_date, cr_decision_date, cr_decision_rationale, cr_schedule_impact_days, executed_by, execution_date, notes, links, created_at, updated_at)
+        (operation_id, operation_type, task_id, parent_operation_id, release_workflow_id, title, description, status, owner_id, priority, incident_type, severity, occurred_date, resolved_date, root_cause, immediate_action, resolution, cost_impact, schedule_impact_days, scope_impact, quality_impact, risk_level, probability_score, impact_score_time, impact_score_cost, impact_score_quality, impact_score_scope, overall_risk_score, response_strategy, contingency_plan, trigger_condition, residual_risk_level, cost_reserve, schedule_reserve_days, measure_category, planned_date, actual_date, effectiveness, verification_method, verified_date, verified_by, phase, criteria, acceptance_criteria, findings, gate_result, gate_decision, ac_type, validated_date, validated_by, impact, audience, frequency, channel, responsible, lesson_type, recommendation, applicable_phases, decision_type, rationale, decision_date, decision_by, alternatives_considered, change_type, justification, cr_impact, raised_date, cr_decision_date, cr_decision_rationale, cr_schedule_impact_days, executed_by, execution_date, notes, links, created_at, updated_at)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     )SQL", {
-        BindParam::text(vorgangId),
-        BindParam::text(vorgangType),
+        BindParam::text(operationId),
+        BindParam::text(operationType),
         BindParam::nullOrText(taskId),
         BindParam::nullOrText(parentVorgangId),
         BindParam::nullOrText(releaseWorkflowId),
@@ -221,8 +222,26 @@ OperationResult F18Operation::save() const {
 
 OperationResult F18Operation::update() {
     if (isReleased()) {
-        LOG_WARN("[F18] update() verweigert: Vorgang ist released — " + vorgangId);
+        LOG_WARN("[F18] update() refused: operation is released — " + operationId);
         return OperationResult::ENTITY_RELEASED;
+    }
+    if (isLocked()) {
+        LOG_WARN("[F18] update() refused: operation is locked — " + operationId);
+        return OperationResult::ENTITY_LOCKED;
+    }
+    // Check parent F22 status — if parent is locked/released, block all mutations
+    if (!taskId.empty()) {
+        auto parent = Rosenholz::F22::loadById(taskId);
+        if (parent) {
+            if (parent->isReleased()) {
+                LOG_WARN("[F18] update() refused: parent F22 is released — " + taskId);
+                return OperationResult::ENTITY_RELEASED;
+            }
+            if (parent->isLocked()) {
+                LOG_WARN("[F18] update() refused: parent F22 is locked — " + taskId);
+                return OperationResult::ENTITY_LOCKED;
+            }
+        }
     }
     updatedAt = nowIso();
     return save();
@@ -231,16 +250,16 @@ OperationResult F18Operation::update() {
 OperationResult F18Operation::remove() const {
     auto* d = db(); if (!d) return OperationResult::DB_ERROR;
     // Steps are cascade-deleted via FK or explicit delete
-    d->exec("DELETE FROM f18_operation_steps WHERE vorgang_id=?;",
-            {BindParam::text(vorgangId)});
-    return d->exec("DELETE FROM f18_operations WHERE vorgang_id=?;",
-                   {BindParam::text(vorgangId)})
+    d->exec("DELETE FROM f18_operation_steps WHERE operation_id=?;",
+            {BindParam::text(operationId)});
+    return d->exec("DELETE FROM f18_operations WHERE operation_id=?;",
+                   {BindParam::text(operationId)})
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
 bool F18Operation::load(const std::string& id) {
     auto* d = db(); if (!d) return false;
-    auto rows = d->query("SELECT * FROM f18_operations WHERE vorgang_id=?;",
+    auto rows = d->query("SELECT * FROM f18_operations WHERE operation_id=?;",
                          {BindParam::text(id)});
     if (rows.empty()) return false;
     fromRow(rows[0]);
@@ -254,8 +273,8 @@ std::shared_ptr<F18Operation> F18Operation::create(
     const std::string& type)
 {
     auto v = std::make_shared<F18Operation>();
-    v->vorgangId   = genId("F18");
-    v->vorgangType = type.empty() ? F18OperationType::GENERIC : type;
+    v->operationId   = genId("F18");
+    v->operationType = type.empty() ? F18OperationType::GENERIC : type;
     v->taskId      = taskId;
     v->title       = title;
     v->status      = EntityStatus::IN_WORK;
@@ -276,7 +295,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     // Auto-create Init and End steps
     auto initStep = std::make_shared<F18OperationStep>();
     initStep->stepId        = genId("WFS");
-    initStep->vorgangId     = v->vorgangId;
+    initStep->operationId     = v->operationId;
     initStep->title         = "Init";
     initStep->description   = "Automatischer Startschritt.";
     initStep->sequenceOrder = 0;
@@ -293,7 +312,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
 
     auto endStep = std::make_shared<F18OperationStep>();
     endStep->stepId         = genId("WFS");
-    endStep->vorgangId      = v->vorgangId;
+    endStep->operationId      = v->operationId;
     endStep->title          = "End";
     endStep->description    = "Abschlussschritt.";
     endStep->sequenceOrder  = 9999;
@@ -308,7 +327,18 @@ std::shared_ptr<F18Operation> F18Operation::create(
     v->steps.clear();
     v->steps.push_back(*initStep);
     v->steps.push_back(*endStep);
-    LOG_INFO("[F18Operation] Created: " + v->vorgangId + " type=" + type);
+
+    // Auto-create "Allgemeine Akte" for this F18 Operation:
+    {
+        auto allgAkte = Rosenholz::Folder::create(
+            "Allgemeine Akte", "general", taskId, v->operationId);
+        if (opOk(allgAkte->save())) {
+            allgAkte->attachToEntity("f18", v->operationId);
+            LOG_INFO("[F18] Allgemeine Akte angelegt: " + allgAkte->folderId
+                     + " für F18 " + v->operationId);
+        }
+    }
+    LOG_INFO("[F18Operation] Created: " + v->operationId + " type=" + type);
     return v;
 }
 
@@ -326,7 +356,7 @@ std::vector<std::shared_ptr<F18Operation>> F18Operation::loadForTask(
     if (!d) return result;
     std::string sql = "SELECT * FROM f18_operations WHERE task_id=?";
     std::vector<BindParam> params = {BindParam::text(taskId)};
-    if (!type.empty()) { sql += " AND vorgang_type=?"; params.push_back(BindParam::text(type)); }
+    if (!type.empty()) { sql += " AND operation_type=?"; params.push_back(BindParam::text(type)); }
     sql += " ORDER BY created_at DESC;";
     for (auto& r : d->query(sql, params)) {
         auto v = std::make_shared<F18Operation>(); v->fromRow(r); result.push_back(v);
@@ -371,7 +401,7 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
 
     F18OperationStep newStep;
     newStep.stepId             = genId("WFS");
-    newStep.vorgangId          = vorgangId;
+    newStep.operationId          = operationId;
     newStep.title              = title;
     newStep.stepType           = stepType;
     newStep.sequenceOrder      = maxSeq + 1;
@@ -401,7 +431,7 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     }
 
     steps.push_back(newStep);
-    LOG_INFO("[F18Operation] Step added: " + step->stepId + " to " + vorgangId);
+    LOG_INFO("[F18Operation] Step added: " + step->stepId + " to " + operationId);
     return step;
 }
 
@@ -444,7 +474,7 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
     // Create the new step
     F18OperationStep newStep;
     newStep.stepId             = genId("WFS");
-    newStep.vorgangId          = vorgangId;
+    newStep.operationId          = operationId;
     newStep.title              = title;
     newStep.stepType           = stepType;
     newStep.sequenceOrder      = newSeq;
@@ -472,7 +502,7 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
 }
 
 void F18Operation::loadSteps() {
-    steps = F18OperationStep::loadForVorgang(vorgangId);
+    steps = F18OperationStep::loadForVorgang(operationId);
 }
 
 // ── Risk score calculation ────────────────────────────────────
@@ -509,31 +539,41 @@ OperationResult F18Operation::addNote(const std::string& authorId,
 
 bool F18Operation::isWorkflowComplete() const {
     if (releaseWorkflowId.empty()) return false;
-    auto wf = Rosenholz::F77_Workflow::loadById(releaseWorkflowId);
+    auto wf = Rosenholz::F77W::loadById(releaseWorkflowId);
     return wf && wf->status == WorkflowStatus::COMPLETED;
 }
 
 void F18Operation::ensureReleaseWorkflow() {
     if (!releaseWorkflowId.empty()) return;
+
+    // Block if parent F22 is locked or released
+    if (!taskId.empty()) {
+        auto parent = Rosenholz::F22::loadById(taskId);
+        if (parent && (parent->isLocked() || parent->isReleased())) {
+            LOG_WARN("[F18] ensureReleaseWorkflow blocked: parent F22 is " 
+                     + std::string(entityStatusToString(parent->status)) + " — " + taskId);
+            return;
+        }
+    }
     // startDefault creates the WF and calls storeWorkflowId (one place, in F77Engine).
-    auto wf = Rosenholz::F77_Engine::startDefault("f18", vorgangId);
+    auto wf = Rosenholz::F77Engine::startDefault("f18", operationId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
-    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for f18/" + vorgangId);
+    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for f18/" + operationId);
 }
 
 
 
 std::string F18Operation::mfsSchluesselText() const {
     std::ostringstream s;
-    s << "  ID      : " << vorgangId << "\n"
-      << "  Typ     : " << vorgangType << "\n"
+    s << "  ID      : " << operationId << "\n"
+      << "  Typ     : " << operationType << "\n"
       << "  Status  : " << entityStatusToString(status) << "\n"
       << "  F22     : " << taskId << "\n";
-    auto docs = Rosenholz::Document::loadForEntity("f18", vorgangId);
+    auto docs = Rosenholz::Folder::loadForEntity("f18", operationId);
     if (!docs.empty()) {
         s << "  AKT     :";
-        for (auto& d : docs) s << " " << d->documentId;
+        for (auto& d : docs) s << " " << d->folderId;
         s << "\n";
     }
     s << "\n";
@@ -581,7 +621,7 @@ bool F18Operation::tick() {
                 status = EntityStatus::RELEASED;
                 updatedAt = nowIso();
                 update();
-                LOG_INFO("[F18] Operation auto-completed: " + vorgangId);
+                LOG_INFO("[F18] Operation auto-completed: " + operationId);
             }
             changed = true;
             LOG_INFO("[F18] Auto-approved End step: " + s.stepId);

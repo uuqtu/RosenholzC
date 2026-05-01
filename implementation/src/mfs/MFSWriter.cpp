@@ -29,7 +29,7 @@
 #ifndef _WIN32
 #  include <sys/stat.h>
 #endif
-#include "../repository/DocumentRevision.h"
+#include "../model/akt/FolderRevision.h"
 #include "../core/FileOps.h"
 
 static std::string fval(const std::string& v) {
@@ -38,10 +38,10 @@ static std::string fval(const std::string& v) {
 
 #include "../core/Logger.h"
 #include "../core/Config.h"
-#include "../model/f16/ProjectF16.h"
-#include "../model/f22/TaskF22.h"
-#include "../model/dok/Document.h"
-#include "../model/dok/DocumentObject.h"
+#include "../model/f16/F16.h"
+#include "../model/f22/F22.h"
+#include "../model/akt/Folder.h"
+#include "../model/akt/FolderObject.h"
 #include "../model/f18/F18Operation.h"
 #include "../model/person/Person.h"
 #include "../model/team/Team.h"
@@ -70,8 +70,8 @@ bool MFSWriter::ownerOnlyWrite(const std::string& path, const std::string& conte
 static std::string f22Dir(const std::string& mfsRoot, const std::string& regNr) {
     return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F22"), sanitiseRegNr(regNr));
 }
-static std::string f18Dir(const std::string& mfsRoot, const std::string& vorgangId) {
-    return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F18"), sanitiseRegNr(vorgangId));
+static std::string f18Dir(const std::string& mfsRoot, const std::string& operationId) {
+    return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F18"), sanitiseRegNr(operationId));
 }
 static std::string f77Dir(const std::string& mfsRoot, const std::string& wfiId) {
     return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F77"), sanitiseRegNr(wfiId));
@@ -85,7 +85,7 @@ static std::string docEntityDir(const std::string& entityDir, const std::string&
 // ─────────────────────────────────────────────────────────────
 // PROJECT (F16) — Hängeregister + cover sheet
 // ─────────────────────────────────────────────────────────────
-bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
+bool MFSWriter::writeProject(const F16& p, const std::string& mfsRoot) {
     // F16 writes a single flat file in mfs/F16/ named by registration number.
     // No subdirectory is created — the F16 folder contains one file per project.
     // The file is named: XV_F16_0001_26.txt (sanitised registration number)
@@ -141,7 +141,7 @@ bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
     schluessel << "\n"
         << "VERBUNDENE AUFGABEN (F22)\n"
         << std::string(40, '-') << "\n";
-    auto tasks = TaskF22::loadForProject(p.projectId);
+    auto tasks = F22::loadForProject(p.projectId);
     if (tasks.empty()) {
         schluessel << "  (keine)\n";
     } else {
@@ -164,11 +164,11 @@ bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
 // ─────────────────────────────────────────────────────────────
 // TASK (F22) — mfs/F22/<reg>/ own subfolder
 // ─────────────────────────────────────────────────────────────
-bool MFSWriter::writeTask(const TaskF22& t, const std::string& mfsRoot) {
+bool MFSWriter::writeTask(const F22& t, const std::string& mfsRoot) {
     std::string dir = f22Dir(mfsRoot, t.regNumber.toString());
     FileOps::makeDirs(dir);
 
-    auto proj = ProjectF16::loadById(t.projectId);
+    auto proj = F16::loadById(t.projectId);
     std::string projRef = proj ? proj->regNumber.toString() : t.projectId;
 
     std::string cardPath = FileOps::joinPath(dir, "00_KARTE.txt");
@@ -212,27 +212,27 @@ bool MFSWriter::writeTask(const TaskF22& t, const std::string& mfsRoot) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// F18 OPERATION — mfs/F18/<vorgangId>/ own subfolder
+// F18 OPERATION — mfs/F18/<operationId>/ own subfolder
 // ─────────────────────────────────────────────────────────────
 bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
     if (v.taskId.empty()) {
-        LOG_WARN("MFSWriter::writeF18 — no task reference for " + v.vorgangId);
+        LOG_WARN("MFSWriter::writeF18 — no task reference for " + v.operationId);
         return false;
     }
     // F18 is filed under its owning task (F22)
-    auto task = TaskF22::loadById(v.taskId);
+    auto task = F22::loadById(v.taskId);
     if (!task) return false;
 
-    std::string dir = f18Dir(mfsRoot, v.vorgangId);
+    std::string dir = f18Dir(mfsRoot, v.operationId);
     FileOps::makeDirs(dir);
 
     std::string cardPath = FileOps::joinPath(dir, "00_KARTE.txt");
     std::ostringstream oss;
-    oss << "VORGANGSKARTE F18 (" << v.vorgangType << ")\n"
+    oss << "VORGANGSKARTE F18 (" << v.operationType << ")\n"
         << "=======================================================\n"
-        << "VORGANG-ID       : " << v.vorgangId              << "\n"
+        << "VORGANG-ID       : " << v.operationId              << "\n"
         << "TITEL            : " << v.title                  << "\n"
-        << "VORGANGSART      : " << v.vorgangType             << "\n"
+        << "VORGANGSART      : " << v.operationType             << "\n"
         << "STATUS           : " << entityStatusToString(v.status)                  << "\n"
         << "PRIORITAET       : " << v.priority                << "\n"
         << "F77-FREIGABE-WFI : " << v.releaseWorkflowId       << "\n"
@@ -255,7 +255,7 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
     std::map<std::string,std::string> conn;
     conn["F22"]   = v.taskId;
     conn["OWNER"] = v.ownerId;
-    appendOwnerKey(v.vorgangId, v.title, conn, mfsRoot);
+    appendOwnerKey(v.operationId, v.title, conn, mfsRoot);
 
     LOG_DEBUG("MFS F18 written: " + cardPath);
     return true;
@@ -265,13 +265,13 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
 // DOCUMENT — filed inside parent entity subfolder/DOK/<docId>/
 // Parent can be F16, F22, F18, or F77 — each doc in own subfolder
 // ─────────────────────────────────────────────────────────────
-bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
+bool MFSWriter::writeDocument(const Folder& d, const std::string& mfsRoot) {
     // Determine parent entity directory
     std::string parentDir;
     std::string parentRef;
 
     if (!d.taskId.empty()) {
-        auto task = TaskF22::loadById(d.taskId);
+        auto task = F22::loadById(d.taskId);
         if (task) {
             parentDir = f22Dir(mfsRoot, task->regNumber.toString());
             parentRef = "F22/" + task->regNumber.toString();
@@ -292,10 +292,10 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
     }
 
     // Each document gets its own subfolder: DOK/<docId>/
-    std::string docDir = docEntityDir(parentDir, d.documentId);
+    std::string docDir = docEntityDir(parentDir, d.folderId);
     FileOps::makeDirs(docDir);
 
-    std::string sane     = sanitiseRegNr(d.documentId);
+    std::string sane     = sanitiseRegNr(d.folderId);
     std::string safeName = FileOps::sanitizeFilename(d.title);
     if (safeName.size() > 40) safeName = safeName.substr(0, 40);
     std::string cardName = sane + ".txt";
@@ -304,7 +304,7 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
     std::ostringstream content;
     content << "AKTEN-KARTE\n"
             << "=======================================================\n"
-            << "AKTEN-ID      : " << d.documentId          << "\n"
+            << "AKTEN-ID      : " << d.folderId          << "\n"
             << "TITEL            : " << d.title               << "\n"
             << "TYP              : " << d.docType             << "\n"
             << "FORMAT           : " << d.format              << "\n"
@@ -334,7 +334,7 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
     std::map<std::string,std::string> conn;
     conn["PARENT"]    = parentRef;
     conn["VERFASSER"] = d.authorId;
-    appendOwnerKey(d.documentId, d.title, conn, mfsRoot);
+    appendOwnerKey(d.folderId, d.title, conn, mfsRoot);
 
     LOG_DEBUG("MFS AKT written: " + cardPath);
     return ok;
@@ -448,14 +448,14 @@ void MFSWriter::rebuildTypeSchluessel(const std::string& mfsRoot,
       << "==============================\n\n";
 
     if (typeCode == "F16") {
-        auto items = ProjectF16::loadAll();
+        auto items = F16::loadAll();
         s << "Alle F16-Vorgaenge (" << items.size() << "):\n\n";
         for (auto& p : items) s << p->mfsSchluesselText();
 
     } else if (typeCode == "F22") {
-        std::vector<std::shared_ptr<TaskF22>> items;
-        for (auto& p : ProjectF16::loadAll()) {
-            auto pt = TaskF22::loadForProject(p->projectId);
+        std::vector<std::shared_ptr<F22>> items;
+        for (auto& p : F16::loadAll()) {
+            auto pt = F22::loadForProject(p->projectId);
             items.insert(items.end(), pt.begin(), pt.end());
         }
         s << "Alle F22-Aufgaben (" << items.size() << "):\n\n";
@@ -463,8 +463,8 @@ void MFSWriter::rebuildTypeSchluessel(const std::string& mfsRoot,
 
     } else if (typeCode == "F18") {
         std::vector<std::shared_ptr<F18Operation>> items;
-        for (auto& p : ProjectF16::loadAll()) {
-            auto tasks = TaskF22::loadForProject(p->projectId);
+        for (auto& p : F16::loadAll()) {
+            auto tasks = F22::loadForProject(p->projectId);
             for (auto& t : tasks) {
                 auto tf = F18Operation::loadForTask(t->taskId);
                 items.insert(items.end(), tf.begin(), tf.end());
@@ -474,7 +474,7 @@ void MFSWriter::rebuildTypeSchluessel(const std::string& mfsRoot,
         for (auto& v : items) s << v->mfsSchluesselText();
 
     } else if (typeCode == "AKT") {
-        auto items = Document::loadRecent(9999);
+        auto items = Folder::loadRecent(9999);
         s << "Alle Akten (" << items.size() << "):\n\n";
         for (auto& d : items) s << d->mfsSchluesselText();
 
@@ -500,37 +500,37 @@ bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
     bool ok = true;
     int nProj=0, nTask=0, nF18=0, nDok=0, nF77=0;
 
-    auto projects = ProjectF16::loadAll();
+    auto projects = F16::loadAll();
     for (auto& p : projects) {
         ok &= writeProject(*p, mfsRoot); ++nProj;
 
         // Tasks (F22) — filed under F22/<reg>/
-        auto tasks = TaskF22::loadForProject(p->projectId);
+        auto tasks = F22::loadForProject(p->projectId);
         for (auto& t : tasks) { ok &= writeTask(*t, mfsRoot); ++nTask; }
 
         // F18 operations via tasks — filed under F18/<id>/
-        for (auto& t : TaskF22::loadForProject(p->projectId)) {
+        for (auto& t : F22::loadForProject(p->projectId)) {
             auto f18s = F18Operation::loadForTask(t->taskId);
             for (auto& v : f18s) { ok &= writeF18(*v, mfsRoot); ++nF18; }
         }
 
         // Documents filed under their parent F22 task
         for (auto& t : tasks) {
-            auto tDocs = Document::loadForEntity("f22", t->taskId);
+            auto tDocs = Folder::loadForEntity("f22", t->taskId);
             for (auto& d : tDocs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
         }
         // Documents filed under F18 operations
-        for (auto& t : TaskF22::loadForProject(p->projectId)) {
+        for (auto& t : F22::loadForProject(p->projectId)) {
             auto f18s = F18Operation::loadForTask(t->taskId);
             for (auto& v : f18s) {
-                auto fDocs = Document::loadForEntity("f18", v->vorgangId);
+                auto fDocs = Folder::loadForEntity("f18", v->operationId);
                 for (auto& d : fDocs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
             }
         }
     }
 
     // F77 active workflows — filed under F77/<id>/
-    auto wfs = F77_Workflow::loadActive();
+    auto wfs = F77W::loadActive();
     for (auto& wf : wfs) {
         ok &= writeF77(wf->workflowId, wf->entityType, wf->templateName, mfsRoot);
         ++nF77;

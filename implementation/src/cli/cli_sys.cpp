@@ -10,19 +10,19 @@
 //   globalSearch(query)    — search across all entity types
 // ============================================================
 #include "cli_common.h"
-#include "../model/dok/DocumentObject.h"
-#include "../model/dok/Document.h"
-#include "../repository/DocumentRevision.h"
+#include "../model/akt/FolderObject.h"
+#include "../model/akt/Folder.h"
+#include "../model/akt/FolderRevision.h"
 using Rosenholz::RevState;
 #include "../core/Config.h"
 #include "../core/Database.h"
 #include "../core/Logger.h"
 #include "../core/BackupManager.h"
 #include "../mfs/MFSWriter.h"
-#include "../model/f16/ProjectF16.h"
-#include "../model/f22/TaskF22.h"
+#include "../model/f16/F16.h"
+#include "../model/f22/F22.h"
 #include "../model/f18/F18Operation.h"
-#include "../model/dok/Document.h"
+#include "../model/akt/Folder.h"
 #include "../workflow/F77Workflow.h"
 #include <algorithm>
 #include <iomanip>
@@ -57,7 +57,7 @@ void cmdStatus() {
         row("F77 Templates:", db->rowCount("f77_workflow_templates"), "Vorlagen");
     }
     if (auto* db = DatabasePool::instance().get("akt"))
-        row("Akten:",         db->rowCount("akten"),     "Akten");
+        row("Akten:",         db->rowCount("folders"),     "Akten");
     if (auto* db = DatabasePool::instance().get("core")) {
         row("Personen:",      db->rowCount("persons"),  "Personen");
         row("Teams:",         db->rowCount("teams"),    "Diensteinheiten");
@@ -105,38 +105,38 @@ void cmdMfs(const std::vector<std::string>& args) {
     if (!isId(args[0])) { printErr("Ungültiges Argument: " + args[0] + "  (erwartet ID)"); return; }
     const std::string& id = args[0];
 
-    if (auto p = ProjectF16::loadById(id)) {
+    if (auto p = F16::loadById(id)) {
         bool ok = MFSWriter::writeProject(*p, root);
-        for (auto& t : TaskF22::loadForProject(p->projectId))
+        for (auto& t : F22::loadForProject(p->projectId))
             ok &= MFSWriter::writeTask(*t, root);
-        for (auto& t2 : TaskF22::loadForProject(p->projectId))
+        for (auto& t2 : F22::loadForProject(p->projectId))
             for (auto& v : F18Operation::loadForTask(t2->taskId))
                 ok &= MFSWriter::writeF18(*v, root);
-        for (auto& d : Document::loadForEntity("f22", p->projectId))
+        for (auto& d : Folder::loadForEntity("f22", p->projectId))
             ok &= MFSWriter::writeDocument(*d, root);
         printOk(ok ? "  >> F16 " + id + " geschrieben." : "  >> Fehler.");
         return;
     }
-    if (auto t = TaskF22::loadById(id)) {
+    if (auto t = F22::loadById(id)) {
         bool ok = MFSWriter::writeTask(*t, root);
-        for (auto& d : Document::loadForEntity("f22", id))
+        for (auto& d : Folder::loadForEntity("f22", id))
             ok &= MFSWriter::writeDocument(*d, root);
         printOk(ok ? "  >> F22 " + id + " geschrieben." : "  >> Fehler.");
         return;
     }
     if (auto v = F18Operation::loadById(id)) {
         bool ok = MFSWriter::writeF18(*v, root);
-        for (auto& d : Document::loadForEntity("f18", id))
+        for (auto& d : Folder::loadForEntity("f18", id))
             ok &= MFSWriter::writeDocument(*d, root);
         printOk(ok ? "  >> F18 " + id + " geschrieben." : "  >> Fehler.");
         return;
     }
-    if (auto d = Document::loadById(id)) {
+    if (auto d = Folder::loadById(id)) {
         bool ok = MFSWriter::writeDocument(*d, root);
         printOk(ok ? "  >> AKT " + id + " geschrieben." : "  >> Fehler.");
         return;
     }
-    if (auto wf = F77_Workflow::loadById(id)) {
+    if (auto wf = F77W::loadById(id)) {
         bool ok = MFSWriter::writeF77(wf->workflowId, wf->entityType, wf->templateName, root);
         printOk(ok ? "  >> F77 " + id + " geschrieben." : "  >> Fehler.");
         return;
@@ -181,13 +181,13 @@ void globalSearch(const std::string& query) {
     std::vector<Hit> hits;
 
     // F16 Projects
-    auto projs = ProjectF16::loadRecent(200);
+    auto projs = F16::loadRecent(200);
     for (auto& p : projs)
         if (match(p->title) || match(p->projectId) || match(p->codename))
             hits.push_back({"F16", p->projectId, p->title, p->archived ? "archiviert" : "aktiv"});
 
     // F22 Tasks
-    auto tasks = TaskF22::loadRecent(200);
+    auto tasks = F22::loadRecent(200);
     for (auto& t : tasks)
         if (match(t->title) || match(t->taskId))
             hits.push_back({"F22", t->taskId, t->title, entityStatusToString(t->status)});
@@ -195,18 +195,18 @@ void globalSearch(const std::string& query) {
     // F18 Workflows (all types)
     auto vorgaenge = Rosenholz::F18Operation::loadRecent(200);
     for (auto& v : vorgaenge)
-        if (match(v->title) || match(v->vorgangId))
-            hits.push_back({"F18", v->vorgangId, v->title,
-                            v->vorgangType + "|" + std::string(entityStatusToString(v->status))});
+        if (match(v->title) || match(v->operationId))
+            hits.push_back({"F18", v->operationId, v->title,
+                            v->operationType + "|" + std::string(entityStatusToString(v->status))});
 
     // DOK Documents
-    auto docs = Document::loadRecent(200);
+    auto docs = Folder::loadRecent(200);
     for (auto& d : docs)
-        if (match(d->title) || match(d->documentId) || match(d->tags))
-            hits.push_back({"AKT", d->documentId, d->title, "v"+d->version});
+        if (match(d->title) || match(d->folderId) || match(d->tags))
+            hits.push_back({"AKT", d->folderId, d->title, "v"+d->version});
 
     // F77 Workflows (active)
-    auto wfis = F77_Workflow::loadActive();
+    auto wfis = F77W::loadActive();
     for (auto& w : wfis)
         if (match(w->templateName) || match(w->workflowId))
             hits.push_back({"F77", w->workflowId, w->templateName, std::string(toString(w->status))});
@@ -238,16 +238,16 @@ void globalSearch(const std::string& query) {
 
     auto& h = hits[idx];
     if (h.typeCode == "F16") {
-        auto p = ProjectF16::loadById(h.id);
-        if (p) { p->loadQTCSLinks(); projectMenu(p); }
+        auto p = F16::loadById(h.id);
+        if (p) { projectMenu(p); }
     } else if (h.typeCode == "F22") {
-        auto t = TaskF22::loadById(h.id);
+        auto t = F22::loadById(h.id);
         if (t) taskMenu(t);
     } else if (h.typeCode == "F18") {
         auto v = Rosenholz::F18Operation::loadById(h.id);
         if (v) f18Menu(v);
     } else if (h.typeCode == "AKT") {
-        auto d = Document::loadById(h.id);
+        auto d = Folder::loadById(h.id);
         if (d) documentMenu(d);
     } else if (h.typeCode == "WFI") {
         instanceMenu(h.id);
@@ -256,7 +256,7 @@ void globalSearch(const std::string& query) {
 
 
 // ── indexDokFolders ───────────────────────────────────────────────────────────
-// Scans all revision MFS folders for files not yet registered as DocumentObjects.
+// Scans all revision MFS folders for files not yet registered as FolderObjects.
 // For each unregistered file found in an in_work revision, the user is asked
 // whether to add it to the document.
 //
@@ -270,7 +270,7 @@ void cmdIndexDokFolders() {
     hdr("INDEX AKT-ORDNER — Nicht registrierte Dateien suchen");
 
     // Load all documents
-    auto docs = Document::loadRecent(500);
+    auto docs = Folder::loadRecent(500);
     if (docs.empty()) {
         std::cout << "  (keine Akten vorhanden)\n";
         return;
@@ -284,10 +284,10 @@ void cmdIndexDokFolders() {
 
         for (auto& [revNum, filePath] : candidates) {
             // Load the revision to check its state
-            auto rev = DocumentRevision::loadByRev(doc->documentId, revNum);
+            auto rev = FolderRevision::loadByRev(doc->folderId, revNum);
             if (!rev) continue;
 
-            std::cout << "\n  Dokument : " << doc->documentId << "  "" << doc->title << ""\n"
+            std::cout << "\n  Dokument : " << doc->folderId << "  "" << doc->title << ""\n"
                       << "  Revision : " << revNum << "  [" << rev->revState << "]\n"
                       << "  Datei    : " << filePath << "\n";
             totalFound++;
@@ -312,9 +312,9 @@ void cmdIndexDokFolders() {
 
             if (mode == "C") {
                 // Use original filename — no object ID, import as-is
-                auto obj = DocumentObject::importFile(doc->documentId, revNum, filePath, res);
+                auto obj = FolderObject::importFile(doc->folderId, revNum, filePath, res);
                 if (opOk(res) && obj) {
-                    DocumentObject::writeKeyFile(doc->documentId, revNum, doc->title);
+                    FolderObject::writeKeyFile(doc->folderId, revNum, doc->title);
                     std::cout << "  >> Importiert (Dateiname): " << obj->displayName() << "\n";
                     totalAdded++;
                 } else {
@@ -334,15 +334,15 @@ void cmdIndexDokFolders() {
                     for (char& c : customId) c = std::toupper(c);
                 }
 
-                auto obj = DocumentObject::importFile(doc->documentId, revNum, filePath, res);
+                auto obj = FolderObject::importFile(doc->folderId, revNum, filePath, res);
                 if (opOk(res) && obj) {
                     if (!title.empty())    obj->originalName = title;
                     if (!customId.empty()) {
                         // Override objectId (stored as docId + ":" + customId)
-                        obj->objectId = doc->documentId + ":" + customId;
+                        obj->objectId = doc->folderId + ":" + customId;
                     }
                     opOk(obj->update());
-                    DocumentObject::writeKeyFile(doc->documentId, revNum, doc->title);
+                    FolderObject::writeKeyFile(doc->folderId, revNum, doc->title);
                     std::cout << "  >> Importiert: " << obj->objectId
                               << "  "" << obj->displayName() << ""\n";
                     totalAdded++;
