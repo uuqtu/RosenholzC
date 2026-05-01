@@ -90,7 +90,7 @@ void testSuiteCore() {
     {
         std::string ver = R::Version::toString();
         CHECK(!ver.empty(), "Version::toString() not empty");
-        CHECK(ver.find("4.0") != std::string::npos, "Version is 4.x");
+        CHECK(ver.find("6.1") != std::string::npos, "Version is 6.1");
         std::string full = R::Version::full();
         CHECK(full.find("Rosenholz") != std::string::npos, "Version::full() contains Rosenholz");
     }

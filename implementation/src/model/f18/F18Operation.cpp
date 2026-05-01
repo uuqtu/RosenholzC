@@ -331,7 +331,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     // Auto-create "Allgemeine Akte" for this F18 Operation:
     {
         auto allgAkte = Rosenholz::Folder::create(
-            "Allgemeine Akte", "general", taskId, v->operationId);
+            "Allgemeine Akte " + v->operationId, "general", taskId, v->operationId);
         if (opOk(allgAkte->save())) {
             allgAkte->attachToEntity("f18", v->operationId);
             LOG_INFO("[F18] Allgemeine Akte angelegt: " + allgAkte->folderId

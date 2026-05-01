@@ -44,7 +44,7 @@ void commDetailMenu(std::shared_ptr<Communication> c) {
             std::string t = readOpt("Titel (leer=behalten): ");
             if (!t.empty()) c->title = t;
             c->channel       = readOpt("Kanal (teams/zoom/phone/email/in-person): ");
-            c->scheduledDate = readOpt("Geplantes Datum (JJJJ-MM-TT): ");
+            c->scheduledDate = parseDate(readOpt("Geplantes Datum (JJJJ-MM-TT, . +1d +2w): "));
             std::string dm   = readOpt("Dauer (Minuten): ");
             if (!dm.empty()) try { c->durationMins = std::stoi(dm); } catch(...) {}
             c->location      = readOpt("Ort / Raum: ");
@@ -93,7 +93,7 @@ void communicationMenu(const std::string& ownerId, const std::string& ownerType)
             auto c = Communication::create(
                 ownerId, ownerType, t, commTypeToString(ctype));
             if (c) {
-                c->scheduledDate = readOpt("Datum (JJJJ-MM-TT): ");
+                c->scheduledDate = parseDate(readOpt("Datum (JJJJ-MM-TT, . +1d +2w +3m +1y): "));
                 c->channel       = readOpt("Kanal: ");
                 c->location      = readOpt("Ort: ");
                 c->agenda        = readOpt("Agenda: ");

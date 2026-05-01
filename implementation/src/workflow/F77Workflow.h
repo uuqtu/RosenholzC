@@ -309,7 +309,7 @@ struct OperationSpec {
     SystemAction action      { SystemAction::NONE };
     bool         autoApprove { true };
     // If empty: chains from previous step; explicit overrides possible in builder
-    std::string  predecessorHint;
+    std::string  predecessorHint {};  ///< optional: explicit predecessor step ID
 };
 
 /// Return the default operation chain for a given entity type.
@@ -353,8 +353,8 @@ private:
 
 
 struct Version {
-    static constexpr int  major       = 4;
-    static constexpr int  minor       = 0;
+    static constexpr int  major       = 6;
+    static constexpr int  minor       = 1;
     static constexpr int  patch       = 0;
     static constexpr char tag[]       = "";
     static constexpr char buildDate[] = __DATE__;

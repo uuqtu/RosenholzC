@@ -30,6 +30,51 @@
 #include <iostream>
 #include <iomanip>
 #include <memory>
+#include <unistd.h>
+#include <cstdlib>
+
+
+// ── ANSI color support ─────────────────────────────────────────────────────
+namespace Color {
+
+inline bool enabled() {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* term = std::getenv("TERM");
+        cached = ::isatty(STDOUT_FILENO) && term && std::string(term) != "dumb" ? 1 : 0;
+    }
+    return cached == 1;
+}
+inline std::string wrap(const std::string& text, const char* code) {
+    if (!enabled()) return text;
+    return std::string("\033[") + code + "m" + text + "\033[0m";
+}
+inline std::string bold(const std::string& s)    { return wrap(s, "1"); }
+inline std::string dim(const std::string& s)     { return wrap(s, "2"); }
+inline std::string red(const std::string& s)     { return wrap(s, "31"); }
+inline std::string green(const std::string& s)   { return wrap(s, "32"); }
+inline std::string yellow(const std::string& s)  { return wrap(s, "33"); }
+inline std::string blue(const std::string& s)    { return wrap(s, "34"); }
+inline std::string magenta(const std::string& s) { return wrap(s, "35"); }
+inline std::string cyan(const std::string& s)    { return wrap(s, "36"); }
+
+inline std::string statusColor(const std::string& status) {
+    if (status == "in_work" || status == "aktiv")       return green(status);
+    if (status == "locked"  || status == "gesperrt")    return yellow(status);
+    if (status == "released"|| status == "freigegeben") return cyan(status);
+    if (status == "closed"  || status == "geschlossen") return dim(status);
+    return status;
+}
+inline std::string stepSymbolColored(Rosenholz::StepStatus s) {
+    switch (s) {
+        case Rosenholz::StepStatus::APPROVED:    return green("[OK]");
+        case Rosenholz::StepStatus::REJECTED:    return red("[X ]");
+        case Rosenholz::StepStatus::SKIPPED:     return dim("[~ ]");
+        case Rosenholz::StepStatus::IN_PROGRESS: return yellow("[ >]");
+        default:                                  return dim("[  ]");
+    }
+}
+} // namespace Color
 
 namespace CLI {
 
@@ -80,8 +125,10 @@ inline const char* f18StepSymbolStr(Rosenholz::F18StepSymbol s) {
 std::string readLine(const std::string& prompt);
 std::string readOpt(const std::string& prompt);
 int         readInt(const std::string& prompt, int lo, int hi);
+int         readChoice(const std::string& menuText, int lo, int hi); ///< ? shows menu
 bool        yesno(const std::string& prompt);
 std::string fval(const std::string& v);
+std::string parseDate(const std::string& input); ///< "." "+1d" "+2w" "+3m" "+1y" shortcuts
 std::string fdate(const std::string& d);
 void        hdr(const std::string& title);
 void        hr();
@@ -128,9 +175,9 @@ void cmdF18(const std::vector<std::string>& args);
 void f18BrowserMenu(const std::string& taskId     = "",
                     const std::string& typeFilter = "");
 std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
-    const std::string& projectId,
-    const std::string& taskId = "",
-    const std::string& type   = "");
+    const std::string& projectId = "",
+    const std::string& taskId    = "",
+    const std::string& type      = "");
 
 // Guided wizard: asks user to pick F16 (and optionally F22), then creates F18.
 
@@ -174,6 +221,15 @@ std::shared_ptr<Rosenholz::Person> createPersonWizard();
 // ── Team / Diensteinheit commands (cli_de.cpp) ────────────────
 void cmdDe(const std::vector<std::string>& args);
 void cmdTasks(const std::vector<std::string>& args);
+
+// ── Navigation commands (cli_nav.cpp) ─────────────────────────────────────
+void cmdCf(const std::vector<std::string>& args);   ///< change folder — navigate into entity
+void cmdLf(const std::vector<std::string>& args);   ///< list folder — show children
+void cmdLo(const std::vector<std::string>& args);   ///< list options — context-sensitive help
+
+/// Returns (id, title) pairs for tab completion of cf command
+std::vector<std::pair<std::string,std::string>> getContextChildren();
+
 void teamMenu();
 
 // ── Communication menu (cli_comm.cpp) ────────────────────────

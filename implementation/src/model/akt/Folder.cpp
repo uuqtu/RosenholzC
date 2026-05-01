@@ -331,8 +331,8 @@ static std::string mfsDocFilename(const Folder& d, int revNumber = 0) {
     int rev = (revNumber > 0) ? revNumber
                                : (int)FolderRevision::latestRevNumber(d.folderId);
     if (rev <= 0) rev = 1;
-    char revbuf[8];
-    std::snprintf(revbuf, sizeof(revbuf), "r%03d", rev);
+    char revbuf[16];
+    std::snprintf(revbuf, sizeof(revbuf), "r%03d", revNumber);
     return docSane + "_" + titleSafe + "_" + revbuf + "." + ext;
 }
 
@@ -474,7 +474,7 @@ std::vector<Folder::VersionRecord> Folder::loadVersions() const {
     return result;
 }
 
-bool Folder::openFile(const std::string& mode, const std::string& pathOverride) const {
+bool Folder::openFile(const std::string& mode, const std::string& /*pathOverride*/) const {
     if (filePath.empty() || !FileOps::fileExists(filePath)) {
         LOG_WARN("openFile: no file at " + filePath);
         return false;
@@ -765,7 +765,7 @@ std::string Folder::mfsSchluesselText() const {
     std::string saneId = folderId;
     for (char& c : saneId) if (c == '/') c = '_';
     uint32_t revNum = cur ? cur->rev : 0;
-    char revbuf[8]; std::snprintf(revbuf, sizeof(revbuf), "%03u", revNum);
+    char revbuf[16]; std::snprintf(revbuf, sizeof(revbuf), "%03u", revNum);
     std::string revLabel = saneId + "_r" + revbuf;
 
     s << "  AKTEN-ID         : " << folderId << "  [" << (cur ? cur->revStateStr() : "?") << "]\n"
@@ -817,7 +817,7 @@ Folder::knownMfsPaths(const std::string& entityType,
         if (!cur) continue;
         auto objs = Rosenholz::FolderObject::loadForRevision(d->folderId, cur->rev);
         for (auto& o : objs) {
-            if (!o->mfsPath.empty())     known.insert(o->mfsPath);
+            if (!o->filePath.empty())     known.insert(o->filePath);
             if (!o->storedFileName.empty() && !d->mfsDir().empty())
                 known.insert(Rosenholz::FileOps::joinPath(d->mfsDir(), o->storedFileName));
         }

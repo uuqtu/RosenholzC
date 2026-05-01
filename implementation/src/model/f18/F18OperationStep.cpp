@@ -177,6 +177,8 @@ F18StepSymbol F18OperationStep::displaySymbol() const {
         case F18StepStatus::REJECTED:    return F18StepSymbol::SKIPPED;
         case F18StepStatus::IN_PROGRESS: return F18StepSymbol::IN_PROGRESS;
         case F18StepStatus::PENDING:     return F18StepSymbol::PENDING;
+        case F18StepStatus::WAITING: return F18StepSymbol::WAITING;
+        case F18StepStatus::BLOCKED: return F18StepSymbol::BLOCKED;
     }
     return F18StepSymbol::PENDING;
 }

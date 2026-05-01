@@ -35,7 +35,7 @@ void FolderRevision::fromRow(const Row& r) {
 // ── save ─────────────────────────────────────────────────────
 bool FolderRevision::save() const {
     auto* d = db(); if (!d) return false;
-    auto n = [](const std::string& s) { return s.empty() ? BindParam::null() : BindParam::text(s); };
+    // n was a helper lambda — removed
 
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO folder_revisions

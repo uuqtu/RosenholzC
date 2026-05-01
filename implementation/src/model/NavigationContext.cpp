@@ -79,20 +79,48 @@ EntityRef NavigationStack::parent() const {
 
 std::vector<EntityRef> NavigationStack::all() const { return stack_; }
 
+// Helper: extract short "seq/year" from a full reg-ID (XV/F22/0001/26 -> 0001/26)
+static std::string shortSeq(const std::string& id) {
+    // Find second-to-last slash: XV/F22/0001/26 -> position of /0001
+    auto lastSlash = id.rfind('/');
+    if (lastSlash == std::string::npos) return id;
+    auto prevSlash = id.rfind('/', lastSlash - 1);
+    return (prevSlash != std::string::npos) ? id.substr(prevSlash + 1) : id;
+}
+
 std::string NavigationStack::breadcrumb() const {
     if (stack_.empty()) return "";
     std::ostringstream oss;
     for (std::size_t i = 0; i < stack_.size(); i++) {
-        if (i) oss << " → ";
-        oss << stack_[i].compactForm();
+        if (i) oss << " > ";
+        const auto& r = stack_[i];
+        oss << entityTypeLabel(r.type) << ":" << shortSeq(r.id);
+        if (i == stack_.size() - 1 && !r.displayName.empty()) {
+            std::string name = r.displayName;
+            if (name.size() > 24) name = name.substr(0, 22) + "..";
+            oss << " - " << name;
+        }
     }
     return oss.str();
 }
 
 std::string NavigationStack::promptSuffix() const {
     if (stack_.empty()) return "";
-    // Show compact form of current context
-    return " [" + current().compactForm() + "]";
+    // Format: "F16:0001/26 > F22:0001/26 > AKT:0003/26 - Titel des aktuellen Elements"
+    // Only the CURRENT (last) level shows the title after " - "
+    std::ostringstream oss;
+    for (std::size_t i = 0; i < stack_.size(); i++) {
+        if (i) oss << " > ";
+        const auto& r = stack_[i];
+        oss << entityTypeLabel(r.type) << ":" << shortSeq(r.id);
+        // Current (last) level: append " - Title"
+        if (i == stack_.size() - 1 && !r.displayName.empty()) {
+            std::string name = r.displayName;
+            if (name.size() > 24) name = name.substr(0, 22) + "..";
+            oss << " - " << name;
+        }
+    }
+    return oss.str();
 }
 
 void NavigationStack::popTo(EntityType t) {

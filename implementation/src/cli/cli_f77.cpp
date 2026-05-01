@@ -9,6 +9,7 @@
 //   startWfInstanceWizard(..) — guided workflow start wizard
 // ============================================================
 #include "cli_common.h"
+#include "../workflow/F77Task.h"
 #include "../model/Utils.h"
 #include "../core/Config.h"
 #include "../core/Logger.h"
@@ -74,31 +75,48 @@ static void drawF77Chain(const std::vector<F77W_Operation>& steps, bool compact 
 
     if (compact) {
         std::cout << "  ";
-        for (int i = 0; i < (int)sorted.size(); ++i) {
-            const auto& s = sorted[i];
-            const char* sym = stepSymbolShortStr(s.stepSymbol());
-            std::string label = s.isInitialize ? "INIT" :
-                                s.isFinal      ? "END"  :
-                                s.title.substr(0, 10);
-            std::cout << "[" << label << sym << "]";
-            if (i < (int)sorted.size() - 1) std::cout << "-->";
+        for (auto& step : sorted) {
+            std::cout << Color::stepSymbolColored(step.status) << " ";
         }
         std::cout << "\n";
         return;
     }
 
-    std::cout << "\n";
-    for (int i = 0; i < (int)sorted.size(); ++i) {
-        const auto& s = sorted[i];
-        std::string sym = stepSymbolStr(s.stepSymbol());
-        std::string conn = (i == 0) ? "   " : "-->";
-        std::string label = s.isInitialize ? "Init" : s.isFinal ? "End " : "    ";
-        std::cout << "  " << conn << sym << " " << label
-                  << std::left << std::setw(20) << s.title.substr(0, 19);
-            std::cout << "  [WARTE auf F18]";
+    // Full display with descriptions
+    for (auto& s : sorted) {
+        std::string indent = s.isInitialize || s.isFinal ? "   " : "-->";
+        std::cout << "  " << indent
+                  << Color::stepSymbolColored(s.status) << " "
+                  << std::left << std::setw(24) << s.title.substr(0, 22);
+
+        // Status explanation
+        if (s.isSystem) {
+            switch (s.systemAction) {
+                case SystemAction::SCAN_UNREGISTERED_FILES:
+                    std::cout << " [System: Dateien prüfen]";     break;
+                case SystemAction::COMMIT_DB_OBJECTS:
+                    std::cout << " [System: Objekte sichern]";    break;
+                default:
+                    std::cout << " [System]";                     break;
+            }
+        } else if (s.isFinal) {
+            std::cout << " [Auto-Abschluss]";
+        } else if (s.isInitialize) {
+            std::cout << " [Auto-Start]";
+        } else {
+            // Show pending reason
+            if (s.status == StepStatus::PENDING || s.status == StepStatus::IN_PROGRESS) {
+                auto tasks = F77Task::loadForOperation(s.stepId);
+                int open = 0;
+                for (auto& t : tasks) if (t->isOpen()) open++;
+                if (open > 0)
+                    std::cout << " [" << open << " offene Aufgabe(n)]";
+                else
+                    std::cout << " [wartet auf Vorgänger]";
+            }
+        }
         std::cout << "\n";
     }
-    std::cout << "\n";
 }
 
 // ── List F77 workflows ────────────────────────────────────────
@@ -144,7 +162,21 @@ void instanceMenu(const std::string& workflowId) {
         };
         row("ID",          wf->workflowId);
         row("Vorlage",     wf->templateName);
-        row("Entitaet",    wf->entityType + " / " + wf->entityId);
+        // Resolve entity display name:
+        std::string entityDisplay = wf->entityType + " / " + wf->entityId;
+        std::string entityTitle;
+        if (wf->entityType == "f22") {
+            auto t = F22::loadById(wf->entityId);
+            if (t) entityTitle = t->title.substr(0,30);
+        } else if (wf->entityType == "f18") {
+            auto v = F18Operation::loadById(wf->entityId);
+            if (v) entityTitle = v->title.substr(0,30);
+        } else if (wf->entityType == "akt") {
+            auto d = Folder::loadById(wf->entityId);
+            if (d) entityTitle = d->title.substr(0,30);
+        }
+        row("Entitaet",    entityDisplay);
+        if (!entityTitle.empty()) row("  Bezeichnung", entityTitle);
         row("Zielzustand", std::string(entityStatusToString(wf->targetState)));
         row("Status", std::string(toString(wf->status)));
         row("Gestartet",   wf->initiatedDate.substr(0, 16));

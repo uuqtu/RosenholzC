@@ -43,7 +43,7 @@ void FolderObject::fromRow(const Row& r) {
     rev           = g("rev").empty() ? 1u : (uint32_t)std::stoi(g("rev"));
     originalName  = g("original_name");
     storedFileName   = g("stored_file_name");
-    mfsPath       = g("mfs_path");
+    filePath       = g("file_path");
     contentHash   = g("content_hash");
     contentSize   = g("content_size").empty() ? 0 : std::stoll(g("content_size"));
     format        = g("format");
@@ -57,12 +57,12 @@ OperationResult FolderObject::save() const {
     if (!d) return OperationResult::DB_ERROR;
     bool ok = d->exec(R"(
         INSERT OR REPLACE INTO folder_objects
-        (object_id,folder_id,rev,original_name,stored_file_name,mfs_path,
+        (object_id,folder_id,rev,original_name,stored_file_name,file_path,
          content_hash,content_size,format,source_url,display_name,description,committed,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);)",
         {BindParam::text(objectId), BindParam::text(folderId),
          BindParam::int64(rev), BindParam::text(originalName),
-         BindParam::text(storedFileName), BindParam::text(mfsPath),
+         BindParam::text(storedFileName), BindParam::text(filePath),
          BindParam::text(contentHash), BindParam::int64(contentSize),
          BindParam::text(format), BindParam::nullOrText(sourceUrl),
          BindParam::nullOrText(displayName_), BindParam::nullOrText(description),
@@ -230,7 +230,7 @@ std::shared_ptr<FolderObject> FolderObject::importFile(
     obj->rev          = revNum;
     obj->originalName = origName;
     obj->storedFileName  = mfsFname;
-    obj->mfsPath      = destPath;
+    obj->filePath      = destPath;
     obj->format       = ext;
     obj->displayName_ = label;
     obj->description  = desc;
@@ -318,8 +318,8 @@ OperationResult FolderObject::writeKeyFile(
 // ── LMDB commit ──────────────────────────────────────────────
 // ── LMDB archive ─────────────────────────────────────────────────────────────
 OperationResult FolderObject::commitToLMDB() {
-    if (mfsPath.empty() || !FileOps::fileExists(mfsPath)) {
-        LOG_ERROR("[DocObject] commitToLMDB: MFS file not found: " + mfsPath);
+    if (filePath.empty() || !FileOps::fileExists(filePath)) {
+        LOG_ERROR("[DocObject] commitToLMDB: MFS file not found: " + filePath);
         return OperationResult::DOC_FILE_NOT_FOUND;
     }
     auto& store = Rosenholz::Archive::ArchiveStore::instance();
@@ -328,9 +328,9 @@ OperationResult FolderObject::commitToLMDB() {
         return OperationResult::DOC_COMMIT_FAILED;
     }
     std::string stagePath;
-    auto ref = store.stageContent(mfsPath, stagePath);
+    auto ref = store.stageContent(filePath, stagePath);
     if (!ref.valid()) {
-        LOG_ERROR("[DocObject] commitToLMDB: stage failed for " + mfsPath);
+        LOG_ERROR("[DocObject] commitToLMDB: stage failed for " + filePath);
         return OperationResult::DOC_COMMIT_FAILED;
     }
     // LMDB key: objectId (which includes docId+":"+shortId)
@@ -361,7 +361,7 @@ std::string FolderObject::extractFromLMDB(const std::string& destDir) {
         LOG_ERROR("[DocObject] extractFromLMDB: failed for " + objectId);
         return "";
     }
-    mfsPath = destPath;
+    filePath = destPath;
     update();
     return destPath;
 }
@@ -385,8 +385,8 @@ std::string FolderObject::checkoutObject(const std::string& destDir) {
         auto& store = Rosenholz::Archive::ArchiveStore::instance();
         std::string lmdbKey = folderId + ":r" + std::to_string(rev) + ":" + originalName;
         ok = store.retrieveContent(lmdbKey, 0, destPath);
-    } else if (!mfsPath.empty() && FileOps::fileExists(mfsPath)) {
-        ok = FileOps::copyFile(mfsPath, destPath, true);
+    } else if (!filePath.empty() && FileOps::fileExists(filePath)) {
+        ok = FileOps::copyFile(filePath, destPath, true);
     }
     if (!ok) {
         LOG_ERROR("[DocObject] checkoutObject: failed for " + objectId);
@@ -394,7 +394,7 @@ std::string FolderObject::checkoutObject(const std::string& destDir) {
     }
     checkedOut   = true;
     checkoutPath = destPath;
-    mfsPath      = destPath;
+    filePath      = destPath;
     update();
     LOG_INFO("[DocObject] Checked out: " + destPath);
     return destPath;
@@ -402,10 +402,10 @@ std::string FolderObject::checkoutObject(const std::string& destDir) {
 
 // ── Object-level checkin ──────────────────────────────────────
 OperationResult FolderObject::checkinObject(const std::string& srcPath) {
-    // Fall back: use mfsPath if neither srcPath nor checkoutPath is set
+    // Fall back: use filePath if neither srcPath nor checkoutPath is set
     std::string path = srcPath.empty() ? checkoutPath : srcPath;
-    if (path.empty() && !mfsPath.empty() && FileOps::fileExists(mfsPath))
-        path = mfsPath; // use current MFS location as source
+    if (path.empty() && !filePath.empty() && FileOps::fileExists(filePath))
+        path = filePath; // use current MFS location as source
     if (path.empty() || !FileOps::fileExists(path)) {
         LOG_ERROR("[DocObject] checkinObject: file not found: " + path);
         return OperationResult::DOC_FILE_NOT_FOUND;
@@ -472,7 +472,7 @@ std::string FolderObject::openObject(bool inWork, bool& wasCheckedOut) {
 #elif defined(__APPLE__)
         std::system(("open \"" + p + "\" &").c_str());
 #else
-        std::system(("xdg-open \"" + p + "\" 2>/dev/null &").c_str());
+        (void)std::system(("xdg-open \"" + p + "\" 2>/dev/null &").c_str());
 #endif
     };
 
@@ -493,8 +493,8 @@ std::string FolderObject::openObject(bool inWork, bool& wasCheckedOut) {
             auto& store = Rosenholz::Archive::ArchiveStore::instance();
             std::string key = folderId + ":r" + std::to_string(rev) + ":" + originalName;
             ok = store.retrieveContent(key, 0, tmpPath);
-        } else if (!mfsPath.empty()) {
-            ok = FileOps::copyFile(mfsPath, tmpPath, true);
+        } else if (!filePath.empty()) {
+            ok = FileOps::copyFile(filePath, tmpPath, true);
         }
         if (ok) { openPath(tmpPath); return tmpPath; }
         return "";
@@ -505,8 +505,8 @@ std::string FolderObject::openObject(bool inWork, bool& wasCheckedOut) {
     FileOps::makeDirs(tmpDir);
     std::string tmpPath = FileOps::joinPath(tmpDir, storedFileName.empty() ? originalName : storedFileName);
     bool ok = false;
-    if (!mfsPath.empty() && FileOps::fileExists(mfsPath))
-        ok = FileOps::copyFile(mfsPath, tmpPath, true);
+    if (!filePath.empty() && FileOps::fileExists(filePath))
+        ok = FileOps::copyFile(filePath, tmpPath, true);
     else if (committed) {
         auto& store = Rosenholz::Archive::ArchiveStore::instance();
         std::string key = folderId + ":r" + std::to_string(rev) + ":" + originalName;
@@ -529,7 +529,7 @@ std::vector<std::string> FolderObject::scanForUnregisteredFiles(
     auto known = loadForRevision(docId, rev);
     std::set<std::string> knownPaths;
     for (auto& o : known) {
-        if (!o->mfsPath.empty()) knownPaths.insert(o->mfsPath);
+        if (!o->filePath.empty()) knownPaths.insert(o->filePath);
         // Also track by filename
         if (!o->storedFileName.empty())
             knownPaths.insert(FileOps::joinPath(revDir, o->storedFileName));
@@ -580,11 +580,11 @@ OperationResult FolderObject::updateFromUrl(const std::string& url) {
     std::string downloaded = FileOps::downloadUrl(target, tmpDir);
     if (downloaded.empty()) return OperationResult::IO_ERROR;
 
-    if (!mfsPath.empty() && FileOps::fileExists(mfsPath))
-        FileOps::deleteFile(mfsPath);
+    if (!filePath.empty() && FileOps::fileExists(filePath))
+        FileOps::deleteFile(filePath);
     if (FileOps::fileExists(downloaded)) {
-        if (!mfsPath.empty())
-            FileOps::copyFile(downloaded, mfsPath);
+        if (!filePath.empty())
+            FileOps::copyFile(downloaded, filePath);
         FileOps::deleteFile(downloaded);
     }
     return update();

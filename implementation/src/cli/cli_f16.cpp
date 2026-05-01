@@ -80,10 +80,31 @@ void cmdF16(const std::vector<std::string>& args) {
         return;
     }
 
-    // -n  —  guided creation (same as direct wizard; kept for symmetry)
+    // -n  —  guided creation
     if (args[0] == "-n" || args[0] == "--neu") {
         auto p = createProjectWizard();
         if (p) printOk("  >> F16 angelegt: " + p->regNumber.toString() + "  " + p->title);
+        return;
+    }
+
+    // -o  —  list and select project to open
+    if (args[0] == "-o" || args[0] == "--open") {
+        auto all = F16::loadAll();
+        if (all.empty()) { std::cout << "  (keine F16-Karten vorhanden)\n"; return; }
+        std::cout << "\n  F16-KARTEN:\n";
+        std::cout << "  " << std::left << std::setw(4) << "#"
+                  << std::setw(28) << "REG-NR"
+                  << std::setw(38) << "TITEL"
+                  << "STATUS\n";
+        std::cout << "  " << std::string(74, '-') << "\n";
+        for (int i = 0; i < (int)all.size(); i++)
+            std::cout << "  " << std::setw(4) << (i+1)
+                      << std::setw(28) << all[i]->regNumber.toString()
+                      << std::setw(38) << all[i]->title.substr(0, 36)
+                      << (all[i]->archived ? "archiviert" : "aktiv") << "\n";
+        int pick = readInt("Auswahl [0=Abbrechen]", 0, (int)all.size());
+        if (pick < 1) return;
+        projectMenu(all[pick-1]);
         return;
     }
 
@@ -142,10 +163,10 @@ static void editMenu(std::shared_ptr<Rosenholz::F16> p) {
     }
 
     // Dates
-    std::string startP = readOpt("Geplanter Start (YYYY-MM-DD, leer = behalten): ");
+    std::string startP = parseDate(readOpt("Geplanter Start (YYYY-MM-DD / . +1d +2w +3m, leer=behalten): "));
     if (!startP.empty()) p->startDatePlanned = startP;
 
-    std::string endP = readOpt("Geplantes Ende (YYYY-MM-DD, leer = behalten): ");
+    std::string endP = parseDate(readOpt("Geplantes Ende (YYYY-MM-DD / . +1d +2w +3m, leer=behalten): "));
     if (!endP.empty()) p->endDatePlanned = endP;
 
     // Budget
@@ -204,8 +225,8 @@ std::shared_ptr<Rosenholz::F16> createProjectWizard() {
     std::string complexity = readOpt("Complexity (complex/moderate/simple, optional): ");
     std::string method     = readOpt("Methodology (agile/waterfall/kanban, optional): ");
     std::string scope      = readOpt("Scope statement (optional): ");
-    std::string startPlan  = readOpt("Planned start date (YYYY-MM-DD, optional): ");
-    std::string endPlan    = readOpt("Planned end date  (YYYY-MM-DD, optional): ");
+    std::string startPlan  = parseDate(readOpt("Geplanter Start (YYYY-MM-DD / . +1d +2w +3m, optional): "));
+    std::string endPlan    = parseDate(readOpt("Geplantes Ende (YYYY-MM-DD / . +1d +2w +3m, optional): "));
 
     std::string budgetStr  = readOpt("Budget planned (EUR, optional): ");
     double budget = 0.0;
@@ -352,8 +373,27 @@ static bool f16_kom_new(std::shared_ptr<F16> p) {
 }
 
 
+
+static bool f16_notizen(std::shared_ptr<F16> p) {
+    // Show existing notes and optionally add new one
+    auto notes = Rosenholz::Note::loadForEntity("f16", p->projectId);
+    if (!notes.empty()) {
+        std::cout << "  -- NOTIZEN (" << notes.size() << ") --\n";
+        for (auto& n : notes)
+            std::cout << "  [" << n->createdAt.substr(0,16) << "] " 
+                      << n->body.substr(0,60) << "\n";
+        std::cout << "\n";
+    }
+    std::string text = readOpt("Neue Notiz (leer=überspringen): ");
+    if (!text.empty()) {
+        auto n = Rosenholz::Note::create("f16", p->projectId, text);
+        if (n) std::cout << "  >> Notiz gespeichert.\n";
+    }
+    return true;
+}
+
 using prjMenuFn = bool(*)(std::shared_ptr<F16> p);
-static const prjMenuFn prjMenuTable[11] = {
+static const prjMenuFn prjMenuTable[12] = {
     nullptr,        // 0
     f16_edit,       // 1 Bearbeiten
     f16_f22_list,   // 2 F22 listen
@@ -365,6 +405,7 @@ static const prjMenuFn prjMenuTable[11] = {
     f16_kom_list,   // 8 KOM listen
     f16_kom_open,   // 9 KOM <#>
     f16_kom_new,    // 10 KOM+
+    f16_notizen,    // 11 Notizen
 };
 
 void projectMenu(std::shared_ptr<F16> p) {
@@ -381,10 +422,11 @@ void projectMenu(std::shared_ptr<F16> p) {
             << "  F22: 2.listen | 3.<#> | 4.neu\n"
             << "  AKT: 5.listen | 6.<#> | 7.neu\n"
             << "  KOM: 8.listen | 9.<#> | 10.neu\n"
+            << "  11.Notizen\n"
             << "  0.Zurück\n";
-        int ch = readInt("Wahl", 0, 10);
+        int ch = readInt("Wahl", 0, 11);
         if (ch == 0) break;
-        if (ch >= 1 && ch <= 10 && prjMenuTable[ch])
+        if (ch >= 1 && ch <= 11 && prjMenuTable[ch])
             if (!prjMenuTable[ch](p)) break;
     }
 }

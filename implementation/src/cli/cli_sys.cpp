@@ -10,6 +10,7 @@
 //   globalSearch(query)    — search across all entity types
 // ============================================================
 #include "cli_common.h"
+#include "../model/WatchPoller.h"
 #include "../model/akt/FolderObject.h"
 #include "../model/akt/Folder.h"
 #include "../model/akt/FolderRevision.h"

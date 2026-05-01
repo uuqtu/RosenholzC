@@ -22,25 +22,54 @@ using namespace Rosenholz;
 static void printTaskList(const std::vector<std::shared_ptr<F77Task>>& tasks,
                            const std::string& heading)
 {
-    std::cout << "  " << heading << " (" << tasks.size() << "):\n";
+    std::cout << "\n  " << heading << " (" << tasks.size() << "):\n";
     if (tasks.empty()) { std::cout << "  (keine)\n\n"; return; }
     std::cout << "  " << std::left
-              << std::setw(6)  << "#"
+              << std::setw(4)  << "#"
               << std::setw(8)  << "STATUS"
-              << std::setw(20) << "ENTITÄT"
-              << "TITEL\n"
-              << "  " << std::string(80, '-') << "\n";
+              << std::setw(28) << "ENTITÄT (TYP/ID)"
+              << std::setw(28) << "ENTITÄT-TITEL"
+              << "AUFGABE\n"
+              << "  " << std::string(90, '-') << "\n";
     int n = 1;
     for (auto& t : tasks) {
-        std::string ent = t->targetEntityType + ":" + t->targetEntityId.substr(0,16);
-        std::cout << "  " << std::setw(6) << n++
-                  << std::left << std::setw(8)  << t->status
-                  << std::setw(20) << ent
-                  << t->title.substr(0,40) << "\n";
-        if (!t->fileName.empty())
-            std::cout << "         Datei: " << t->fileName << "\n";
+        // Resolve the entity title for context
+        std::string entityTitle;
+        if (t->targetEntityType == "f22") {
+            auto e = Rosenholz::F22::loadById(t->targetEntityId);
+            if (e) entityTitle = e->title.substr(0, 26);
+        } else if (t->targetEntityType == "akt") {
+            auto e = Rosenholz::Folder::loadById(t->targetEntityId);
+            if (e) entityTitle = e->title.substr(0, 26);
+        } else if (t->targetEntityType == "f18") {
+            auto e = Rosenholz::F18Operation::loadById(t->targetEntityId);
+            if (e) entityTitle = e->title.substr(0, 26);
+        }
+
+        std::string ent = t->targetEntityType + ":" + t->targetEntityId.substr(0, 20);
+        std::string statusStr = t->status == "open" ? "offen" :
+                                t->status == "completed" ? "erledigt" :
+                                t->status == "skipped" ? "überspr." : t->status;
+
+        std::cout << "  " << std::setw(4) << n++
+                  << std::left
+                  << std::setw(8)  << statusStr
+                  << std::setw(28) << ent
+                  << std::setw(28) << (entityTitle.empty() ? "—" : entityTitle)
+                  << t->title.substr(0, 38) << "\n";
+        // Show what action is expected
+        if (!t->targetAction.empty())
+            std::cout << "       Aktion:  " << t->targetAction << "\n";
+        if (!t->fileName.empty()) {
+            std::cout << "       Datei:   " << t->fileName << "\n";
+            if (!t->filePath.empty())
+                std::cout << "       Pfad:    " << t->filePath << "\n";
+        }
+        // Show workflow source
+        if (!t->workflowId.empty())
+            std::cout << "       Workflow: " << t->workflowId.substr(0, 26) << "\n";
+        std::cout << "\n";
     }
-    std::cout << "\n";
 }
 
 // ── Handle a single F77Task interactively ────────────────────────────────

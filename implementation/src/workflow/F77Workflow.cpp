@@ -826,7 +826,7 @@ static void pruneMFSRevisions(const std::string& docId) {
         if (!revDir.empty() && Rosenholz::FileOps::fileExists(revDir)) {
             // Use system call to remove directory tree
             std::string cmd = "rm -rf "" + revDir + """;
-            std::system(cmd.c_str());
+            (void)std::system(cmd.c_str());
             LOG_INFO("[F77] pruned MFS rev folder: " + revDir);
         }
     }
@@ -1045,7 +1045,7 @@ bool F77Engine::tick(F77W& wf) {
 std::string F77Engine::addManualOperation(
     F77W&      wf,
     const std::string& title,
-    const std::string& description,
+    const std::string& /*description*/,
     const std::string& assignedTo)
 {
     // Always reload from DB to get current status:

@@ -97,7 +97,7 @@ std::string TreeBuilder::format(const TreeNode& root, int indent) {
     return oss.str();
 }
 
-std::string TreeBuilder::formatAll(const std::vector<TreeNode>& roots, int indent) {
+std::string TreeBuilder::formatAll(const std::vector<TreeNode>& roots, int /*indent*/) {
     std::ostringstream oss;
     for (int i = 0; i < (int)roots.size(); i++) {
         bool last = (i == (int)roots.size() - 1);

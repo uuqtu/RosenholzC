@@ -36,7 +36,7 @@ using namespace Rosenholz;
 
 static void printHelp() {
     std::cout <<
-"Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 -o Auswahl | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
+"Rosenholz PM v6.1  |  rh <BEFEHL> [ARGS]\n""\n""Navigation (Linux-Stil):\n""  cf <ID>   In Entitaet navigieren (F16/F22/F18/AKT)\n""  lf        Inhalt der aktuellen Ebene auflisten\n""  lo / -h   Kontextabhaengige Optionen anzeigen\n""  ..        Eine Ebene zurueck\n""\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 -o Auswahl | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
 "     -tasks       | Meine Workflow-Aufgaben (F77-Tasks)\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/AKT/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""     -go <ref>    Direkt öffnen (ID / Typ:N / Seq#)\n""     -ctx [ref]   Kontext setzen (oder 'clear')  ..=zurück\n""     -hist        Verlauf zuletzt geöffneter Entitäten\n""     -tree [f16id] Hierarchiebaum F16→F22→AKT/F18\n""     -watch [N]   Polling: Benachrichtigung bei Task-Änderungen (N=Sek, Standard=30)\n""     -note <id> [Text]  Schnellnotiz ohne Menü\n""     -cal               Kalenderansicht geplanter Start-/Enddaten\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
 ;
 }
@@ -76,7 +76,7 @@ static const char* const kCommands[] = {
     "-f16", "-f22", "-f18", "-akt", "-f77",
     "-per", "-de",  "-search", "-backup", "-status", "-tasks",
     "-mfs", "-log", "-go", "-ctx", "-h", "--help",
-    "exit", "quit", "help",
+    "cf", "lf", "lo", "exit", "quit", "help",
     nullptr
 };
 
@@ -166,7 +166,17 @@ static char** rhCompletion(const char* text, int /*start*/, int /*end*/) {
         } catch (...) {}
     };
 
-    if (cmd == "-f16") {
+    if (cmd == "cf") {
+        // Complete with context children: "ID (Title)" format
+        try {
+            auto children = CLI::getContextChildren();
+            for (auto& [id, title] : children) {
+                // Format: "ID" for completion, display "ID (Title)"
+                g_candidates.push_back(id);
+            }
+        } catch (...) {}
+        return rl_completion_matches(text, candidateGenerator);
+    } else if (cmd == "-f16") {
         addF16();
         // Also sub-flags
         g_candidates.insert(g_candidates.end(), {"-n", "-s", "-status"});
@@ -228,9 +238,10 @@ static void runShell() {
     using_history();
 
     std::cout << "\n"
-              << "  Rosenholz PM  —  Interaktive Shell\n"
+              << Color::bold("  Rosenholz PM v6.1") + "  —  Interaktive Shell\n"
               << "  Tab=Vervollständigung  ↑↓=Verlauf  Ctrl+C=Abbruch  Ctrl+D=Beenden\n"
-              << "  Beispiel:  -f16        -f22 -n        -h        exit\n"
+              << "  cf <ID>=navigieren  lf=inhalt  lo/-h=hilfe  ..=zurueck  exit\n"
+              << "  Beispiel:  cf XV/F16/0001/26   lf   -f22 -n   exit\n"
               << "\n";
 
     while (true) {
@@ -238,12 +249,19 @@ static void runShell() {
 
         // Build dynamic prompt with navigation context
         std::string promptSuffix = Rosenholz::NavigationStack::instance().promptSuffix();
-        std::string prompt = "  rh" + promptSuffix + "> ";
+        // Show full breadcrumb in prompt
+        std::string breadcrumb = Rosenholz::NavigationStack::instance().breadcrumb();
+        std::string prompt;
+        if (breadcrumb.empty())
+            prompt = Color::bold("rh") + " > ";
+        else
+            prompt = Color::bold("rh") + " " + Color::cyan(breadcrumb) + " > ";
         char* raw = readline(prompt.c_str());
         if (!raw) {
             // EOF (Ctrl+D)
             std::cout << "\n  Auf Wiedersehen.\n\n";
-            break;
+            AppController::instance().shutdown();
+            std::exit(0);
         }
 
         std::string line(raw);
@@ -266,25 +284,16 @@ static void runShell() {
         if (tokens[0] == "..") {
             auto& nav = Rosenholz::NavigationStack::instance();
             nav.pop();
-            auto cur = nav.current();
-            if (cur.valid()) {
-                // Re-open the parent entity
-                std::string fwd = cur.shortForm(); // "F22:XV/F22/0001/26"
-                auto colon = fwd.find(':');
-                if (colon != std::string::npos) {
-                    std::string ecmd = "-" + fwd.substr(0,colon);
-                    std::transform(ecmd.begin(), ecmd.end(), ecmd.begin(), ::tolower);
-                    std::vector<std::string> eargs{cur.id};
-                    dispatch(ecmd, eargs);
-                }
-            }
+            CLI::cmdLf({});  // show new location's children
             continue;
         }
 
-        // Exit keywords
+        // Exit keywords — controlled shutdown via AppController
         if (tokens[0] == "exit" || tokens[0] == "quit" || tokens[0] == "q") {
             std::cout << "  Auf Wiedersehen.\n\n";
-            break;
+            // Controlled shutdown: flush logs, close DBs, run final backup if enabled
+            AppController::instance().shutdown();
+            std::exit(0);  // clean exit after shutdown
         }
 
         // Help shortcut
@@ -511,7 +520,18 @@ static void dispatch(const std::string& cmd, const std::vector<std::string>& res
         return;
     }
 
-    CLI::die("Unbekannter Befehl: " + cmd + "\n  Starte 'rh -h' fuer die vollstaendige Hilfe.");
+    if (cmd == "cf") { CLI::cmdCf(rest); return; }
+    if (cmd == "lf") { CLI::cmdLf(rest); return; }
+    if (cmd == "lo" || cmd == "-h" || cmd == "--help") {
+        // -h in shell context → context-sensitive help (lo), not global help
+        // Only show global help if no navigation context
+        auto cur = Rosenholz::NavigationStack::instance().current();
+        if (cur.valid()) { CLI::cmdLo(rest); return; }
+        printHelp(); return;
+    }
+
+    std::cout << "  >> Unbekannter Befehl: " << cmd << "\n"
+              << "     Tipp: lo  oder  -h  fuer Optionen, Tab fuer Vervollstaendigung.\n";
 }
 
 // ── main ──────────────────────────────────────────────────────

@@ -55,7 +55,7 @@ static void editMenu(std::shared_ptr<Rosenholz::F22> t) {
     std::string pct = readOpt("Fortschritt % (0-100, leer = behalten): ");
     if (!pct.empty()) try { t->percentComplete = std::stoi(pct); } catch(...) {}
 
-    std::string dueP = readOpt("Fälligkeitsdatum (YYYY-MM-DD, leer = behalten): ");
+    std::string dueP = parseDate(readOpt("Fälligkeitsdatum (YYYY-MM-DD / . +1d +2w, leer=behalten): "));
     if (!dueP.empty()) t->dueDatePlanned = dueP;
 
     std::string eff = readOpt("Geplanter Aufwand Stunden (leer = behalten): ");
@@ -126,7 +126,7 @@ std::shared_ptr<F22> createTaskWizard(const std::string& projectId) {
     std::string priority  = readOpt("Priorität (high/medium/low, leer=medium): ");
     std::string wbs       = readOpt("WBS-Code (z.B. 1.2.3, optional): ");
     std::string startP    = readOpt("Geplanter Start (YYYY-MM-DD, optional): ");
-    std::string due       = readOpt("Fälligkeitsdatum (YYYY-MM-DD, optional): ");
+    std::string due       = parseDate(readOpt("Fälligkeitsdatum (YYYY-MM-DD / . +1d +2w, optional): "));
     std::string effortStr = readOpt("Geplanter Aufwand Stunden (optional): ");
     double effort = 0.0;
     if (!effortStr.empty()) try { effort = std::stod(effortStr); } catch (...) {}
@@ -338,7 +338,7 @@ static bool f22_f18_new(std::shared_ptr<F22> t) {
         return true;
     }
     // Pre-select this F22 as the parent, then launch guided wizard
-    auto v = createF18Wizard(t->taskId);
+    auto v = createF18Wizard("", t->taskId, "");
     if (v) f18Menu(v);
     return true;
 }

@@ -31,7 +31,7 @@ public:
     uint32_t    rev         {0};
     std::string originalName;   ///< filename as uploaded (display name)
     std::string storedFileName;    ///< MFS filename: {docRegNr}_{objectId}_r{rev}.{ext}
-    std::string mfsPath;        ///< full MFS path (valid in in_work state)
+    std::string filePath;        ///< full file path (valid in in_work state)
     std::string contentHash;    ///< SHA-256 in LMDB (set when committed=true)
     int64_t     contentSize {0};
     std::string format;         ///< file extension without dot

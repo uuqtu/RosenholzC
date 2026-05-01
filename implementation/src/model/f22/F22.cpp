@@ -130,10 +130,10 @@ OperationResult F22::save() const {
             bool alreadyExists = !existingCheck.empty() &&
                                   existingCheck[0].begin()->second != "0";
             if (!alreadyExists) {
-                auto allgAkte = Rosenholz::Folder::create("Allgemeine Akte", "general", taskId, "");
+                auto allgAkte = Rosenholz::Folder::create("Allgemeine Akte " + taskId, "general", taskId, "");
                 if (opOk(allgAkte->save())) {
                     allgAkte->attachToEntity("f22", taskId);
-                    LOG_INFO("[F22] Allgemeine Akte angelegt: " + allgAkte->folderId + " für " + taskId);
+                    LOG_INFO("[F22] Allgemeine Akte angelegt: " + allgAkte->folderId + " fuer " + taskId);
                 }
             }
         }

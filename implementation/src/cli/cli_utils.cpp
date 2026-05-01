@@ -22,6 +22,7 @@
 #include <sstream>
 #include "../model/akt/FolderRevision.h"
 #include <algorithm>
+#include <ctime>
 #include <cstdio>
 #include <cstring>
 #include <csignal>
@@ -36,7 +37,7 @@ using namespace Rosenholz;
 // ── Output helpers ────────────────────────────────────────────
 
 void printOk(const std::string& msg) {
-    std::cout << msg << "\n";
+    std::cout << Color::green("  >> ") << msg << "\n";
 }
 
 void die(const std::string& msg) {
@@ -45,7 +46,7 @@ void die(const std::string& msg) {
 }
 
 void printErr(const std::string& msg) {
-    std::cout << "  >> Fehler: " << msg << "\n";
+    std::cout << Color::red("  >> Fehler: ") << msg << "\n";
 }
 
 bool isId(const std::string& s) {
@@ -62,7 +63,7 @@ void hr() {
 
 void hdr(const std::string& t) {
     std::string line = t.size() > 54 ? t.substr(0, 54) : t;
-    std::cout << "  -- " << line << " --\n";
+    std::cout << "  " << Color::bold("-- " + line + " --") << "\n";
 }
 
 std::string fval(const std::string& v) {
@@ -116,6 +117,87 @@ static std::string strip(const std::string& s) {
 // ── Input primitives ──────────────────────────────────────────
 // All primitives return a sensible default / empty string when
 // g_interrupted is set — callers check cliIsInterrupted() to abort.
+
+// ── parseDate: shorthand date input ──────────────────────────────────────────
+// "."     → today
+// "+Nd"   → today + N days
+// "+Nw"   → today + N weeks
+// "+Nm"   → today + N months  
+// "+Ny"   → today + N years
+// "YYYY-MM-DD" → passthrough
+// ""      → empty passthrough
+// parseDate: shorthand date input → ISO YYYY-MM-DD
+//   "."       → today
+//   "+Nd"     → today + N days   (any positive integer N)
+//   "+Nw"     → today + N weeks
+//   "+Nm"     → today + N months
+//   "+Ny"     → today + N years
+//   "-Nd" etc → subtract (e.g. "-7d" = 1 week ago)
+//   "YYYY-MM-DD" → passed through unchanged
+//   "" → empty (no date)
+//
+// Examples: +14d +3m +1y -7d .
+std::string parseDate(const std::string& input) {
+    if (input.empty()) return "";
+
+    // Already ISO format (basic check):
+    if (input.size() == 10 && input[4] == '-' && input[7] == '-') return input;
+
+    std::time_t now = std::time(nullptr);
+    std::tm tm_now = *std::localtime(&now);
+
+    // "." → today
+    if (input == ".") {
+        char buf[16]; std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_now); return buf;
+    }
+
+    // "+Nx" or "-Nx" offsets
+    if (!input.empty() && (input[0] == '+' || input[0] == '-')) {
+        int sign = (input[0] == '-') ? -1 : 1;
+        int n = 0;
+        std::size_t i = 1;
+        // Parse any number of digits:
+        while (i < input.size() && std::isdigit((unsigned char)input[i]))
+            n = n * 10 + (input[i++] - '0');
+        char unit = (i < input.size()) ? std::tolower((unsigned char)input[i]) : 'd';
+        n *= sign;
+
+        switch (unit) {
+            case 'd': tm_now.tm_mday += n;     break;
+            case 'w': tm_now.tm_mday += n * 7; break;
+            case 'm': tm_now.tm_mon  += n;     break;
+            case 'y': tm_now.tm_year += n;     break;
+            default:  return input; // unknown unit → pass through
+        }
+        std::mktime(&tm_now); // normalize (handles month/year overflow)
+        char buf[16]; std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_now); return buf;
+    }
+
+    return input; // unrecognised format → pass through
+}
+
+
+// ── readChoice: menu choice with ? for help display ──────────────────────────
+// If user types "?", returns -1 (caller shows menu and re-asks).
+// Otherwise same as readInt().
+int readChoice(const std::string& menuText, int lo, int hi) {
+    while (true) {
+        // Print compact prompt
+        std::cout << "  " << Color::dim("[" + std::to_string(lo) + "-" + std::to_string(hi) + " | ?=Hilfe]") << " Wahl: ";
+        std::string input;
+        std::getline(std::cin, input);
+        if (g_interrupted) { g_interrupted = 0; return lo - 1; }
+        if (input == "?") { std::cout << menuText; continue; }
+        if (input.empty()) continue;
+        try {
+            int v = std::stoi(input);
+            if (v >= lo && v <= hi) return v;
+        } catch (...) {}
+        std::cout << "  " << Color::yellow("  Ungültig — bitte Zahl zwischen ")
+                  << lo << " und " << hi << " (oder ?)\n";
+    }
+}
+
 
 std::string readLine(const std::string& prompt) {
     while (true) {
@@ -247,7 +329,7 @@ void listProjects() {
         std::cout << "  " << std::left
                   << std::setw(28) << p->projectId
                   << std::setw(32) << title
-                  << std::setw(14) << (p->archived ? "archiviert" : "aktiv")
+                  << std::setw(14) << Color::statusColor(p->archived ? "archiviert" : "aktiv")
                   << std::setw(12) << phase
                   << std::setw(8)  << prio
                   << cpibuf << "\n";

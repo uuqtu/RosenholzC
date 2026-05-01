@@ -488,8 +488,8 @@ static bool dokHandleListObjects(DocMenuCtx& ctx) {
                       << std::setw(42) << o->displayName().substr(0, 40)
                       << std::setw(8)  << (o->committed ? "[LMDB]" : "[MFS] ")
                       << (o->contentSize / 1024) << " KB\n";
-            if (!o->mfsPath.empty())
-                std::cout << "       " << o->mfsPath << "\n";
+            if (!o->filePath.empty())
+                std::cout << "       " << o->filePath << "\n";
         }
     }
     return true;
@@ -695,8 +695,8 @@ static bool dokHandleRemoveObject(DocMenuCtx& ctx) {
         std::cout << "  " << (i+1) << ". " << ctx.curObjs[i]->displayName() << "\n";
     int sel = readInt("Objekt entfernen (Nummer)", 1, (int)ctx.curObjs.size());
     if (yesno("Objekt '" + ctx.curObjs[sel-1]->displayName() + "' entfernen?")) {
-        if (!ctx.curObjs[sel-1]->mfsPath.empty())
-            FileOps::deleteFile(ctx.curObjs[sel-1]->mfsPath);
+        if (!ctx.curObjs[sel-1]->filePath.empty())
+            FileOps::deleteFile(ctx.curObjs[sel-1]->filePath);
         ctx.curObjs[sel-1]->remove();
         std::cout << "  >> Objekt entfernt.\n";
     }
@@ -931,7 +931,7 @@ static bool dokHandlePrint(DocMenuCtx& ctx) {
     auto& obj = ctx.curObjs[sel-1];
 
     // Resolve source path
-    std::string srcPath = obj->mfsPath;
+    std::string srcPath = obj->filePath;
     if (srcPath.empty() || !FileOps::fileExists(srcPath)) {
         // Extract from LMDB via tmp copy (reuse open mechanism)
         bool wco = false;
@@ -1086,9 +1086,9 @@ void documentMenu(std::shared_ptr<Folder> doc) {
                 int oc = readInt("Wahl", 0, 6);
                 if (oc == 0) break;
                 if (oc == 1) {
-                    doc->openFile("read", sel->mfsPath);
+                    doc->openFile("read", sel->filePath);
                 } else if (oc == 2 && inWork) {
-                    std::string path = sel->checkoutPath.empty() ? sel->mfsPath : sel->checkoutPath;
+                    std::string path = sel->checkoutPath.empty() ? sel->filePath : sel->checkoutPath;
                     if (!path.empty()) { doc->openFile("edit", path); std::cout << "  >> Geöffnet zum Bearbeiten: " << path << "\n"; }
                     else std::cout << "  >> Kein Pfad vorhanden.\n";
                 } else if (oc == 3 && inWork) {
