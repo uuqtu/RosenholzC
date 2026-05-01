@@ -172,8 +172,6 @@ std::shared_ptr<Rosenholz::F22> createTaskWizardGuided();
 
 // ── F18 operation commands (cli_f18.cpp) ──────────────────────
 void cmdF18(const std::vector<std::string>& args);
-void f18BrowserMenu(const std::string& taskId     = "",
-                    const std::string& typeFilter = "");
 std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& projectId = "",
     const std::string& taskId    = "",
@@ -187,8 +185,6 @@ void printDocument(const Rosenholz::Folder& d);
 void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Folder>>& docs,
                    const std::string& title = "AKTEN");
 void documentMenu(std::shared_ptr<Rosenholz::Folder> doc);
-void documentBrowserMenu(const std::string& taskId  = "",
-                         const std::string& f18OpId = "");
 
 // Create document with known parent.
 std::shared_ptr<Rosenholz::Folder> createDocumentWizard(
@@ -205,10 +201,7 @@ std::shared_ptr<Rosenholz::Folder> attachDocumentDialog(
 
 // ── F77 workflow commands (cli_f77.cpp) ───────────────────────
 void cmdF77(const std::vector<std::string>& args);
-void workflowMenu();
 void instanceMenu(const std::string& workflowId);
-void listWfInstances(const std::string& entityType = "",
-                     const std::string& entityId   = "");
 std::string startWfInstanceWizard(const std::string& entityType = "",
                                   const std::string& entityId   = "");
 
@@ -223,11 +216,13 @@ void cmdDe(const std::vector<std::string>& args);
 void cmdTasks(const std::vector<std::string>& args);
 
 // ── Navigation commands (cli_nav.cpp) ─────────────────────────────────────
-void cmdCf(const std::vector<std::string>& args);   ///< change folder — navigate into entity
-void cmdLf(const std::vector<std::string>& args);   ///< list folder — show children
-void cmdLo(const std::vector<std::string>& args);   ///< list options — context-sensitive help
+void cmdCd(const std::vector<std::string>& args);        ///< cd — navigate into entity
+void cmdLs(const std::vector<std::string>& args);        ///< ls — list children
+void cmdLo(const std::vector<std::string>& args);        ///< lo — context-sensitive help
+void cmdContextual(const std::string& cmd,
+                   const std::vector<std::string>& args); ///< short-form contextual commands
 
-/// Returns (id, title) pairs for tab completion of cf command
+/// Returns (id, title) pairs for tab completion of cd command
 std::vector<std::pair<std::string,std::string>> getContextChildren();
 
 void teamMenu();

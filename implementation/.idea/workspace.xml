@@ -31,29 +31,14 @@
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_comm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_comm.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/settings.json" beforeDir="false" afterPath="$PROJECT_DIR$/settings.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_dok.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_dok.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_f16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_f22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f22.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f18.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f77.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f77.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_sys.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_sys.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_tasks.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_tasks.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_utils.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_utils.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_nav.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_nav.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/main_cli.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/NavigationContext.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/NavigationContext.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/TreeBuilder.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/TreeBuilder.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/WatchPoller.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/WatchPoller.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/WatchPoller.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/WatchPoller.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/akt/Folder.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/akt/Folder.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderObject.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/akt/FolderObject.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderObject.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/akt/FolderObject.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderRevision.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/akt/FolderRevision.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18OperationStep.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18OperationStep.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f22/F22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f22/F22.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Migration.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_core.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_core.cpp" afterDir="false" />
     </list>
@@ -123,12 +108,32 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
+    <configuration name="generate_schemas" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="generate_schemas" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="rosenholz_cli" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_cli" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz_cli">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="rosenholz_cli" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_cli" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz_cli">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
     <configuration name="rosenholz_lib" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_lib" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="rosenholz_lib" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_lib" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="rosenholz_test" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz_test">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -181,6 +186,8 @@
       <workItem from="1777657097909" duration="1333000" />
       <workItem from="1777670555940" duration="1973000" />
       <workItem from="1777673731052" duration="1771000" />
+      <workItem from="1777675576661" duration="1025000" />
+      <workItem from="1777676691306" duration="941000" />
     </task>
     <servers />
   </component>

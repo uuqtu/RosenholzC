@@ -59,49 +59,8 @@ std::vector<Migration> MigrationEngine::registry() {
     // Changes from v3: F18 removed from F16, F18 exclusively owned by F22.
     // Add future deltas here as the schema evolves beyond v4.
     //
-    return {
-        // dok v5: remove project_id column (docs now linked F22/F18 only)
-        {"akt", 5,
-         "v5: project_id removed — documents belong to F22 or F18 only",
-         // SQLite < 3.35 has no DROP COLUMN — recreate table without project_id
-         R"SQL(
-            CREATE TABLE IF NOT EXISTS akten_v5 AS
-                SELECT folder_id, workflow_id, task_id,
-                       f18_operation_id, f18_step_id, author_id, approved_by,
-                       doc_type, doc_category, title, version,
-                       date_created, date_modified, date_approved, date_expires,
-                       classification, volume_number, page_count, language,
-                       format, file_path, file_size, file_hash, file_url,
-                       external_ref, tags, summary, links, notes,
-                       created_at, updated_at
-                FROM folders;
-            DROP TABLE folders;
-            ALTER TABLE akten_v5 RENAME TO folders;
-         )SQL"
-        },
-        {"akt", 6,
-         "v6: source_url added to folder_objects for URL-based objects",
-         "ALTER TABLE folder_objects ADD COLUMN source_url TEXT;"
-        },
-        {"akt", 7,
-         "v7: file_url removed from documents — URL belongs to FolderObjects only",
-         // SQLite < 3.35: recreate table without file_url
-         R"SQL(
-            CREATE TABLE IF NOT EXISTS akten_v7 AS
-                SELECT folder_id, workflow_id, task_id,
-                       f18_operation_id, f18_step_id, author_id, approved_by,
-                       doc_type, doc_category, title, version,
-                       date_created, date_modified, date_approved, date_expires,
-                       classification, volume_number, page_count, language,
-                       format, file_path, file_size, file_hash,
-                       external_ref, tags, summary, links, notes,
-                       created_at, updated_at
-                FROM folders;
-            DROP TABLE folders;
-            ALTER TABLE akten_v7 RENAME TO folders;
-         )SQL"
-        },
-    }; // end registry
+    // v7: fresh start — no migration from v6 possible, no deltas.
+    return {}; // end registry
 }
 
 bool MigrationEngine::ensureSchemaVersionTable(Database* db, const std::string& dbName) {

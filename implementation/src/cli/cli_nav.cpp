@@ -1,15 +1,16 @@
 // ============================================================
-// cli_nav.cpp  —  Linux-style navigation commands
+// cli_nav.cpp  —  Linux-style navigation (cf / ls / lo)
 //
-// cf <id>    — "change folder": navigate into an entity
-// ..         — navigate back (already in main_cli.cpp)
-// lf         — "list folder": list children of current entity
-// lo         — "list options": show context-aware help
-// -h at prompt — shows lo (context help), not global help
+// cd <id>   → navigate into entity (push nav stack)
+// ..        → one level up (pop nav stack)  [handled in main_cli.cpp]
+// ls [opts] → list children of current entity
+// lo        → context-sensitive option list (-h also routes here)
 //
-// These commands integrate fully into the existing shell,
-// replacing the number-menu approach with linux-style navigation
-// while keeping all existing commands available.
+// Context-aware command wrappers:
+//   f22 -n  / f18 -n / akt -n   → use current context as parent
+//   f77 -s  → start workflow on current entity
+//   f77 -d  → show workflow on current entity
+//   rev     → revise current AKT
 // ============================================================
 #include "cli_common.h"
 #include "../model/f16/F16.h"
@@ -19,8 +20,11 @@
 #include "../model/akt/Folder.h"
 #include "../model/akt/FolderRevision.h"
 #include "../model/akt/FolderObject.h"
+#include "../model/person/Person.h"
 #include "../workflow/F77Workflow.h"
 #include "../workflow/F77Task.h"
+#include "../mfs/MFSWriter.h"
+#include "../core/Config.h"
 #include <iomanip>
 #include <sstream>
 
@@ -28,19 +32,107 @@ namespace CLI {
 
 using namespace Rosenholz;
 
-// ── Forward declarations (defined in other CLI modules) ───────────────────
+// ── Forward declarations (defined in other CLI modules) ─────────────────────
 void projectMenu(std::shared_ptr<F16> p);
 void taskMenu(std::shared_ptr<F22> t);
 void f18Menu(std::shared_ptr<F18Operation> v);
 void documentMenu(std::shared_ptr<Folder> d);
 void instanceMenu(const std::string& wfId);
+std::string startWfInstanceWizard(const std::string& entityType,
+                                   const std::string& entityId);
+std::shared_ptr<F22>    createTaskWizard(const std::string& projectId);
+std::shared_ptr<Folder> createDocumentWizard(const std::string& projectId,
+                                              const std::string& taskId);
+std::shared_ptr<F18Operation> createF18Wizard(const std::string& projectId,
+                                               const std::string& taskId,
+                                               const std::string& type);
+void communicationMenu(const std::string& ownerId, const std::string& ownerType);
 
-// ── lf — list children of current entity ─────────────────────────────────
-//
-// Shows what's inside the current location in a structured format.
-// Format: "  #  ID                  TITLE              TYPE"
-//
-void cmdLf(const std::vector<std::string>& args) {
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+static void showF16Children(const std::string& projectId) {
+    auto tasks = F22::loadForProject(projectId);
+    auto akten = Folder::loadForEntity("f16", projectId);
+
+    if (!tasks.empty()) {
+        std::cout << "\n  F22-Vorgaenge (" << tasks.size() << "):\n"
+                  << "  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(34) << "TITEL"
+                  << "STATUS\n"
+                  << "  " << std::string(72,'-') << "\n";
+        int n = 1;
+        for (auto& t : tasks)
+            std::cout << "  " << std::setw(4) << n++
+                      << std::setw(26) << t->regNumber.toString()
+                      << std::setw(34) << t->title.substr(0,32)
+                      << Color::statusColor(entityStatusToString(t->status)) << "\n";
+    } else {
+        std::cout << "  (keine F22-Vorgaenge)\n";
+    }
+
+    if (!akten.empty()) {
+        std::cout << "\n  Akten (" << akten.size() << "):\n"
+                  << "  " << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(34) << "TITEL"
+                  << "TYP\n"
+                  << "  " << std::string(68,'-') << "\n";
+        int n = 1;
+        for (auto& d : akten)
+            std::cout << "  " << std::setw(4) << n++
+                      << std::setw(26) << d->folderId
+                      << std::setw(34) << d->title.substr(0,32)
+                      << d->docType << "\n";
+    }
+    std::cout << "\n";
+}
+
+static void showF22Children(const std::string& taskId) {
+    auto f18s  = F18Operation::loadForTask(taskId);
+    auto akten = Folder::loadForEntity("f22", taskId);
+
+    if (!f18s.empty()) {
+        std::cout << "\n  F18-Vorgaenge (" << f18s.size() << "):\n"
+                  << "  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(12) << "TYP"
+                  << std::setw(30) << "TITEL"
+                  << "STATUS\n"
+                  << "  " << std::string(76,'-') << "\n";
+        int n = 1;
+        for (auto& v : f18s)
+            std::cout << "  " << std::setw(4) << n++
+                      << std::setw(26) << v->operationId
+                      << std::setw(12) << v->operationType.substr(0,10)
+                      << std::setw(30) << v->title.substr(0,28)
+                      << Color::statusColor(entityStatusToString(v->status)) << "\n";
+    } else {
+        std::cout << "\n  (keine F18-Vorgaenge)\n";
+    }
+
+    if (!akten.empty()) {
+        std::cout << "\n  Akten (" << akten.size() << "):\n"
+                  << "  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(34) << "TITEL"
+                  << "TYP\n"
+                  << "  " << std::string(68,'-') << "\n";
+        int n = 1;
+        for (auto& d : akten)
+            std::cout << "  " << std::setw(4) << n++
+                      << std::setw(26) << d->folderId
+                      << std::setw(34) << d->title.substr(0,32)
+                      << d->docType << "\n";
+    } else {
+        std::cout << "\n  (keine Akten)\n";
+    }
+    std::cout << "\n";
+}
+
+// ── ls — list folder (children of current location) ─────────────────────────
+
+void cmdLs(const std::vector<std::string>& args) {
     auto& nav = NavigationStack::instance();
     auto cur = nav.current();
 
@@ -48,243 +140,181 @@ void cmdLf(const std::vector<std::string>& args) {
     for (auto& a : args) if (a == "-rev") showRevisions = true;
 
     if (!cur.valid()) {
-        // Top level: list all F16 projects
+        // Top level: all F16
         auto all = F16::loadAll();
-        if (all.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
+        if (all.empty()) { std::cout << "  (keine F16-Karten)\n  f16 -n  anlegen\n"; return; }
         std::cout << "\n  F16-Karten (" << all.size() << "):\n"
                   << "  " << std::left << std::setw(4) << "#"
-                  << std::setw(24) << "ID"
-                  << std::setw(34) << "TITEL"
+                  << std::setw(26) << "ID"
+                  << std::setw(36) << "TITEL"
                   << "STATUS\n"
-                  << "  " << std::string(70,'-') << "\n";
+                  << "  " << std::string(72,'-') << "\n";
         int n = 1;
         for (auto& p : all)
             std::cout << "  " << std::setw(4) << n++
-                      << std::setw(24) << p->regNumber.toString()
-                      << std::setw(34) << p->title.substr(0,32)
-                      << (p->archived ? "archiviert" : "aktiv") << "\n";
-        std::cout << "\n  cf <ID>  um hineinzugehen\n\n";
+                      << std::setw(26) << p->regNumber.toString()
+                      << std::setw(36) << p->title.substr(0,34)
+                      << (p->archived ? Color::dim("archiviert") : Color::green("aktiv")) << "\n";
+        std::cout << "\n  cd <ID>  navigieren  |  f16 -n  neue Kartei\n\n";
         return;
     }
 
     switch (cur.type) {
-
     case EntityType::F16: {
         auto p = F16::loadById(cur.id);
         if (!p) { printErr("F16 nicht gefunden: " + cur.id); return; }
-
-        auto tasks = F22::loadForProject(p->projectId);
-        auto akten = Folder::loadForEntity("f16", p->projectId);
-
-        std::cout << "\n  F16:" << cur.id << " — " << p->title << "\n\n";
-
-        if (!tasks.empty()) {
-            std::cout << "  F22-Vorgaenge (" << tasks.size() << "):\n"
-                      << "  " << std::left << std::setw(4) << "#"
-                      << std::setw(24) << "ID"
-                      << std::setw(34) << "TITEL"
-                      << "STATUS\n"
-                      << "  " << std::string(70,'-') << "\n";
-            int n = 1;
-            for (auto& t : tasks)
-                std::cout << "  " << std::setw(4) << n++
-                          << std::setw(24) << t->regNumber.toString()
-                          << std::setw(34) << t->title.substr(0,32)
-                          << entityStatusToString(t->status) << "\n";
-        } else {
-            std::cout << "  (keine F22-Vorgaenge)\n";
-        }
-
-        if (!akten.empty()) {
-            std::cout << "\n  Akten (" << akten.size() << "):\n";
-            int n = 1;
-            for (auto& d : akten)
-                std::cout << "  " << std::setw(4) << n++
-                          << std::setw(24) << d->folderId
-                          << "  " << d->title.substr(0,32) << "\n";
-        }
-        std::cout << "\n";
+        std::cout << "\n  " << Color::bold("F16") << " " << Color::cyan(cur.id)
+                  << " — " << p->title << "\n";
+        showF16Children(p->projectId);
         break;
     }
-
     case EntityType::F22: {
         auto t = F22::loadById(cur.id);
         if (!t) { printErr("F22 nicht gefunden: " + cur.id); return; }
-
-        auto f18s  = F18Operation::loadForTask(t->taskId);
-        auto akten = Folder::loadForEntity("f22", t->taskId);
-
-        std::cout << "\n  F22:" << cur.id << " — " << t->title << "\n"
+        std::cout << "\n  " << Color::bold("F22") << " " << Color::blue(cur.id)
+                  << " — " << t->title << "\n"
                   << "  Status: " << Color::statusColor(entityStatusToString(t->status))
-                  << "  Prioritaet: " << t->priority << "\n\n";
-
-        if (!f18s.empty()) {
-            std::cout << "  F18-Vorgaenge (" << f18s.size() << "):\n"
-                      << "  " << std::left << std::setw(4) << "#"
-                      << std::setw(24) << "ID"
-                      << std::setw(10) << "TYP"
-                      << std::setw(30) << "TITEL"
-                      << "STATUS\n"
-                      << "  " << std::string(75,'-') << "\n";
-            int n = 1;
-            for (auto& v : f18s)
-                std::cout << "  " << std::setw(4) << n++
-                          << std::setw(24) << v->operationId
-                          << std::setw(10) << v->operationType.substr(0,9)
-                          << std::setw(30) << v->title.substr(0,28)
-                          << entityStatusToString(v->status) << "\n";
-        } else {
-            std::cout << "  (keine F18-Vorgaenge)\n";
-        }
-
-        if (!akten.empty()) {
-            std::cout << "\n  Akten (" << akten.size() << "):\n"
-                      << "  " << std::left << std::setw(4) << "#"
-                      << std::setw(24) << "ID"
-                      << std::setw(30) << "TITEL"
-                      << "TYP\n"
-                      << "  " << std::string(66,'-') << "\n";
-            int n = 1;
-            for (auto& d : akten)
-                std::cout << "  " << std::setw(4) << n++
-                          << std::setw(24) << d->folderId
-                          << std::setw(30) << d->title.substr(0,28)
-                          << d->docType << "\n";
-        } else {
-            std::cout << "\n  (keine Akten)\n";
-        }
-        std::cout << "\n";
+                  << "  Prio: " << t->priority << "\n";
+        showF22Children(t->taskId);
         break;
     }
-
     case EntityType::F18: {
         auto v = F18Operation::loadById(cur.id);
         if (!v) { printErr("F18 nicht gefunden: " + cur.id); return; }
-
-        std::cout << "\n  F18:" << cur.id << " — " << v->title << "\n"
+        std::cout << "\n  " << Color::bold("F18") << " " << Color::magenta(cur.id)
+                  << " — " << v->title << "\n"
                   << "  Typ: " << v->operationType
                   << "  Status: " << Color::statusColor(entityStatusToString(v->status)) << "\n\n";
 
-        // Steps:
-        std::cout << "  Schritte (" << v->steps.size() << "):\n"
-                  << "  " << std::left << std::setw(4) << "#"
-                  << std::setw(26) << "ID"
-                  << std::setw(28) << "TITEL"
-                  << "STATUS\n"
-                  << "  " << std::string(66,'-') << "\n";
-        int n = 1;
-        for (auto& s : v->steps) {
-            auto sym = f18StepSymbolStr(s.displaySymbol());
-            std::cout << "  " << std::setw(4) << n++
-                      << std::setw(26) << s.stepId
-                      << std::setw(28) << s.title.substr(0,26);
-            if (s.status == F18StepStatus::DONE) std::cout << Color::green(sym);
-            else if (s.status == F18StepStatus::IN_PROGRESS) std::cout << Color::yellow(sym);
-            else std::cout << sym;
-            std::cout << "\n";
+        // Steps
+        if (!v->steps.empty()) {
+            std::cout << "  Schritte (" << v->steps.size() << "):\n"
+                      << "  " << std::left << std::setw(4) << "#"
+                      << std::setw(26) << "ID"
+                      << std::setw(28) << "TITEL"
+                      << "STATUS\n"
+                      << "  " << std::string(66,'-') << "\n";
+            int n = 1;
+            for (auto& s : v->steps) {
+                std::string sym = f18StepSymbolStr(s.displaySymbol());
+                std::cout << "  " << std::setw(4) << n++
+                          << std::setw(26) << s.stepId
+                          << std::setw(28) << s.title.substr(0,26);
+                if (s.status == F18StepStatus::DONE)
+                    std::cout << Color::green(sym);
+                else if (s.status == F18StepStatus::IN_PROGRESS)
+                    std::cout << Color::yellow(sym);
+                else
+                    std::cout << Color::dim(sym);
+                std::cout << "\n";
+            }
         }
-
-        // Akten:
+        // Akten under this F18
         auto akten = Folder::loadForEntity("f18", v->operationId);
         if (!akten.empty()) {
             std::cout << "\n  Akten (" << akten.size() << "):\n";
-            n = 1;
+            int n = 1;
             for (auto& d : akten)
                 std::cout << "  " << std::setw(4) << n++
-                          << std::setw(24) << d->folderId
+                          << std::setw(26) << d->folderId
                           << "  " << d->title.substr(0,32) << "\n";
         }
         std::cout << "\n";
         break;
     }
-
     case EntityType::AKT: {
         auto d = Folder::loadById(cur.id);
         if (!d) { printErr("Akte nicht gefunden: " + cur.id); return; }
-
         auto rev = FolderRevision::currentRevision(d->folderId);
-        std::cout << "\n  AKT:" << cur.id << " — " << d->title << "\n";
-        if (rev) {
-            std::cout << "  Rev:" << rev->rev << "  Status:" << rev->revState << "\n";
-        }
-        std::cout << "\n";
+        std::cout << "\n  " << Color::bold("AKT") << " " << Color::yellow(cur.id)
+                  << " — " << d->title << "\n";
+        if (rev)
+            std::cout << "  Rev:" << rev->rev
+                      << "  Status:" << Color::statusColor(revStateToString(rev->revState))
+                      << (rev->revState == RevState::IN_WORK ? "  (bearbeitbar)" : "  (unveraenderlich)")
+                      << "\n";
 
         if (showRevisions) {
-            // List all revisions:
             auto allRevs = FolderRevision::loadAllRevisions(d->folderId);
-            std::cout << "  Revisionen (" << allRevs.size() << "):\n"
+            std::cout << "\n  Alle Revisionen (" << allRevs.size() << "):\n"
                       << "  " << std::setw(6) << "REV"
-                      << std::setw(16) << "STATUS"
+                      << std::setw(18) << "STATUS"
                       << "ERSTELLT\n"
                       << "  " << std::string(50,'-') << "\n";
             for (auto& r : allRevs)
                 std::cout << "  " << std::setw(6) << r->rev
-                          << std::setw(16) << revStateToString(r->revState)
+                          << std::setw(18) << Color::statusColor(revStateToString(r->revState))
                           << r->createdAt.substr(0,16) << "\n";
-            std::cout << "\n";
         }
 
         if (rev) {
             auto objs = FolderObject::loadForRevision(d->folderId, rev->rev);
+            std::cout << "\n  Objekte Rev " << rev->rev << " (" << objs.size() << "):\n";
             if (!objs.empty()) {
-                std::cout << "  Objekte in Rev " << rev->rev
-                          << " (" << objs.size() << "):\n"
-                          << "  " << std::left << std::setw(4) << "#"
-                          << std::setw(20) << "ID"
-                          << std::setw(30) << "NAME"
-                          << std::setw(8) << "FMT"
+                std::cout << "  " << std::left << std::setw(4) << "#"
+                          << std::setw(20) << "OBJ-ID"
+                          << std::setw(34) << "NAME"
+                          << std::setw(8) << "FORMAT"
                           << "STATUS\n"
-                          << "  " << std::string(68,'-') << "\n";
+                          << "  " << std::string(72,'-') << "\n";
                 int n = 1;
                 for (auto& o : objs)
                     std::cout << "  " << std::setw(4) << n++
                               << std::setw(20) << o->objectId.substr(0,18)
-                              << std::setw(30) << o->displayName().substr(0,28)
+                              << std::setw(34) << o->displayName().substr(0,32)
                               << std::setw(8) << o->format.substr(0,6)
-                              << (o->committed ? "committed" : "in_work") << "\n";
+                              << (o->committed ? Color::green("committed") : Color::yellow("in_work"))
+                              << "\n";
             } else {
                 std::cout << "  (keine Objekte in aktueller Revision)\n";
             }
         }
-        std::cout << "\n  lo  fuer Optionen  |  -rev  fuer alle Revisionen\n\n";
+        std::cout << "\n  Tipp: ls -rev  zeigt alle Revisionen\n\n";
         break;
     }
-
     default:
         std::cout << "  (keine Unterobjekte fuer diesen Typ)\n";
-        break;
     }
 }
 
-// ── lo — list options at current location ────────────────────────────────────
-//
-// Shows context-specific commands available at the current navigation level.
-// This is the "local -h" — what you can do from here.
-//
+// ── lo — list options (context-sensitive help) ────────────────────────────────
+
 void cmdLo(const std::vector<std::string>& args) {
+    (void)args;
     auto& nav = NavigationStack::instance();
     auto cur = nav.current();
 
     std::cout << "\n";
 
     if (!cur.valid()) {
-        // Top level
-        std::cout << "  Rosenholz PM — Befehle (oberste Ebene)\n"
-                  << "  " << std::string(52,'-') << "\n"
-                  << "  cf <F16-ID>      In F16-Kartei navigieren\n"
-                  << "  lf               Alle F16-Karten listen\n"
-                  << "  -f16 -n          Neue F16-Kartei anlegen\n"
-                  << "  -f16 -o          F16 auswaehlen und navigieren\n"
-                  << "  -f16 -s <q>      F16 suchen\n"
-                  << "  -f22 -n          Neue F22-Aufgabe anlegen\n"
-                  << "  -tasks           Offene Workflow-Aufgaben\n"
-                  << "  -search <q>      Globale Suche\n"
-                  << "  -tree            Hierarchiebaum\n"
-                  << "  -status          Datenbankzaehler\n"
-                  << "  -watch [N]       MFS+F77 Polling (N=Sekunden)\n"
-                  << "  -hist            Verlauf\n"
-                  << "  -h               Diese Uebersicht\n"
-                  << "  exit             Beenden\n\n";
+        std::cout
+            << Color::bold("  Rosenholz PM — Befehle (oberste Ebene)") << "\n"
+            << "  " << std::string(54,'-') << "\n"
+            << "  Navigation:\n"
+            << "    cd <F16-ID>    In F16-Kartei navigieren\n"
+            << "    ls             Alle F16-Karten listen\n"
+            << "    ..             (hier: nichts)\n"
+            << "  Erstellen:\n"
+            << "    f16 -n         Neue F16-Kartei\n"
+            << "    f22 -n         Neue F22-Aufgabe (fragt nach F16)\n"
+            << "    f18 -n         Neuen F18-Vorgang (fragt nach F22)\n"
+            << "    akt -n         Neue Akte (fragt nach Entitaet)\n"
+            << "    per -n         Neue Person\n"
+            << "  Suchen/Listen:\n"
+            << "    f16 -s <q>     F16 suchen\n"
+            << "    f22 -s <q>     F22 suchen\n"
+            << "    f18 -s <q>     F18 suchen\n"
+            << "    akt -s <q>     Akte suchen\n"
+            << "    tsk            Offene F77-Aufgaben\n"
+            << "    srch <q>       Globale Suche\n"
+            << "    tree           Hierarchiebaum\n"
+            << "    cal            Kalenderansicht\n"
+            << "    his            Verlauf\n"
+            << "  System:\n"
+            << "    sts            Datenbankzaehler\n"
+            << "    bak            Backup starten\n"
+            << "    wch [N]        Watch-Polling (N=Sekunden)\n"
+            << "    exit           Beenden\n\n";
         return;
     }
 
@@ -292,185 +322,666 @@ void cmdLo(const std::vector<std::string>& args) {
 
     case EntityType::F16: {
         auto p = F16::loadById(cur.id);
-        std::string title = p ? p->title : cur.id;
-        std::cout << "  F16: " << cur.id << " — " << title << "\n"
-                  << "  " << std::string(52,'-') << "\n"
+        std::string t = p ? p->title : cur.id;
+        std::cout << Color::bold("  F16 " + cur.id + " — " + t) << "\n"
+                  << "  " << std::string(54,'-') << "\n"
                   << "  Navigation:\n"
-                  << "    cf <F22-ID>      In F22-Vorgang navigieren\n"
-                  << "    cf <AKT-ID>      In Akte navigieren\n"
-                  << "    lf               F22-Vorgaenge und Akten listen\n"
-                  << "    ..               Zurueck (oberste Ebene)\n"
-                  << "  Aktionen:\n"
-                  << "    -f22 -n          Neue F22-Aufgabe in diesem Projekt\n"
-                  << "    -f22 <F22-ID>    F22-Menue oeffnen (Bearbeiten etc.)\n"
-                  << "    -akt -n          Neue Akte anlegen\n"
-                  << "    -f16 " << cur.id << "   F16-Menue oeffnen\n"
-                  << "    -note " << cur.id << " <Text>   Schnellnotiz\n"
-                  << "    -tree " << cur.id << "  Hierarchiebaum\n\n";
+                  << "    cd <F22-ID>    In F22-Vorgang navigieren\n"
+                  << "    cd <AKT-ID>    In Akte navigieren\n"
+                  << "    ls             Alle F22 und Akten listen\n"
+                  << "    ..             Zurueck (oberste Ebene)\n"
+                  << "  Erstellen:\n"
+                  << "    f22 -n         Neue F22-Aufgabe in diesem Projekt\n"
+                  << "    akt -n         Neue Akte zu diesem Projekt\n"
+                  << "    kom -n         Neue Kommunikation\n"
+                  << "  Bearbeiten:\n"
+                  << "    f16 -e         F16-Felder bearbeiten\n"
+                  << "    f16 -v         F16-Details anzeigen\n"
+                  << "    f16 -arc       Projekt archivieren\n"
+                  << "  Suchen:\n"
+                  << "    f22 -s <q>     F22-Aufgaben suchen\n"
+                  << "    akt -s <q>     Akten suchen\n"
+                  << "    note <Text>    Schnellnotiz zu diesem Projekt\n"
+                  << "    tree           Hierarchiebaum ab hier\n\n";
         break;
     }
 
     case EntityType::F22: {
         auto t = F22::loadById(cur.id);
         std::string title = t ? t->title : cur.id;
-        std::cout << "  F22: " << cur.id << " — " << title << "\n"
-                  << "  " << std::string(52,'-') << "\n"
+        std::string wfi   = t ? t->releaseWorkflowId : "";
+        std::cout << Color::bold("  F22 " + cur.id + " — " + title) << "\n"
+                  << "  " << std::string(54,'-') << "\n"
                   << "  Navigation:\n"
-                  << "    cf <F18-ID>      In F18-Vorgang navigieren\n"
-                  << "    cf <AKT-ID>      In Akte navigieren\n"
-                  << "    lf               F18-Vorgaenge und Akten listen\n"
-                  << "    ..               Zurueck zum F16\n"
-                  << "  Aktionen:\n"
-                  << "    -f18 -n          Neuen F18-Vorgang anlegen\n"
-                  << "    -akt -n          Neue Akte anlegen\n"
-                  << "    -f22 " << cur.id << "   F22-Menue (Bearbeiten, F77, etc.)\n"
-                  << "    -note " << cur.id << " <Text>   Schnellnotiz\n";
-        if (t && !t->releaseWorkflowId.empty())
-            std::cout << "    -f77 " << t->releaseWorkflowId << "  F77-Workflow\n";
-        std::cout << "\n";
+                  << "    cd <F18-ID>    In F18-Vorgang navigieren\n"
+                  << "    cd <AKT-ID>    In Akte navigieren\n"
+                  << "    ls             F18-Vorgaenge und Akten listen\n"
+                  << "    ..             Zurueck zum F16\n"
+                  << "  Erstellen:\n"
+                  << "    f18 -n         Neuen F18-Vorgang in dieser Aufgabe\n"
+                  << "    akt -n         Neue Akte zu dieser Aufgabe\n"
+                  << "    kom -n         Neue Kommunikation\n"
+                  << "  Bearbeiten:\n"
+                  << "    f22 -e         F22-Felder bearbeiten\n"
+                  << "    f22 -v         F22-Details anzeigen\n"
+                  << "    f22 -ind       Nacherfassung unregistrierter Dateien\n"
+                  << "  Workflow:\n";
+        if (wfi.empty())
+            std::cout << "    f77 -s         F77-Workflow starten\n";
+        else
+            std::cout << "    f77 -d         F77-Workflow anzeigen (" << wfi.substr(0,20) << ")\n"
+                      << "    f77 -s         Neuen F77-Workflow starten\n";
+        std::cout << "    note <Text>    Schnellnotiz\n\n";
         break;
     }
 
     case EntityType::F18: {
         auto v = F18Operation::loadById(cur.id);
         std::string title = v ? v->title : cur.id;
-        std::cout << "  F18: " << cur.id << " — " << title << "\n"
-                  << "  " << std::string(52,'-') << "\n"
+        std::cout << Color::bold("  F18 " + cur.id + " — " + title) << "\n"
+                  << "  " << std::string(54,'-') << "\n"
                   << "  Navigation:\n"
-                  << "    cf <AKT-ID>      In Akte navigieren\n"
-                  << "    lf               Schritte und Akten listen\n"
-                  << "    ..               Zurueck zur F22\n"
-                  << "  Aktionen:\n"
-                  << "    -f18 " << cur.id << "   F18-Menue (Schritte, Bearbeiten)\n"
-                  << "    -akt -n          Neue Akte zu diesem Vorgang\n"
-                  << "    -note " << cur.id << " <Text>   Schnellnotiz\n\n";
+                  << "    cd <AKT-ID>    In Akte navigieren\n"
+                  << "    ls             Schritte und Akten listen\n"
+                  << "    ..             Zurueck zur F22\n"
+                  << "  Erstellen:\n"
+                  << "    akt -n         Neue Akte zu diesem Vorgang\n"
+                  << "    kom -n         Neue Kommunikation\n"
+                  << "    f18 -stp       Neuen Schritt hinzufuegen\n"
+                  << "  Bearbeiten:\n"
+                  << "    f18 -e         F18-Felder bearbeiten\n"
+                  << "    f18 -v         F18-Details anzeigen\n"
+                  << "  Workflow:\n"
+                  << "    f77 -s         F77-Workflow starten\n"
+                  << "    f77 -d         F77-Workflow anzeigen\n"
+                  << "    note <Text>    Schnellnotiz\n\n";
         break;
     }
 
     case EntityType::AKT: {
         auto d = Folder::loadById(cur.id);
         std::string title = d ? d->title : cur.id;
-        std::cout << "  AKT: " << cur.id << " — " << title << "\n"
-                  << "  " << std::string(52,'-') << "\n"
+        auto rev = d ? FolderRevision::currentRevision(d->folderId) : nullptr;
+        bool inWork = rev && (rev->revState == RevState::IN_WORK);
+        std::cout << Color::bold("  AKT " + cur.id + " — " + title) << "\n"
+                  << "  " << std::string(54,'-') << "\n"
                   << "  Navigation:\n"
-                  << "    lf               Objekte in aktueller Revision listen\n"
-                  << "    lf -rev          Alle Revisionen listen\n"
-                  << "    ..               Zurueck\n"
-                  << "  Aktionen:\n"
-                  << "    -akt " << cur.id << "   Akten-Menue (Objekte hinzufuegen, checkout)\n"
-                  << "    -note " << cur.id << " <Text>   Schnellnotiz\n\n";
+                  << "    ls             Objekte in aktueller Revision\n"
+                  << "    ls -rev        Alle Revisionen listen\n"
+                  << "    ..             Zurueck\n"
+                  << "  Ansicht:\n"
+                  << "    akt -v         Akte-Details anzeigen\n"
+                  << "  Inhalt:\n";
+        if (inWork) {
+            std::cout << "    akt -obj       Objekt hinzufuegen (Datei/URL/Stub)\n"
+                      << "    akt -url       URL-Objekte aktualisieren\n"
+                      << "    akt -co <#>    Objekt auschecken (bearbeiten)\n"
+                      << "    akt -ci        Objekt einchecken\n";
+        } else {
+            std::cout << "    akt -co <#>    Objekt oeffnen (lesen)\n";
+        }
+        std::cout << "  Versionen:\n"
+                  << "    rev            Neue Revision erstellen\n"
+                  << "    akt -rv <n>    Revision wechseln zu Rev N\n"
+                  << "  Workflow:\n"
+                  << "    f77 -s         F77-Workflow starten\n"
+                  << "    f77 -d         F77-Workflow anzeigen\n"
+                  << "    note <Text>    Schnellnotiz\n\n";
         break;
     }
 
     default:
-        std::cout << "  Keine kontextspezifischen Optionen.\n"
-                  << "  -h fuer globale Hilfe.\n\n";
-        break;
+        std::cout << "  Keine kontextspezifischen Optionen.\n  lo  fuer globale Hilfe.\n\n";
     }
 }
 
-// ── cf — change folder (navigate into entity) ─────────────────────────────────
-//
-// cf <id>   → resolve ID, push to nav stack, show lf
-// cf ..     → pop nav stack
-// cf        → show current location (same as lf)
-//
-void cmdCf(const std::vector<std::string>& args) {
+// ── cd — change folder ────────────────────────────────────────────────────────
+
+void cmdCd(const std::vector<std::string>& args) {
     auto& nav = NavigationStack::instance();
 
-    if (args.empty()) {
-        // No arg: show current location
-        cmdLf({});
-        return;
-    }
+    if (args.empty()) { cmdLs({}); return; }
 
     std::string target = args[0];
+    if (target == "..") { nav.pop(); cmdLs({}); return; }
 
-    if (target == "..") {
-        nav.pop();
-        cmdLf({});
-        return;
-    }
-
-    // Resolve: try to load as F16, F22, F18, AKT, PER
-    // Check each type by prefix or direct load:
-    auto tryLoad = [&]() -> bool {
-        // Try F16:
+    // Try each entity type:
+    {
         auto p = F16::loadById(target);
         if (p) {
             nav.push({EntityType::F16, p->projectId, p->title, p->regNumber.toString()});
-            std::cout << "  -> " << Color::cyan("F16:" + p->regNumber.toString())
-                      << "  " << p->title << "\n";
-            cmdLf({});
-            return true;
+            std::cout << "  >> " << Color::cyan("F16:" + p->regNumber.toString())
+                      << "  " << Color::bold(p->title) << "\n";
+            cmdLs({}); return;
         }
-        // Try F22:
+    }
+    {
         auto t = F22::loadById(target);
         if (t) {
             nav.push({EntityType::F22, t->taskId, t->title, t->regNumber.toString()});
-            std::cout << "  -> " << Color::blue("F22:" + t->regNumber.toString())
-                      << "  " << t->title << "\n";
-            cmdLf({});
-            return true;
+            std::cout << "  >> " << Color::blue("F22:" + t->regNumber.toString())
+                      << "  " << Color::bold(t->title) << "\n";
+            cmdLs({}); return;
         }
-        // Try F18:
+    }
+    {
         auto v = F18Operation::loadById(target);
         if (v) {
             nav.push({EntityType::F18, v->operationId, v->title, v->operationId});
-            std::cout << "  -> " << Color::magenta("F18:" + v->operationId)
-                      << "  " << v->title << "\n";
-            cmdLf({});
-            return true;
+            std::cout << "  >> " << Color::magenta("F18:" + v->operationId)
+                      << "  " << Color::bold(v->title) << "\n";
+            cmdLs({}); return;
         }
-        // Try AKT:
+    }
+    {
         auto d = Folder::loadById(target);
         if (d) {
             nav.push({EntityType::AKT, d->folderId, d->title, d->folderId});
-            std::cout << "  -> " << Color::yellow("AKT:" + d->folderId)
-                      << "  " << d->title << "\n";
-            cmdLf({});
-            return true;
+            std::cout << "  >> " << Color::yellow("AKT:" + d->folderId)
+                      << "  " << Color::bold(d->title) << "\n";
+            cmdLs({}); return;
         }
-        return false;
-    };
+    }
+    printErr("Entitaet nicht gefunden: " + target);
+    std::cout << "  Tipp: ls  zeigt verfuegbare Eintraege  |  lo  zeigt Optionen\n";
+}
 
-    if (!tryLoad()) {
-        printErr("Entitaet nicht gefunden: " + target);
-        std::cout << "  Tipp: lf  zeigt verfuegbare Eintraege.\n";
+// ── Context-aware command dispatch ───────────────────────────────────────────
+//
+// These short-form commands use the current navigation context as the
+// implicit parent entity, so you don't have to type the ID every time.
+//
+// Command mapping (max 3 chars):
+//   f16 [-n/-e/-v/-s/-o/-arc]   F16 actions
+//   f22 [-n/-e/-v/-s/-ind]      F22 actions
+//   f18 [-n/-e/-v/-s/-stp]      F18 actions
+//   akt [-n/-v/-s/-obj/-url/-co/-ci/-rv] AKT actions
+//   f77 [-s/-d/-tpl]             F77 actions
+//   rev                         Revise current AKT
+//   kom [-n/-l]                  Communications
+//   note [text]                  Quick note
+//   tsk                         Tasks (F77-Aufgaben)
+//   srch <q>                    Global search
+//   sts                         Status
+//   bak                         Backup
+//   wch [N]                     Watch
+//   tree                        Tree view
+//   cal                         Calendar
+//   his                         History
+
+static std::string contextId(EntityType expected = EntityType::NONE) {
+    auto& nav = NavigationStack::instance();
+    auto cur = nav.current();
+    if (!cur.valid()) return "";
+    if (expected == EntityType::NONE || cur.type == expected) return cur.id;
+    return "";
+}
+
+void cmdContextual(const std::string& cmd, const std::vector<std::string>& args) {
+    auto& nav = NavigationStack::instance();
+    auto cur = nav.current();
+
+    // ── f16 ──────────────────────────────────────────────────────────────────
+    if (cmd == "f16") {
+        std::vector<std::string> fullArgs;
+        // No args and in F16 context → show F16 details/menu
+        if (args.empty() && cur.type == EntityType::F16) {
+            auto p = F16::loadById(cur.id);
+            if (p) { projectMenu(p); return; }
+        }
+        // -n: create new F16 (no context needed)
+        if (!args.empty() && args[0] == "-n") { cmdF16({"-n"}); return; }
+        // -e: edit current F16
+        if (!args.empty() && args[0] == "-e" && cur.type == EntityType::F16) {
+            cmdF16({cur.id}); return;
+        }
+        // -v: view current F16
+        if (!args.empty() && args[0] == "-v" && cur.type == EntityType::F16) {
+            auto p = F16::loadById(cur.id);
+            if (p) printProject(*p); return;
+        }
+        // -arc: archive current F16
+        if (!args.empty() && args[0] == "-arc" && cur.type == EntityType::F16) {
+            auto p = F16::loadById(cur.id);
+            if (p) { p->archived = true; p->update();
+                     std::cout << "  >> Archiviert.\n"; }
+            return;
+        }
+        // -o: selection list
+        if (!args.empty() && args[0] == "-o") { cmdF16({"-o"}); return; }
+        // -s: search
+        if (!args.empty() && args[0] == "-s") {
+            std::vector<std::string> sa(args.begin(), args.end());
+            cmdF16(sa); return;
+        }
+        // -note: quick note on current F16 (no ID needed)
+        if (!args.empty() && args[0] == "-note" && cur.type == EntityType::F16) {
+            std::string text;
+            for (std::size_t i=1; i<args.size(); i++) { if(!text.empty()) text+=" "; text+=args[i]; }
+            if (text.empty()) text = readLine("  Notiz: ");
+            if (text.empty()) return;
+            std::string etype = entityTypeLabel(cur.type);
+            std::transform(etype.begin(), etype.end(), etype.begin(), ::tolower);
+            auto n = Note::create(etype, cur.id, text);
+            if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+            else   printErr("Fehler beim Speichern");
+            return;
+        }
+        // Fallback
+        cmdF16(args); return;
+    }
+
+    // ── f22 ──────────────────────────────────────────────────────────────────
+    if (cmd == "f22") {
+        // -n: create under current F16 (if in F16 context)
+        if (!args.empty() && args[0] == "-n") {
+            if (cur.type == EntityType::F16) {
+                auto t = createTaskWizard(cur.id);
+                if (t) {
+                    printOk("F22 angelegt: " + t->regNumber.toString() + "  " + t->title);
+                    if (yesno("  Jetzt navigieren?"))
+                        cmdCd({t->taskId});
+                }
+            } else {
+                cmdF22({"-n"});
+            }
+            return;
+        }
+        // -e: edit current F22
+        if (!args.empty() && args[0] == "-e" && cur.type == EntityType::F22) {
+            auto t = F22::loadById(cur.id);
+            if (t) taskMenu(t);
+            return;
+        }
+        // -v: view current F22
+        if (!args.empty() && args[0] == "-v" && cur.type == EntityType::F22) {
+            auto t = F22::loadById(cur.id);
+            if (t) printTask(*t);
+            return;
+        }
+        // -ind: Nacherfassung on current F22
+        if (!args.empty() && args[0] == "-ind" && cur.type == EntityType::F22) {
+            auto t = F22::loadById(cur.id);
+            if (t) taskMenu(t);  // taskMenu has Nacherfassen option
+            return;
+        }
+        // -note: quick note on current entity
+        if (!args.empty() && args[0] == "-note") {
+            std::string text;
+            for (std::size_t i=1; i<args.size(); i++) { if(!text.empty()) text+=" "; text+=args[i]; }
+            if (text.empty()) text = readLine("  Notiz: ");
+            if (text.empty()) return;
+            std::string etype = entityTypeLabel(cur.type);
+            std::transform(etype.begin(), etype.end(), etype.begin(), ::tolower);
+            auto n = Note::create(etype, cur.id, text);
+            if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+            else   printErr("Fehler beim Speichern");
+            return;
+        }
+        // No flag: open full menu if in F22 context
+        if (args.empty() && cur.type == EntityType::F22) {
+            auto t = F22::loadById(cur.id);
+            if (t) taskMenu(t);
+            return;
+        }
+        cmdF22(args); return;
+    }
+
+    // ── f18 ──────────────────────────────────────────────────────────────────
+    if (cmd == "f18") {
+        // -n: create under current F22
+        if (!args.empty() && args[0] == "-n") {
+            std::string taskId;
+            if (cur.type == EntityType::F22) taskId = cur.id;
+            else if (cur.type == EntityType::F18) {
+                // Get parent F22 of current F18:
+                auto v = F18Operation::loadById(cur.id);
+                if (v) taskId = v->taskId;
+            }
+            if (!taskId.empty()) {
+                auto v = createF18Wizard("", taskId, "");
+                if (v) {
+                    printOk("F18 angelegt: " + v->operationId + "  " + v->title);
+                    if (yesno("  Jetzt navigieren?"))
+                        cmdCd({v->operationId});
+                }
+            } else {
+                cmdF18({"-n"});
+            }
+            return;
+        }
+        // -e: edit / open menu
+        if (!args.empty() && args[0] == "-e" && cur.type == EntityType::F18) {
+            auto v = F18Operation::loadById(cur.id);
+            if (v) f18Menu(v);
+            return;
+        }
+        // -v: view
+        if (!args.empty() && args[0] == "-v" && cur.type == EntityType::F18) {
+            auto v = F18Operation::loadById(cur.id);
+            if (v) printF18Operation(*v);
+            return;
+        }
+        // -stp: add step to current F18
+        if (!args.empty() && args[0] == "-stp" && cur.type == EntityType::F18) {
+            auto v = F18Operation::loadById(cur.id);
+            if (v) f18Menu(v);  // f18Menu has step management
+            return;
+        }
+        // -note: quick note on current entity
+        if (!args.empty() && args[0] == "-note") {
+            std::string text;
+            for (std::size_t i=1; i<args.size(); i++) { if(!text.empty()) text+=" "; text+=args[i]; }
+            if (text.empty()) text = readLine("  Notiz: ");
+            if (text.empty()) return;
+            std::string etype = entityTypeLabel(cur.type);
+            std::transform(etype.begin(), etype.end(), etype.begin(), ::tolower);
+            auto n = Note::create(etype, cur.id, text);
+            if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+            else   printErr("Fehler beim Speichern");
+            return;
+        }
+        // -note: quick note on current entity
+        if (!args.empty() && args[0] == "-note") {
+            std::string text;
+            for (std::size_t i=1; i<args.size(); i++) { if(!text.empty()) text+=" "; text+=args[i]; }
+            if (text.empty()) text = readLine("  Notiz: ");
+            if (text.empty()) return;
+            std::string etype = entityTypeLabel(cur.type);
+            std::transform(etype.begin(), etype.end(), etype.begin(), ::tolower);
+            auto n = Note::create(etype, cur.id, text);
+            if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+            else   printErr("Fehler beim Speichern");
+            return;
+        }
+        // No flag: open menu if in F18 context
+        if (args.empty() && cur.type == EntityType::F18) {
+            auto v = F18Operation::loadById(cur.id);
+            if (v) f18Menu(v);
+            return;
+        }
+        cmdF18(args); return;
+    }
+
+    // ── akt ──────────────────────────────────────────────────────────────────
+    if (cmd == "akt") {
+        // -n: create new AKT under current entity
+        if (!args.empty() && args[0] == "-n") {
+            std::string projId, taskId;
+            if (cur.type == EntityType::F16) projId = cur.id;
+            else if (cur.type == EntityType::F22) {
+                auto t = F22::loadById(cur.id);
+                if (t) { projId = t->projectId; taskId = t->taskId; }
+            } else if (cur.type == EntityType::F18) {
+                auto v = F18Operation::loadById(cur.id);
+                if (v) {
+                    auto t = F22::loadById(v->taskId);
+                    if (t) projId = t->projectId;
+                    taskId = v->taskId;
+                }
+            }
+            if (!projId.empty() || !taskId.empty()) {
+                auto doc = createDocumentWizard(projId, taskId);
+                if (doc) {
+                    printOk("AKT angelegt: " + doc->folderId + "  " + doc->title);
+                    if (yesno("  Jetzt navigieren?"))
+                        cmdCd({doc->folderId});
+                }
+            } else {
+                cmdAkt({"-n"});
+            }
+            return;
+        }
+        // -v: view/open current AKT menu
+        if (!args.empty() && (args[0] == "-v" || args[0] == "-e") && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d) documentMenu(d);
+            return;
+        }
+        // -obj: add object to current AKT
+        if (!args.empty() && args[0] == "-obj" && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d) documentMenu(d);  // documentMenu handles object addition
+            return;
+        }
+        // -co <n>: checkout object #N
+        if (!args.empty() && args[0] == "-co" && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d) documentMenu(d);
+            return;
+        }
+        // -ci: checkin
+        if (!args.empty() && args[0] == "-ci" && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d) documentMenu(d);
+            return;
+        }
+        // -url: update all URLs in current AKT
+        if (!args.empty() && args[0] == "-url" && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d) documentMenu(d);
+            return;
+        }
+        // -rv <n>: switch revision
+        if (!args.empty() && args[0] == "-rv" && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d) documentMenu(d);
+            return;
+        }
+        // -note: quick note on current AKT (no ID needed)
+        if (!args.empty() && args[0] == "-note" && cur.type == EntityType::AKT) {
+            std::string text;
+            for (std::size_t i=1; i<args.size(); i++) { if(!text.empty()) text+=" "; text+=args[i]; }
+            if (text.empty()) text = readLine("  Notiz: ");
+            if (text.empty()) return;
+            std::string etype = entityTypeLabel(cur.type);
+            std::transform(etype.begin(), etype.end(), etype.begin(), ::tolower);
+            auto n = Note::create(etype, cur.id, text);
+            if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+            else   printErr("Fehler beim Speichern");
+            return;
+        }
+        // No flag: open menu if in AKT context
+        if (args.empty() && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d) documentMenu(d);
+            return;
+        }
+        cmdAkt(args); return;
+    }
+
+    // ── f77 ──────────────────────────────────────────────────────────────────
+    if (cmd == "f77") {
+        // -s: start workflow on current entity
+        if (!args.empty() && args[0] == "-s") {
+            if (!cur.valid()) { printErr("Kein Kontext — cd <ID>  um zu navigieren"); return; }
+            std::string etype;
+            switch (cur.type) {
+                case EntityType::F22: etype = "f22"; break;
+                case EntityType::F18: etype = "f18"; break;
+                case EntityType::AKT: etype = "akt"; break;
+                default: printErr("F77 nicht unterstuetzt fuer diesen Typ"); return;
+            }
+            startWfInstanceWizard(etype, cur.id);
+            return;
+        }
+        // -d: show active workflow on current entity
+        if (!args.empty() && args[0] == "-d") {
+            if (!cur.valid()) { printErr("Kein Kontext"); return; }
+            std::string etype;
+            switch (cur.type) {
+                case EntityType::F22: etype = "f22"; break;
+                case EntityType::F18: etype = "f18"; break;
+                case EntityType::AKT: etype = "akt"; break;
+                default: printErr("Kein F77 fuer diesen Typ"); return;
+            }
+            auto wfs = F77W::loadForEntity(etype, cur.id);
+            if (wfs.empty()) { std::cout << "  (kein F77 fuer dieses Objekt)\n"; return; }
+            // Show most recent active one:
+            for (auto& wf : wfs) {
+                if (wf->status == WorkflowStatus::ACTIVE) {
+                    instanceMenu(wf->workflowId);
+                    return;
+                }
+            }
+            // No active: show most recent
+            instanceMenu(wfs.front()->workflowId);
+            return;
+        }
+        // -tpl: show templates
+        if (!args.empty() && args[0] == "-tpl") { cmdF77({"-tpl"}); return; }
+        // No args: list active workflows
+        cmdF77(args); return;
+    }
+
+    // ── rev — new revision of current AKT ────────────────────────────────────
+    if (cmd == "rev") {
+        if (cur.type != EntityType::AKT) {
+            printErr("rev nur fuer AKT verfuegbar — cd <AKT-ID>  um zu navigieren");
+            return;
+        }
+        auto d = Folder::loadById(cur.id);
+        if (d) documentMenu(d);  // documentMenu option 2 = revise
+        return;
+    }
+
+    // ── kom — communications ──────────────────────────────────────────────────
+    if (cmd == "kom") {
+        std::string ownerId, ownerType;
+        switch (cur.type) {
+            case EntityType::F16: ownerId = cur.id; ownerType = "f16"; break;
+            case EntityType::F22: ownerId = cur.id; ownerType = "f22"; break;
+            case EntityType::F18: ownerId = cur.id; ownerType = "f18"; break;
+            default: break;
+        }
+        if (ownerId.empty()) { printErr("Kein Kontext fuer Kommunikation"); return; }
+        // -l: list, anything else: open menu
+        communicationMenu(ownerId, ownerType);
+        return;
+    }
+
+    // ── note — quick note ─────────────────────────────────────────────────────
+    if (cmd == "note") {
+        if (!cur.valid()) { printErr("Kein Kontext — cd <ID>  um zu navigieren"); return; }
+        std::string text;
+        for (auto& a : args) { if (!text.empty()) text += " "; text += a; }
+        if (text.empty()) text = readLine("  Notiz: ");
+        if (text.empty()) return;
+        std::string etype = entityTypeLabel(cur.type);
+        std::transform(etype.begin(), etype.end(), etype.begin(), ::tolower);
+        auto n = Note::create(etype, cur.id, text);
+        if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+        else   printErr("Fehler beim Speichern");
+        return;
+    }
+
+    // ── tsk — F77 tasks ───────────────────────────────────────────────────────
+    if (cmd == "tsk") { cmdTasks(args); return; }
+
+    // ── srch — global search ──────────────────────────────────────────────────
+    if (cmd == "srch") {
+        std::string q;
+        for (auto& a : args) { if (!q.empty()) q += " "; q += a; }
+        if (q.empty()) q = readLine("  Suche: ");
+        cmdSearch(q);
+        return;
+    }
+
+    // ── sts — status ──────────────────────────────────────────────────────────
+    if (cmd == "sts") { cmdStatus(); return; }
+
+    // ── bak — backup ──────────────────────────────────────────────────────────
+    if (cmd == "bak") { cmdBackup(); return; }
+
+    // ── wch — watch ───────────────────────────────────────────────────────────
+    if (cmd == "wch") {
+        int interval = 30;
+        if (!args.empty()) { try { interval = std::stoi(args[0]); } catch (...) {} }
+        WatchPoller::run([](const std::string& m) {
+            std::cout << "  " << nowIso().substr(11,8) << "  " << m << "\n";
+            std::cout.flush();
+        }, interval);
+        return;
+    }
+
+    // ── tree — hierarchy view ─────────────────────────────────────────────────
+    if (cmd == "tree") {
+        std::string rootId;
+        if (!args.empty()) rootId = args[0];
+        else if (cur.type == EntityType::F16) rootId = cur.id;
+        if (!rootId.empty()) {
+            auto tree = TreeBuilder::buildF16Tree(rootId);
+            std::cout << "\n" << TreeBuilder::format(tree) << "\n";
+        } else {
+            auto all = TreeBuilder::buildAllF16();
+            if (all.empty()) { std::cout << "  (keine F16)\n"; return; }
+            std::cout << "\n  Rosenholz PM — Hierarchie\n\n";
+            std::cout << TreeBuilder::formatAll(all) << "\n";
+        }
+        return;
+    }
+
+    // ── cal — calendar ────────────────────────────────────────────────────────
+    if (cmd == "cal") {
+        std::cout << "\n  -- KALENDER --\n";
+        auto projs = F16::loadWithDates();
+        if (projs.empty()) { std::cout << "  (keine Eintraege)\n"; return; }
+        for (auto& p : projs)
+            std::cout << "  F16 " << std::left << std::setw(26) << p->regNumber.toString()
+                      << "  " << std::setw(28) << p->title.substr(0,26)
+                      << "  Start:" << fval(p->startDatePlanned)
+                      << "  Ende:" << fval(p->endDatePlanned) << "\n";
+        std::cout << "\n";
+        return;
+    }
+
+    // ── his — history ─────────────────────────────────────────────────────────
+    if (cmd == "his") {
+        auto hist = HistoryLog::instance().recent(20);
+        if (hist.empty()) { std::cout << "  (kein Verlauf)\n"; return; }
+        std::cout << "\n  Zuletzt geoeffnet:\n";
+        for (int i = 0; i < (int)hist.size(); i++) {
+            auto& r = hist[i];
+            std::cout << "  " << std::setw(3) << (i+1) << ". "
+                      << std::left << std::setw(6) << entityTypeLabel(r.type)
+                      << "  " << std::setw(28) << r.id
+                      << "  " << r.displayName.substr(0,30) << "\n";
+        }
+        std::cout << "\n  cd <ID>  zum Navigieren\n\n";
+        return;
     }
 }
 
-// ── getContextChildren: returns IDs + labels for Tab completion ──────────────
+// ── getContextChildren: returns (id, title) pairs for Tab completion ─────────
+
 std::vector<std::pair<std::string,std::string>> getContextChildren() {
     auto& nav = NavigationStack::instance();
     auto cur = nav.current();
     std::vector<std::pair<std::string,std::string>> result;
 
     if (!cur.valid()) {
-        // Top level: all F16
         for (auto& p : F16::loadAll())
             result.push_back({p->regNumber.toString(), p->title});
         return result;
     }
-
     switch (cur.type) {
     case EntityType::F16: {
-        auto tasks = F22::loadForProject(cur.id);
-        for (auto& t : tasks) result.push_back({t->regNumber.toString(), t->title});
-        auto akten = Folder::loadForEntity("f16", cur.id);
-        for (auto& d : akten) result.push_back({d->folderId, d->title});
+        for (auto& t : F22::loadForProject(cur.id))
+            result.push_back({t->regNumber.toString(), t->title});
+        for (auto& d : Folder::loadForEntity("f16", cur.id))
+            result.push_back({d->folderId, d->title});
         break;
     }
     case EntityType::F22: {
-        auto f18s = F18Operation::loadForTask(cur.id);
-        for (auto& v : f18s) result.push_back({v->operationId, v->title});
-        auto akten = Folder::loadForEntity("f22", cur.id);
-        for (auto& d : akten) result.push_back({d->folderId, d->title});
+        for (auto& v : F18Operation::loadForTask(cur.id))
+            result.push_back({v->operationId, v->title});
+        for (auto& d : Folder::loadForEntity("f22", cur.id))
+            result.push_back({d->folderId, d->title});
         break;
     }
     case EntityType::F18: {
-        auto akten = Folder::loadForEntity("f18", cur.id);
-        for (auto& d : akten) result.push_back({d->folderId, d->title});
+        for (auto& d : Folder::loadForEntity("f18", cur.id))
+            result.push_back({d->folderId, d->title});
         break;
     }
     default: break;

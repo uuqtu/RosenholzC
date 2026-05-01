@@ -36,7 +36,7 @@ using namespace Rosenholz;
 
 static void printHelp() {
     std::cout <<
-"Rosenholz PM v6.1  |  rh <BEFEHL> [ARGS]\n""\n""Navigation (Linux-Stil):\n""  cf <ID>   In Entitaet navigieren (F16/F22/F18/AKT)\n""  lf        Inhalt der aktuellen Ebene auflisten\n""  lo / -h   Kontextabhaengige Optionen anzeigen\n""  ..        Eine Ebene zurueck\n""\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 -o Auswahl | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
+"Rosenholz PM v7  |  rh <BEFEHL> [ARGS]\n""\n""Navigation (Linux-Stil):\n""  cd <ID>   In Entitaet navigieren (F16/F22/F18/AKT)\n""  ls        Inhalt der aktuellen Ebene auflisten\n""  lo / -h   Kontextabhaengige Optionen anzeigen\n""  ..        Eine Ebene zurueck\n""\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 -o Auswahl | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
 "     -tasks       | Meine Workflow-Aufgaben (F77-Tasks)\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/AKT/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""     -go <ref>    Direkt öffnen (ID / Typ:N / Seq#)\n""     -ctx [ref]   Kontext setzen (oder 'clear')  ..=zurück\n""     -hist        Verlauf zuletzt geöffneter Entitäten\n""     -tree [f16id] Hierarchiebaum F16→F22→AKT/F18\n""     -watch [N]   Polling: Benachrichtigung bei Task-Änderungen (N=Sek, Standard=30)\n""     -note <id> [Text]  Schnellnotiz ohne Menü\n""     -cal               Kalenderansicht geplanter Start-/Enddaten\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
 ;
 }
@@ -76,7 +76,11 @@ static const char* const kCommands[] = {
     "-f16", "-f22", "-f18", "-akt", "-f77",
     "-per", "-de",  "-search", "-backup", "-status", "-tasks",
     "-mfs", "-log", "-go", "-ctx", "-h", "--help",
-    "cf", "lf", "lo", "exit", "quit", "help",
+    "cd", "ls", "lo",
+    "f16", "f22", "f18", "akt", "f77",
+    "rev", "kom", "note", "tsk", "srch",
+    "sts", "bak", "wch", "tree", "cal", "his",
+    "exit", "quit", "help",
     nullptr
 };
 
@@ -166,7 +170,7 @@ static char** rhCompletion(const char* text, int /*start*/, int /*end*/) {
         } catch (...) {}
     };
 
-    if (cmd == "cf") {
+    if (cmd == "cd") {
         // Complete with context children: "ID (Title)" format
         try {
             auto children = CLI::getContextChildren();
@@ -238,10 +242,10 @@ static void runShell() {
     using_history();
 
     std::cout << "\n"
-              << Color::bold("  Rosenholz PM v6.1") + "  —  Interaktive Shell\n"
+              << Color::bold("  Rosenholz PM v7") + "  —  Interaktive Shell\n"
               << "  Tab=Vervollständigung  ↑↓=Verlauf  Ctrl+C=Abbruch  Ctrl+D=Beenden\n"
-              << "  cf <ID>=navigieren  lf=inhalt  lo/-h=hilfe  ..=zurueck  exit\n"
-              << "  Beispiel:  cf XV/F16/0001/26   lf   -f22 -n   exit\n"
+              << "  cd <ID>=navigieren  ls=inhalt  lo/-h=hilfe  ..=zurueck  exit\n"
+              << "  Beispiel:  cd XV/F16/0001/26   ls   -f22 -n   exit\n"
               << "\n";
 
     while (true) {
@@ -284,7 +288,7 @@ static void runShell() {
         if (tokens[0] == "..") {
             auto& nav = Rosenholz::NavigationStack::instance();
             nav.pop();
-            CLI::cmdLf({});  // show new location's children
+            CLI::cmdLs({});  // show new location's children
             continue;
         }
 
@@ -520,18 +524,25 @@ static void dispatch(const std::string& cmd, const std::vector<std::string>& res
         return;
     }
 
-    if (cmd == "cf") { CLI::cmdCf(rest); return; }
-    if (cmd == "lf") { CLI::cmdLf(rest); return; }
+    if (cmd == "cd") { CLI::cmdCd(rest); return; }
+    if (cmd == "ls") { CLI::cmdLs(rest); return; }
     if (cmd == "lo" || cmd == "-h" || cmd == "--help") {
-        // -h in shell context → context-sensitive help (lo), not global help
-        // Only show global help if no navigation context
         auto cur = Rosenholz::NavigationStack::instance().current();
         if (cur.valid()) { CLI::cmdLo(rest); return; }
         printHelp(); return;
     }
 
-    std::cout << "  >> Unbekannter Befehl: " << cmd << "\n"
-              << "     Tipp: lo  oder  -h  fuer Optionen, Tab fuer Vervollstaendigung.\n";
+    // Short contextual commands (≤ 3 chars, no leading dash):
+    static const char* kCtxCmds[] = {
+        "f16","f22","f18","akt","f77",
+        "rev","kom","note","tsk","srch",
+        "sts","bak","wch","tree","cal","his",nullptr};
+    for (int i = 0; kCtxCmds[i]; ++i) {
+        if (cmd == kCtxCmds[i]) { CLI::cmdContextual(cmd, rest); return; }
+    }
+
+    std::cout << "  >> Unbekannter Befehl: " << Color::red(cmd) << "\n"
+              << "     lo  oder  -h  = Optionen  |  Tab = Vervollstaendigung\n";
 }
 
 // ── main ──────────────────────────────────────────────────────

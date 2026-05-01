@@ -254,15 +254,14 @@ void cmdAkt(const std::vector<std::string>& args) {
     // Try as project ID
     auto proj = F16::loadById(args[0]);
     if (!proj) { printErr("ID nicht gefunden: " + args[0]); return; }
-
-    if (args.size() > 1) {
-        // Additional argument → create document under this project
-        auto d = createDocumentWizard("", "");
-        if (d) printOk("  >> Dokument angelegt: " + d->folderId + "  " + d->title);
-    } else {
-        // Just a project ID → browse documents for this project
-        documentBrowserMenu(proj->projectId);
-    }
+    // v7: list Akten for this project — use cd <id> to navigate
+    auto docs = Folder::loadForEntity("f16", proj->projectId);
+    if (docs.empty()) { std::cout << "  (keine Akten fuer " << args[0] << ")\n"; return; }
+    std::cout << "  Akten fuer " << proj->regNumber.toString() << ":\n";
+    for (auto& d : docs)
+        std::cout << "  " << std::left << std::setw(26) << d->folderId
+                  << "  " << d->title.substr(0,36) << "\n";
+    std::cout << "  cd <AKT-ID>  zum Navigieren\n";
 }
 
 // ── createDocumentWizard ──────────────────────────────────────
@@ -1189,44 +1188,6 @@ void documentMenu(std::shared_ptr<Folder> doc) {
         case 17: if (Config::instance().admin().enabled) dokHandleDelete(ctx); break;
         case 18: dokHandlePrint(ctx);           break;
         case 19: dokHandleRevisionSwitch(ctx);       break;
-        }
-    }
-}
-
-
-void documentBrowserMenu(const std::string& taskId, const std::string& f18OpId) {
-    while (true) {
-        std::vector<std::shared_ptr<Folder>> docs;
-        if (!taskId.empty())
-            docs = Folder::loadForEntity("f22", taskId);
-        else if (!f18OpId.empty())
-            docs = Folder::loadForEntity("f18", f18OpId);
-        else
-            docs = Folder::loadRecent(50);
-        
-        listDocuments(docs, "DOKUMENTE (" + std::to_string(docs.size()) + ")");
-        // Check parent released status
-        bool parentReleased = false;
-        if (!taskId.empty()) {
-            auto t = F22::loadById(taskId);
-            if (t) parentReleased = t->isReleased();
-            // If task not found, silently continue — docs may still be linked
-        } else if (!f18OpId.empty()) {
-            auto op = F18Operation::loadById(f18OpId);
-            if (op) parentReleased = op->isReleased();
-        }
-        if (parentReleased)
-            std::cout << "  1.Öffnen  0.Zurück  (Released — kein Neu anlegen)\n";
-        else
-            std::cout << "  1.Öffnen  2.Neu anlegen  0.Zurück\n";
-        int ch = readInt("Wahl",0,2); if (ch==0) break;
-        if (ch==1 && !docs.empty()) {
-            int pick = readInt("Nummer",1,(int)docs.size());
-            documentMenu(docs[pick-1]);
-        } else if (ch==2) {
-            if (parentReleased) { std::cout << "  >> Released — kein Neu anlegen.\n"; continue; }
-            auto d = createDocumentWizard(taskId, f18OpId);
-            if (d) documentMenu(d);
         }
     }
 }
