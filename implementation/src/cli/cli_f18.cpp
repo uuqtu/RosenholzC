@@ -164,7 +164,7 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
 
         std::cout << "  1.Ausführen | 2.Tracking | 3.Notiz\n"
                   << "  KOM: 4.listen(" << koms.size() << ") | 5.<#> | 6.neu\n"
-                  << "  DOK: 7.listen(" << docs.size() << ") | 8.<#> | 9.neu\n"
+                  << "  AKT: 7.listen(" << docs.size() << ") | 8.<#> | 9.neu\n"
                   << "  0.Zurück\n";
         int ch = readInt("Wahl", 0, 9);
         if (ch == 0) return;
@@ -206,7 +206,7 @@ static void stepMenu(Rosenholz::F18OperationStep& step,
             for (auto& d : docs)
                 std::cout << "  " << std::setw(3) << n++ << ". "
                           << d->documentId.substr(0,24) << "  " << d->title.substr(0,30) << "\n";
-            int pick = readInt("DOK #", 1, (int)docs.size());
+            int pick = readInt("AKT #", 1, (int)docs.size());
             documentMenu(docs[pick-1]);
         } else if (ch == 9) {
             auto doc = createDocumentWizard("", step.stepId);
@@ -407,7 +407,7 @@ static bool f18_dok_open(std::shared_ptr<F18Operation> v) {
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << std::left << std::setw(26) << d->documentId.substr(0,24)
                   << "  " << d->title.substr(0,30) << "\n";
-    int pick = readInt("DOK #", 1, (int)docs.size());
+    int pick = readInt("AKT #", 1, (int)docs.size());
     documentMenu(docs[pick-1]);
     return true;
 }
@@ -447,9 +447,9 @@ static const f18MenuFn f18MenuTable[13] = {
     f18_kom_list,  // 6 KOM listen
     f18_kom_open,  // 7 KOM <#>
     f18_kom_new,   // 8 KOM+
-    f18_dok_list,  // 9 DOK listen
-    f18_dok_open,  // 10 DOK <#>
-    f18_dok_new,   // 11 DOK+
+    f18_dok_list,  // 9 AKT listen
+    f18_dok_open,  // 10 AKT <#>
+    f18_dok_new,   // 11 AKT+
     f18_f77,       // 12 F77
 };
 
@@ -464,7 +464,7 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
             << "  1.Bearbeiten | 2.Notiz+\n"
             << "  F18S: 3.listen | 4.<#> | 5.neu\n"
             << "  KOM:  6.listen | 7.<#> | 8.neu\n"
-            << "  DOK:  9.listen | 10.<#> | 11.neu\n"
+            << "  AKT:  9.listen | 10.<#> | 11.neu\n"
             << "  12.F77  0.Zurück\n";
         int ch = readInt("Wahl", 0, 12);
         if (ch == 0) break;

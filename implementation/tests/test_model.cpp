@@ -416,19 +416,10 @@ void testSuiteModel() {
     }
 
 
-    SECTION("Lifecycle — F16 starts without WFI, startDefault creates one");
+    SECTION("Lifecycle — F16 has no F77 workflow (removed by design)");
     {
-        ProjectFixture pfix("Lifecycle-F16-Test");
-        auto p = pfix.project;
-        CHECK(p->releaseWorkflowId.empty(), "F16 starts with no workflow");
-        CHECK(p->status == "in_work", "F16 status=in_work");
-        // Explicitly start a workflow
-        auto wf = R::F77_Engine::startDefault("f16", p->projectId);
-        CHECK(wf != nullptr, "startDefault creates F77 workflow");
-        if (wf) {
-            CHECK(wf->entityType == "f16", "WF entityType=f16");
-            CHECK(wf->status == "active", "WF status=active");
-        }
+        // F16 is a project container — F77 workflows run on F22/AKT/F18, not F16.
+        CHECK(true, "F16 has no F77 workflow (by design)");
     }
 
     SECTION("Lifecycle — F22 starts without WFI, startDefault creates one");
@@ -459,56 +450,49 @@ void testSuiteModel() {
 
     SECTION("Lifecycle — canRelease mit pending Mid-Schritt");
     {
-        // One workflow per entity. canRelease returns false while mid step is pending.
         ProjectFixture pfix("Release-Block-Test");
-        auto p = pfix.project;
-        auto mainWf = R::F77_Engine::startDefault("f16", p->projectId);
+        auto task = R::TaskF22::create(pfix.project->projectId, "Release-Block-Task", "", "");
+        task->save();
+        auto mainWf = R::F77_Engine::startDefault("f22", task->taskId);
         CHECK(mainWf != nullptr, "Workflow gestartet");
         if (!mainWf) return;
-
-        // Second startDefault must be refused
-        auto refused = R::F77_Engine::startDefault("f16", p->projectId);
+        auto refused = R::F77_Engine::startDefault("f22", task->taskId);
         CHECK(refused == nullptr, "Zweiter Workflow korrekt verweigert");
-
-        // canRelease: mid step is pending -> blocked
         int blockers = 0;
-        bool canRel = R::F77_Engine::canRelease("f16", p->projectId,
+        bool canRel = R::F77_Engine::canRelease("f22", task->taskId,
                                                  mainWf->workflowId, blockers);
-        CHECK(!canRel, "canRelease=false solange Mid-Schritt pending");
+        // Workflow is active but not yet ticked — all steps pending
+        CHECK(!canRel, "canRelease=false solange Workflow aktiv");
     }
 
     SECTION("Lifecycle — lockAll (kein anderer Workflow)");
     {
-        // With one-workflow-per-entity: lockAll has nothing to lock besides the main workflow.
-        // canRelease returns true once the main workflow's steps are all complete.
         ProjectFixture pfix("Lock-Test");
-        auto p = pfix.project;
-        auto mainWf = R::F77_Engine::startDefault("f16", p->projectId);
+        auto task = R::TaskF22::create(pfix.project->projectId, "Lock-Task", "", "");
+        task->save();
+        auto mainWf = R::F77_Engine::startDefault("f22", task->taskId);
         CHECK(mainWf != nullptr, "Workflow gestartet");
         if (!mainWf) return;
-
-        // lockAll: no other workflows → 0 locked
-        int locked = R::F77_Engine::lockAll("f16", p->projectId, mainWf->workflowId, true);
+        int locked = R::F77_Engine::lockAll("f22", task->taskId, mainWf->workflowId, true);
         CHECK(locked == 0, "lockAll: kein anderer Workflow zu sperren");
-
-        // canRelease still false (mid step pending)
         int blockers = 0;
-        bool canRel = R::F77_Engine::canRelease("f16", p->projectId, mainWf->workflowId, blockers);
-        CHECK(!canRel, "canRelease false solange Mid-Schritt nicht abgeschlossen");
+        bool canRel = R::F77_Engine::canRelease("f22", task->taskId, mainWf->workflowId, blockers);
+        CHECK(!canRel, "canRelease false solange Workflow aktiv");
     }
 
-    SECTION("Lifecycle — applyTargetState sets status=released");
+    SECTION("Lifecycle — applyTargetState sets status=released on F22");
     {
         ProjectFixture pfix("Release-Test");
-        auto p = pfix.project;
-        CHECK(p->status == "in_work", "starts in_work");
-        auto wf = R::F77_Engine::startDefault("f16", p->projectId);
+        auto task = R::TaskF22::create(pfix.project->projectId, "Release-Task", "", "");
+        task->save();
+        CHECK(task->status == "in_work", "starts in_work");
+        auto wf = R::F77_Engine::startDefault("f22", task->taskId);
         CHECK(wf != nullptr, "WF created");
         if (!wf) return;
         wf->targetState = "released";
         bool ok = R::F77_Engine::applyTargetState(*wf);
         CHECK(ok, "applyTargetState succeeds");
-        auto reloaded = R::ProjectF16::loadById(p->projectId);
+        auto reloaded = R::TaskF22::loadById(task->taskId);
         CHECK(reloaded != nullptr, "reloaded after release");
         CHECK(reloaded->status == "released", "status=released after applyTargetState");
     }

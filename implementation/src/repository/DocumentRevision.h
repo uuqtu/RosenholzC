@@ -82,7 +82,7 @@ namespace DocRevState {
 class DocumentRevision {
 public:
     // ── Identity ──────────────────────────────────────────────
-    std::string documentId;     // XV/DOK/…  (same as parent document)
+    std::string documentId;     // XV/AKT/…  (same as parent document)
     uint32_t    rev         {1}; // revision counter, starts at 1
 
     // ── Lineage ───────────────────────────────────────────────

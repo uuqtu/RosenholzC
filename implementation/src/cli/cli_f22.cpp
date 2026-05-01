@@ -292,7 +292,7 @@ static bool f22_dok_open(std::shared_ptr<TaskF22> t) {
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << std::left << std::setw(26) << d->documentId.substr(0,24)
                   << "  " << d->title.substr(0,30) << "\n";
-    int pick = readInt("DOK #", 1, (int)docs.size());
+    int pick = readInt("AKT #", 1, (int)docs.size());
     documentMenu(docs[pick-1]);
     return true;
 }
@@ -432,15 +432,9 @@ static bool f22_nacherfassen(std::shared_ptr<TaskF22> t) {
         }
 
         // Ensure the Akte has an inWork revision:
-        auto cur = Rosenholz::DocumentRevision::currentRevision(targetDoc->documentId);
+        auto cur = targetDoc->ensureWorkingRevision();
         if (!cur) {
-            // Create revision 1:
-            auto newRev = Rosenholz::DocumentRevision::createRevision(targetDoc->documentId, 1);
-            if (!newRev) { std::cout << "  >> Revision konnte nicht angelegt werden.\n"; continue; }
-            cur = newRev;
-        }
-        if (cur->revState != Rosenholz::RevState::IN_WORK) {
-            std::cout << "  >> Akte ist nicht in_work — Datei kann nicht hinzugefuegt werden.\n";
+            std::cout << "  >> Akte hat keine bearbeitbare Revision.\n";
             continue;
         }
 
@@ -476,6 +470,8 @@ static const tskMenuFn tskMenuTable[13] = {
 };
 
 void taskMenu(std::shared_ptr<TaskF22> t) {
+    Rosenholz::NavigationStack::instance().push({
+        Rosenholz::EntityType::F22, t->taskId, t->title, t->regNumber.toString()});
     while (true) {
         if (auto fresh = TaskF22::loadById(t->taskId)) *t = *fresh;
         printTask(*t);
@@ -487,8 +483,10 @@ void taskMenu(std::shared_ptr<TaskF22> t) {
             << "  F18: 5.listen | 6.<#> | 7.neu\n"
             << "  KOM: 8.listen | 9.<#> | 10.neu\n"
             << "  11.F77  | 12.Nacherfassen\n"
+            << "  13.Notizen\n"
             << "  0.Zurück\n";
-        int ch = readInt("Wahl", 0, 12);
+        int ch = readInt("Wahl", 0, 13);
+        if (ch == 13) { notesMenu("f22", t->taskId, t->mfsDir()); continue; }
         if (ch == 0) break;
         if (ch >= 1 && ch <= 12 && tskMenuTable[ch])
             if (!tskMenuTable[ch](t)) break;

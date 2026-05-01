@@ -192,6 +192,7 @@ public:
     //
     // Returns: saved F18Operation with generated vorgangId
     // ------------------------------
+    static int count();
     static std::shared_ptr<F18Operation> create(
         const std::string& taskId,
         const std::string& title,

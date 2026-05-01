@@ -172,63 +172,6 @@ static void editMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
     else             std::cout << "  >> Fehler beim Speichern.\n";
 }
 
-// ── mainWorkflowMenu (static helper for projectMenu) ──────────
-//
-// Shows the F77 release workflow sub-menu for a project.
-// Called from projectMenu option 6 (F77-Workflow).
-
-static void mainWorkflowMenu(std::shared_ptr<Rosenholz::ProjectF16> p) {
-    using namespace Rosenholz;
-    while (true) {
-        if (auto fresh = ProjectF16::loadById(p->projectId)) *p = *fresh;
-        hdr("F77 — " + p->projectId);
-        std::cout << "  Status       : " << p->status << "\n";
-
-        if (p->releaseWorkflowId.empty()) {
-            // No workflow yet — offer to start one (always asks targetState via wizard)
-            std::cout << "  Kein F77 aktiv.\n";
-            std::cout << "  1. F77 starten...    0. Zurück\n";
-            int ch = readInt("Wahl", 0, 1);
-            if (ch == 0) return;
-            std::string wid = startWfInstanceWizard("f16", p->projectId);
-            if (!wid.empty()) instanceMenu(wid);
-            return;
-        }
-
-        // Workflow exists
-        auto wf = F77_Workflow::loadById(p->releaseWorkflowId);
-        std::string wfStatus = wf ? wf->status : "unbekannt";
-        std::cout << "  F77-ID  : " << p->releaseWorkflowId.substr(0, 36) << "\n";
-        std::cout << "  WF-Status    : " << wfStatus << "\n";
-
-        if (wfStatus == "active") {
-            int blockers = 0;
-            F77_Engine::canRelease("f16", p->projectId, p->releaseWorkflowId, blockers);
-            if (blockers > 0)
-                std::cout << "  ! " << blockers << " Schritte blockieren Freigabe\n";
-            else
-                std::cout << "  ✓ Freigabe moeglich\n";
-            std::cout << "  1. F77 öffnen    0. Zurück\n";
-            int ch = readInt("Wahl", 0, 1);
-            if (ch == 1) instanceMenu(p->releaseWorkflowId);
-        } else if (wfStatus == "completed" || wfStatus == "cancelled") {
-            // Completed or cancelled: allow starting a new one
-            std::cout << "  (abgeschlossen oder abgebrochen)\n";
-            std::cout << "  1. Neuen F77 starten...    0. Zurück\n";
-            int ch = readInt("Wahl", 0, 1);
-            if (ch == 1) {
-                std::string wid = startWfInstanceWizard("f16", p->projectId);
-                if (!wid.empty()) instanceMenu(wid);
-            }
-        } else {
-            std::cout << "  1. F77 öffnen    0. Zurück\n";
-            int ch = readInt("Wahl", 0, 1);
-            if (ch == 1) instanceMenu(p->releaseWorkflowId);
-        }
-        return;
-    }
-}
-
 // ── createProjectWizard ───────────────────────────────────────
 //
 // Step-by-step wizard for new F16 projects.
@@ -377,7 +320,7 @@ static bool f16_dok_open(std::shared_ptr<ProjectF16> p) {
         std::cout << "  " << std::setw(3) << n++ << ". "
                   << std::left << std::setw(26) << d->documentId.substr(0,24)
                   << "  " << d->title.substr(0,30) << "\n";
-    int pick = readInt("DOK #", 1, (int)docs.size());
+    int pick = readInt("AKT #", 1, (int)docs.size());
     documentMenu(docs[pick-1]);
     return true;
 }
@@ -386,7 +329,7 @@ static bool f16_dok_new(std::shared_ptr<ProjectF16> p) {
     if (!p->canAddChildren()) {
         std::cout << "  >> " << opResultMessage(p->isWorkflowComplete()
             ? OperationResult::ENTITY_WF_COMPLETE
-            : OperationResult::ENTITY_RELEASED) << " — kein neues DOK.\n";
+            : OperationResult::ENTITY_RELEASED) << " — kein neues AKT.\n";
         return true;
     }
     auto doc = createDocumentWizardGuided();
@@ -412,28 +355,26 @@ static bool f16_kom_new(std::shared_ptr<ProjectF16> p) {
     return true;
 }
 
-static bool f16_f77(std::shared_ptr<ProjectF16> p) {
-    mainWorkflowMenu(p);
-    return true;
-}
 
 using prjMenuFn = bool(*)(std::shared_ptr<ProjectF16> p);
-static const prjMenuFn prjMenuTable[12] = {
+static const prjMenuFn prjMenuTable[11] = {
     nullptr,        // 0
     f16_edit,       // 1 Bearbeiten
     f16_f22_list,   // 2 F22 listen
     f16_f22_open,   // 3 F22 <#>
     f16_f22_new,    // 4 F22+
-    f16_dok_list,   // 5 DOK listen
-    f16_dok_open,   // 6 DOK <#>
-    f16_dok_new,    // 7 DOK+
+    f16_dok_list,   // 5 AKT listen
+    f16_dok_open,   // 6 AKT <#>
+    f16_dok_new,    // 7 AKT+
     f16_kom_list,   // 8 KOM listen
     f16_kom_open,   // 9 KOM <#>
     f16_kom_new,    // 10 KOM+
-    f16_f77,        // 11 F77
 };
 
 void projectMenu(std::shared_ptr<ProjectF16> p) {
+    // Push to navigation stack
+    Rosenholz::NavigationStack::instance().push({
+        Rosenholz::EntityType::F16, p->projectId, p->title, p->regNumber.toString()});
     while (true) {
         if (auto fresh = ProjectF16::loadById(p->projectId)) *p = *fresh;
         printProject(*p);
@@ -444,10 +385,10 @@ void projectMenu(std::shared_ptr<ProjectF16> p) {
             << "  F22: 2.listen | 3.<#> | 4.neu\n"
             << "  AKT: 5.listen | 6.<#> | 7.neu\n"
             << "  KOM: 8.listen | 9.<#> | 10.neu\n"
-            << "  11.F77  0.Zurück\n";
-        int ch = readInt("Wahl", 0, 11);
+            << "  0.Zurück\n";
+        int ch = readInt("Wahl", 0, 10);
         if (ch == 0) break;
-        if (ch >= 1 && ch <= 11 && prjMenuTable[ch])
+        if (ch >= 1 && ch <= 10 && prjMenuTable[ch])
             if (!prjMenuTable[ch](p)) break;
     }
 }

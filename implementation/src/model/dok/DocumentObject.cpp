@@ -1,6 +1,7 @@
 // ============================================================
 // DocumentObject.cpp
 // ============================================================
+#include <regex>
 #include "DocumentObject.h"
 #ifdef _WIN32
 #  include <windows.h>
@@ -401,7 +402,10 @@ std::string DocumentObject::checkoutObject(const std::string& destDir) {
 
 // ── Object-level checkin ──────────────────────────────────────
 OperationResult DocumentObject::checkinObject(const std::string& srcPath) {
+    // Fall back: use mfsPath if neither srcPath nor checkoutPath is set
     std::string path = srcPath.empty() ? checkoutPath : srcPath;
+    if (path.empty() && !mfsPath.empty() && FileOps::fileExists(mfsPath))
+        path = mfsPath; // use current MFS location as source
     if (path.empty() || !FileOps::fileExists(path)) {
         LOG_ERROR("[DocObject] checkinObject: file not found: " + path);
         return OperationResult::DOC_FILE_NOT_FOUND;
@@ -531,11 +535,20 @@ std::vector<std::string> DocumentObject::scanForUnregisteredFiles(
             knownPaths.insert(FileOps::joinPath(revDir, o->mfsFilename));
     }
 
-    // List all files in the revision folder
-    auto files = FileOps::listFiles(revDir, false);
+    // List all files in the revision folder (recursive to preserve structure)
+    auto files = FileOps::listFiles(revDir, true);
     for (auto& f : files) {
-        // Skip the key file itself
-        if (FileOps::baseName(f) == "_SCHLUESSEL.txt") continue;
+        std::string base = FileOps::baseName(f);
+        if (base.empty()) continue;
+        // Skip auto-generated key/index files:
+        if (base == "_SCHLUESSEL.txt") continue;
+        if (base == "owner_key.txt") continue;
+        // Skip files that end with the doc-ID pattern (e.g. XV_AKT_0001_26.txt)
+        if (base.size() > 4 && base.substr(base.size()-4) == ".txt") {
+            // Check if the stem matches a Rosenholz ID pattern (XV_XXX_NNNN_YY)
+            static const std::regex rz_id(R"(^[A-Z]{2}_[A-Z]+_\d+_\d+\.txt$)");
+            if (std::regex_match(base, rz_id)) continue;
+        }
         if (knownPaths.count(f) == 0)
             result.push_back(f);
     }

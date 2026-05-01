@@ -27,7 +27,7 @@ class DocumentObject {
 public:
     // ── Identity ──────────────────────────────────────────────
     std::string objectId;       ///< 5-char alphanumeric, unique per document
-    std::string documentId;     ///< XV/DOK/0001/26
+    std::string documentId;     ///< XV/AKT/0001/26
     uint32_t    rev         {0};
     std::string originalName;   ///< filename as uploaded (display name)
     std::string mfsFilename;    ///< MFS filename: {docRegNr}_{objectId}_r{rev}.{ext}

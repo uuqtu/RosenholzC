@@ -103,6 +103,13 @@ set(MODEL_SOURCES
     src/model/f16/ProjectF16.cpp
     src/model/f22/TaskF22.cpp
     src/model/dok/Document.cpp
+    src/model/Utils.cpp
+    src/model/Note.cpp
+    src/model/WatchPoller.cpp
+    src/model/StatusColor.cpp
+    src/model/TreeBuilder.cpp
+    src/model/HistoryLog.cpp
+    src/model/NavigationContext.cpp
     src/model/dok/DocumentObject.cpp
     src/model/f18/F18Operation.cpp
     src/model/f18/F18OperationStep.cpp

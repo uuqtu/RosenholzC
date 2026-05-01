@@ -133,7 +133,7 @@ void cmdMfs(const std::vector<std::string>& args) {
     }
     if (auto d = Document::loadById(id)) {
         bool ok = MFSWriter::writeDocument(*d, root);
-        printOk(ok ? "  >> DOK " + id + " geschrieben." : "  >> Fehler.");
+        printOk(ok ? "  >> AKT " + id + " geschrieben." : "  >> Fehler.");
         return;
     }
     if (auto wf = F77_Workflow::loadById(id)) {
@@ -267,7 +267,7 @@ void globalSearch(const std::string& query) {
 // ─────────────────────────────────────────────────────────────────────────────
 void cmdIndexDokFolders() {
     using namespace Rosenholz;
-    hdr("INDEX DOK-ORDNER — Nicht registrierte Dateien suchen");
+    hdr("INDEX AKT-ORDNER — Nicht registrierte Dateien suchen");
 
     // Load all documents
     auto docs = Document::loadRecent(500);

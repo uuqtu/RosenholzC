@@ -2,19 +2,16 @@
 // TaskF22.cpp  —  Task entity implementation
 // ============================================================
 
-#include "../../mfs/MFSWriter.h"
+#include <regex>
 #include "TaskF22.h"
-#include "../dok/Document.h"
-#include "../dok/DocumentObject.h"
-#include "../../repository/DocumentRevision.h"
+#include "../../core/Config.h"
 #include "../../core/FileOps.h"
-#include "../dok/Document.h"
-#include "../../core/OperationResult.h"
-#include "../../workflow/F77Workflow.h"
 #include "../../core/Database.h"
 #include "../../workflow/F77Workflow.h"
+#include "../dok/Document.h"
+#include "../../mfs/MFSWriter.h"
+#include "../../core/FileOps.h"
 #include "../../core/Logger.h"
-#include "../Utils.h"
 #include "../../core/Repository.h"
 #ifndef _WIN32
 #endif
@@ -380,7 +377,7 @@ std::string TaskF22::mfsSchluesselText() const {
       << "  F16     : " << projectId << "\n";
     auto docs = Rosenholz::Document::loadForEntity("f22", taskId);
     if (!docs.empty()) {
-        s << "  DOK     :";
+        s << "  AKT     :";
         for (auto& d : docs) s << " " << d->documentId;
         s << "\n";
     }
@@ -388,50 +385,58 @@ std::string TaskF22::mfsSchluesselText() const {
     return s.str();
 }
 
+// ── TaskF22::mfsDir ──────────────────────────────────────────────────────
+std::string TaskF22::mfsDir() const {
+    const std::string& root = Config::instance().mfsPath();
+    if (root.empty()) return "";
+    return FileOps::joinPath(FileOps::joinPath(root, "F22"),
+                             sanitiseRegNr(regNumber.toString()));
+}
+
 // ── TaskF22::scanMfsForUnregistered ──────────────────────────────────────
 // Scan the MFS folder for this task for files not registered as Akte objects.
 // Returns (filePath, suggestedTitle) pairs for each unregistered file.
 std::vector<std::pair<std::string,std::string>>
 TaskF22::scanMfsForUnregistered() const {
-    const std::string& mfsRoot = Config::instance().mfsPath();
-    // F22 folder: mfs/F22/<regNr>/
-    std::string taskDir = FileOps::joinPath(
-        FileOps::joinPath(mfsRoot, "F22"),
-        sanitiseRegNr(regNumber.toString()));
-
+    std::string taskDir = mfsDir();
     if (!FileOps::dirExists(taskDir)) return {};
 
-    // Collect all registered object paths (from all Akten linked to this task):
-    std::set<std::string> knownPaths;
-    auto docs = Document::loadForEntity("f22", taskId);
-    for (auto& d : docs) {
-        auto cur = DocumentRevision::currentRevision(d->documentId);
-        if (!cur) continue;
-        auto objs = DocumentObject::loadForRevision(d->documentId, cur->rev);
-        for (auto& o : objs) {
-            if (!o->mfsPath.empty()) knownPaths.insert(o->mfsPath);
-            if (!o->mfsFilename.empty())
-                knownPaths.insert(FileOps::joinPath(taskDir, o->mfsFilename));
-        }
-    }
+    // Delegate AKT-layer knowledge to Document — F22 does not know AKT internals:
+    auto knownPaths = Document::knownMfsPaths("f22", taskId);
 
     // Scan task folder for any files not in knownPaths:
     std::vector<std::pair<std::string,std::string>> result;
     auto files = FileOps::listFiles(taskDir, true); // recursive
     for (auto& f : files) {
         std::string base = FileOps::baseName(f);
-        // Skip metadata files:
+        if (base.empty()) continue;
+        // Skip auto-generated metadata files:
         if (base == "_SCHLUESSEL.txt" || base == "00_KARTE.txt" ||
-            base == "owner_key.txt"   || base.empty()) continue;
+            base == "00_DECKBLATT.txt" || base == "owner_key.txt") continue;
+        // Skip Schlüssel-pattern files (XV_XXX_NNNN_YY.txt):
+        if (base.size() > 4 && base.substr(base.size()-4) == ".txt") {
+            static const std::regex rz_id(R"(^[A-Z]{2}_[A-Z]+_\d+_\d+\.txt$)");
+            if (std::regex_match(base, rz_id)) continue;
+        }
         if (knownPaths.count(f)) continue;
-        // Suggest a title from the filename (strip extension, replace _ with space):
+        // Preserve relative path from taskDir as the display name:
+        std::string relPath = (f.size() > taskDir.size() + 1)
+            ? f.substr(taskDir.size() + 1) : base;
+        // Suggested title: stem of filename, spaces
         std::string stem = base;
         auto dot = stem.rfind('.');
         if (dot != std::string::npos) stem = stem.substr(0, dot);
         for (char& c : stem) if (c == '_' || c == '-') c = ' ';
-        result.emplace_back(f, stem);
+        // fileName = relPath so user sees "subdir/file.pdf" not just "file.pdf"
+        result.emplace_back(f, relPath);
     }
     return result;
+}
+
+
+int TaskF22::count() {
+    auto* d = DatabasePool::instance().get("f22");
+    return d ? d->rowCount("tasks") : 0;
 }
 
 } // namespace Rosenholz

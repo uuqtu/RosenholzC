@@ -114,6 +114,7 @@ public:
     OperationResult update();
 
     // ── Factory ───────────────────────────────────────────
+    static int count();
     static std::shared_ptr<TaskF22> create(
         const std::string& projectId,
         const std::string& title,
@@ -124,6 +125,8 @@ public:
 
     /// Scan this task's MFS folder for files not registered as Akte objects.
     /// Returns (filePath, suggestedTitle) pairs.
+    /// Canonical MFS folder for this F22 task (mfs/F22/<sanitised-reg>/)
+    std::string mfsDir() const;
     std::vector<std::pair<std::string,std::string>> scanMfsForUnregistered() const;
     static std::shared_ptr<TaskF22> loadById(const std::string& taskId);
     static std::vector<std::shared_ptr<TaskF22>> loadForProject(const std::string& projectId);

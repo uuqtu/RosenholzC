@@ -41,6 +41,17 @@ enum class SystemAction {
     SCAN_UNREGISTERED_FILES, // Scan entity MFS folder; spawn F77_Task per loose file
 };
 
+// ── WorkflowStatus / StepStatus ──────────────────────────────
+enum class WorkflowStatus { ACTIVE = 0, COMPLETED, LOCKED, CANCELLED };
+std::string    toString(WorkflowStatus s);
+WorkflowStatus workflowStatusFrom(const std::string& s);
+
+enum class StepStatus {
+    PENDING = 0, IN_PROGRESS, APPROVED, REJECTED, SKIPPED, CANCELLED };
+std::string toString(StepStatus s);
+StepStatus  stepStatusFrom(const std::string& s);
+
+
 struct F77_WorkflowTemplateStep {
     // Mirror of F77_WorkflowStep.systemAction — set when defining the template.
     std::string tplStepId;
@@ -52,11 +63,6 @@ struct F77_WorkflowTemplateStep {
     bool        isFinal            { false };
     std::string executionMode      { "sequential" }; // sequential|parallel
     std::string predecessorTplStepIds;  // comma-sep tpl_step_ids
-
-    // Wait condition: before this step starts, a separate F18_Operation
-    // of the given type must be completed.
-    std::string waitConditionF18Type;   // e.g. "measure","qualityGate" or ""
-    std::string waitConditionTitle;     // title for the auto-spawned F18 Operation
 
     std::string requiredRole;
     int         slaHours           { 0 };
@@ -80,7 +86,7 @@ struct F77_WorkflowTemplate {
     std::string name;
     std::string version         { "1.0" };
     std::string description;
-    std::string entityTypes;    // comma-sep: "f16,f22,f18,dok"
+    std::string entityTypes;    // comma-sep: "f16,f22,f18,akt"
     std::string targetState     { "released" }; // in_work|pre_released|released|locked|closed
     std::string status          { "active" };   // active|inactive
     std::string createdBy;
@@ -104,7 +110,7 @@ struct F77_WorkflowTemplate {
     static std::shared_ptr<F77_WorkflowTemplate> create(
         const std::string& name,
         const std::string& targetState = "released",
-        const std::string& entityTypes = "f16,f22,f18,dok");
+        const std::string& entityTypes = "f16,f22,f18,akt");
     static std::shared_ptr<F77_WorkflowTemplate> loadById(const std::string& id);
     static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadAll();
     static std::vector<std::shared_ptr<F77_WorkflowTemplate>> loadForEntityType(
@@ -130,13 +136,6 @@ struct F77_WorkflowOperation {
     std::string predecessorsToString() const;
     static std::vector<std::string> predecessorsFromString(const std::string& csv);
 
-    // The F18_Operation that executes this step (NULL for Init/End)
-    std::string f18OperationId;
-
-    // Optional wait-condition F18_Operation that must complete before this step starts
-    std::string waitF18OperationId;
-    std::string waitConditionF18Type;
-
     std::string status          { "pending" }; // pending|in_progress|approved|rejected|skipped|cancelled
     bool        autoApprove     { false };
     bool        requiresComment { false };
@@ -151,9 +150,6 @@ struct F77_WorkflowOperation {
     bool isComplete() const {
         return status == "approved" || status == "rejected" || status == "skipped";
     }
-
-    /// Sync status from the linked F18_Operation.
-    void syncFromF18();
 
     /// Check if all predecessor steps are complete.
     bool canStart(const std::vector<F77_WorkflowOperation>& allSteps) const;
@@ -177,7 +173,7 @@ struct F77_Workflow {
     std::string workflowId;
     std::string templateId;     // soft ref only; template may have changed
     std::string templateName;   // snapshot of name at start
-    std::string entityType;     // f16|f22|f18|dok
+    std::string entityType;     // f16|f22|f18|akt
     std::string entityId;
     std::string targetState     { "released" }; // snapshot from template
     std::string status          { "active" };   // active|completed|cancelled|locked
@@ -274,10 +270,32 @@ public:
         const std::string& releaseWorkflowId,
         bool confirmLock);
 
+
+// ── OperationSpec ─────────────────────────────────────────────────────────
+// Declarative description of one F77_WorkflowOperation in the default chain.
+// Adding a new system step = adding one OperationSpec to the entity's list.
+struct OperationSpec {
+    std::string  title;
+    bool         isSystem    { false };
+    SystemAction action      { SystemAction::NONE };
+    bool         autoApprove { true };
+    // If empty: chains from previous step; explicit overrides possible in builder
+    std::string  predecessorHint;
+};
+
+/// Return the default operation chain for a given entity type.
+/// This is the single place to add/remove/reorder system steps per entity.
+static std::vector<OperationSpec> defaultOperations(const std::string& entityType);
+
     /// Add a manual F77_WorkflowOperation to a running workflow.
     /// Creates a F77_Task (not an F18) as the actionable work item.
     /// The operation blocks End until the F77_Task is closed.
     /// Returns the new stepId, or empty string on failure.
+    /// Scan an entity's MFS folder for unregistered files.
+    /// Each entity type knows its own scan logic. F77 does not know internals.
+    static std::vector<std::pair<std::string,std::string>>
+        scanLooseFiles(const std::string& entityType, const std::string& entityId);
+
     static std::string addManualOperation(
         F77_Workflow&      wf,
         const std::string& title,

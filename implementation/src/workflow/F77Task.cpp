@@ -5,7 +5,6 @@
 #include "../core/Logger.h"
 #include "../core/RegNumber.h"
 #include "../model/Utils.h"
-#include "F77Workflow.h"
 
 namespace Rosenholz {
 
@@ -78,20 +77,16 @@ OperationResult F77_Task::complete(const std::string& note) {
     status         = "completed";
     completedAt    = nowIso();
     completionNote = note;
-    auto res       = update();
-    if (opOk(res) && !operationId.empty())
-        checkOperationComplete(operationId);
-    return res;
+    return update();
+    // Note: caller (CLI/engine) should call F77_Engine::tick() after close
+    // to advance the workflow. F77Task does not call the engine directly.
 }
 
 OperationResult F77_Task::skip(const std::string& reason) {
     status         = "skipped";
     completedAt    = nowIso();
     completionNote = reason;
-    auto res       = update();
-    if (opOk(res) && !operationId.empty())
-        checkOperationComplete(operationId);
-    return res;
+    return update();
 }
 
 OperationResult F77_Task::cancel() {
@@ -199,46 +194,13 @@ std::shared_ptr<F77_Task> F77_Task::create(
     return t;
 }
 
-// ── Auto-complete operation when all tasks are done ───────────
+// ── F77_Task::checkOperationComplete ─────────────────────────────────────
+// Pure query — no engine calls. Caller (tick) advances the workflow.
 bool F77_Task::checkOperationComplete(const std::string& operationId) {
     auto tasks = loadForOperation(operationId);
-    for (auto& t : tasks) {
-        if (t->isOpen()) return false; // still has open tasks
-    }
-    // All tasks closed → auto-complete the F77 operation (step)
-    // Load the workflow containing this operation and fire it:
-    auto* f77db = DatabasePool::instance().get("f77");
-    if (!f77db) return false;
-    auto rows = f77db->query(
-        "SELECT workflow_id FROM f77_workflow_steps WHERE step_id=? LIMIT 1;",
-        {BindParam::text(operationId)});
-    if (rows.empty()) return false;
-
-    std::string wfId;
-    auto it = rows[0].find("workflow_id");
-    if (it != rows[0].end()) wfId = it->second;
-    if (wfId.empty()) return false;
-
-    auto wf = F77_Workflow::loadById(wfId);
-    if (!wf) return false;
-
-    LOG_INFO("[F77Task] All tasks for operation " + operationId +
-             " closed — auto-approving operation and ticking workflow " + wfId);
-    // Find if this is a SCAN step (system) or a manual step:
-    wf->loadSteps();
-    bool isScanStep = false;
-    for (auto& s : wf->steps)
-        if (s.stepId == operationId && s.systemAction == SystemAction::SCAN_UNREGISTERED_FILES)
-            { isScanStep = true; break; }
-
-    if (isScanStep) {
-        // SCAN step: just tick — tick will re-check tasks and approve the step
-        F77_Engine::tick(*wf);
-    } else {
-        // Manual operation: fire it as approved, then tick advances
-        F77_Engine::fireStep(*wf, operationId, "approved", "system",
-                             "All F77 tasks completed");
-    }
+    if (tasks.empty()) return false;
+    for (auto& t : tasks) if (t->isOpen()) return false;
+    LOG_INFO("[F77Task] All tasks closed for operation: " + operationId);
     return true;
 }
 

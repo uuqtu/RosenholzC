@@ -19,8 +19,10 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <algorithm>
 #include <cstring>
 #include <csignal>
+#include "../model/NavigationContext.h"
 #include <signal.h>
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -34,8 +36,8 @@ using namespace Rosenholz;
 
 static void printHelp() {
     std::cout <<
-"Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
-"     -tasks       | Meine Workflow-Aufgaben (F77-Tasks)\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/DOK/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
+"Rosenholz PM v4  |  rh <BEFEHL> [ARGS]\n""\n""F16: -f16 F16-Karten  | -f16 -n Neu | -f16 -o Auswahl | -f16 <id> Öffnen | -f16 -s <q> Suche\n""F22: -f22 F22-Vorgänge | -f22 -n Neu | -f22 <id> Öffnen | -f22 <f16id> Liste\n""F18: -f18 Vorgänge    | -f18 -n Neu | -f18 <id> Öffnen\n""AKT: -akt Akten   | -akt -n Neu | -akt <id> Öffnen | -akt -s <q> Suche\n"
+"     -tasks       | Meine Workflow-Aufgaben (F77-Tasks)\n""F77: -f77 Hinweise    | -f77 -start <id> [Zielzustand] | -f77 -tpl Vorlagen\n""PER: -per Personen    | -per -n Neu | -per <id> Karte | -per -s <q> Suche\n""DE:  -de  Diensteinheiten-Browser\n""\n""SYS  -search <q>  Globale Suche (F16/F22/F18/AKT/F77)\n""     -status      Datensatz-Zählungen    -backup Backup    -mfs [id] MFS neu\n""     -log <level> Verbosität: debug|info|warn|error\n""     -go <ref>    Direkt öffnen (ID / Typ:N / Seq#)\n""     -ctx [ref]   Kontext setzen (oder 'clear')  ..=zurück\n""     -hist        Verlauf zuletzt geöffneter Entitäten\n""     -tree [f16id] Hierarchiebaum F16→F22→AKT/F18\n""     -watch [N]   Polling: Benachrichtigung bei Task-Änderungen (N=Sek, Standard=30)\n""     -note <id> [Text]  Schnellnotiz ohne Menü\n""\n""IDs enthalten /  z.B. XV/F16/0001/26\n""Flags: -s <settings.json>  -b <basispfad>\n"
 ;
 }
 
@@ -73,7 +75,7 @@ static void sigintHandler(int) {
 static const char* const kCommands[] = {
     "-f16", "-f22", "-f18", "-akt", "-f77",
     "-per", "-de",  "-search", "-backup", "-status", "-tasks",
-    "-mfs", "-log", "-indexdok", "-h", "--help",
+    "-mfs", "-log", "-go", "-ctx", "-h", "--help",
     "exit", "quit", "help",
     nullptr
 };
@@ -234,7 +236,10 @@ static void runShell() {
     while (true) {
         CLI::cliClearInterrupted();
 
-        char* raw = readline("  rh> ");
+        // Build dynamic prompt with navigation context
+        std::string promptSuffix = Rosenholz::NavigationStack::instance().promptSuffix();
+        std::string prompt = "  rh" + promptSuffix + "> ";
+        char* raw = readline(prompt.c_str());
         if (!raw) {
             // EOF (Ctrl+D)
             std::cout << "\n  Auf Wiedersehen.\n\n";
@@ -256,6 +261,25 @@ static void runShell() {
         std::string tok;
         while (ss >> tok) tokens.push_back(tok);
         if (tokens.empty()) continue;
+
+        // ".." — navigate back (pop navigation stack)
+        if (tokens[0] == "..") {
+            auto& nav = Rosenholz::NavigationStack::instance();
+            nav.pop();
+            auto cur = nav.current();
+            if (cur.valid()) {
+                // Re-open the parent entity
+                std::string fwd = cur.shortForm(); // "F22:XV/F22/0001/26"
+                auto colon = fwd.find(':');
+                if (colon != std::string::npos) {
+                    std::string ecmd = "-" + fwd.substr(0,colon);
+                    std::transform(ecmd.begin(), ecmd.end(), ecmd.begin(), ::tolower);
+                    std::vector<std::string> eargs{cur.id};
+                    dispatch(ecmd, eargs);
+                }
+            }
+            continue;
+        }
 
         // Exit keywords
         if (tokens[0] == "exit" || tokens[0] == "quit" || tokens[0] == "q") {
@@ -307,6 +331,148 @@ static void dispatch(const std::string& cmd, const std::vector<std::string>& res
         CLI::cmdLog(rest[0]);
         return;
     }
+    if (cmd == "-ctx") {
+        auto& nav = Rosenholz::NavigationStack::instance();
+        if (rest.empty() || rest[0] == "clear") {
+            nav.clear();
+            std::cout << "  Kontext gelöscht.\n";
+            return;
+        }
+        // rest[0] could be "f22:XV/F22/0001/26" or a short id
+        auto& qr = Rosenholz::QuickResolver::instance();
+        auto cur = nav.current();
+        auto res = qr.resolve(rest[0],
+                              cur.valid() ? cur.type : Rosenholz::EntityType::NONE,
+                              cur.valid() ? cur.id   : "");
+        if (res.ref.valid()) {
+            nav.push(res.ref);
+            std::cout << "  Kontext: " << res.ref.shortForm()
+                      << "  " << res.ref.displayName << "\n";
+        } else {
+            CLI::printErr("Nicht gefunden: " + rest[0]);
+        }
+        return;
+    }
+
+    if (cmd == "-hist") {
+        auto hist = Rosenholz::HistoryLog::instance().recent(20);
+        if (hist.empty()) { std::cout << "  (kein Verlauf)\n"; return; }
+        std::cout << "\n  Zuletzt geoeffnet:\n";
+        for (int i = 0; i < (int)hist.size(); i++) {
+            auto& r = hist[i];
+            std::cout << "  " << std::setw(3) << (i+1) << ". "
+                      << std::left << std::setw(8) << Rosenholz::entityTypeLabel(r.type)
+                      << "  " << std::setw(26) << r.id
+                      << "  " << r.displayName.substr(0,30) << "\n";
+        }
+        std::cout << "\n  Oeffnen [1-" << hist.size() << "] oder 0: ";
+        int pick;
+        if (!(std::cin >> pick)) { std::cin.clear(); std::cin.ignore(9999,'\n'); return; }
+        std::cin.ignore(9999,'\n');
+        if (pick < 1 || pick > (int)hist.size()) return;
+        auto& ref = hist[pick-1];
+        std::string ecmd;
+        switch (ref.type) {
+            case Rosenholz::EntityType::F16: ecmd="-f16"; break;
+            case Rosenholz::EntityType::F22: ecmd="-f22"; break;
+            case Rosenholz::EntityType::F18: ecmd="-f18"; break;
+            case Rosenholz::EntityType::AKT: ecmd="-akt"; break;
+            case Rosenholz::EntityType::PER: ecmd="-per"; break;
+            default: return;
+        }
+        dispatch(ecmd, {ref.id});
+        return;
+    }
+
+    if (cmd == "-tree") {
+        // Tree view: optional F16 ID, else all
+        if (!rest.empty()) {
+            auto tree = Rosenholz::TreeBuilder::buildF16Tree(rest[0]);
+            std::cout << "\n" << Rosenholz::TreeBuilder::format(tree) << "\n";
+        } else {
+            auto all = Rosenholz::TreeBuilder::buildAllF16();
+            if (all.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
+            std::cout << "\n  Rosenholz PM — Hierarchie\n\n";
+            std::cout << Rosenholz::TreeBuilder::formatAll(all) << "\n";
+            std::cout << "  Tipp: -tree <F16-ID> fuer Detailbaum\n\n";
+        }
+        return;
+    }
+
+    if (cmd == "-watch") {
+        int interval = 30;
+        if (!rest.empty()) {
+            try { interval = std::stoi(rest[0]); } catch (...) {}
+        }
+        Rosenholz::WatchPoller::run(
+            [](const std::string& msg) {
+                std::cout << "  " << Rosenholz::nowIso().substr(11,8)
+                          << "  " << msg << "\n";
+                std::cout.flush();
+            }, interval);
+        return;
+    }
+
+    if (cmd == "-note") {
+        // -note <id> "<text>" OR -note <id> (then prompt)
+        if (rest.empty()) { CLI::printErr("-note <entityId> [Notiztext]"); return; }
+        std::string targetId = rest[0];
+        // Resolve type from ID:
+        auto& qr = Rosenholz::QuickResolver::instance();
+        auto cur = Rosenholz::NavigationStack::instance().current();
+        auto res = qr.resolve(targetId,
+                              cur.valid() ? cur.type : Rosenholz::EntityType::NONE,
+                              cur.valid() ? cur.id   : "");
+        if (!res.ref.valid()) { CLI::printErr("Entity nicht gefunden: " + targetId); return; }
+        std::string noteText;
+        if (rest.size() > 1) {
+            for (std::size_t i = 1; i < rest.size(); i++) {
+                if (!noteText.empty()) noteText += " ";
+                noteText += rest[i];
+            }
+        } else {
+            noteText = CLI::readLine("Notiz: ");
+        }
+        if (noteText.empty()) return;
+        auto n = Rosenholz::Note::create(
+            Rosenholz::entityTypeLabel(res.ref.type),
+            res.ref.id, noteText);
+        if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+        else   CLI::printErr("Fehler beim Speichern");
+        return;
+    }
+
+    if (cmd == "-go") {
+        if (rest.empty()) { CLI::printErr("-go <id|type:N|seq>"); return; }
+        auto& qr  = Rosenholz::QuickResolver::instance();
+        auto& nav = Rosenholz::NavigationStack::instance();
+        auto cur  = nav.current();
+        auto res  = qr.resolve(rest[0],
+                               cur.valid() ? cur.type : Rosenholz::EntityType::NONE,
+                               cur.valid() ? cur.id   : "");
+        if (res.isBack)   { nav.pop(); return; }
+        if (!res.ref.valid() && res.ambiguous) {
+            std::cout << "  Mehrdeutig — bitte Typ angeben (z.B. f22:1):\n";
+            int i = 1;
+            for (auto& c : res.candidates)
+                std::cout << "  " << i++ << "  " << c.shortForm() << "  " << c.displayName << "\n";
+            return;
+        }
+        if (!res.ref.valid()) { CLI::printErr("Nicht gefunden: " + rest[0]); return; }
+        // Route to the right module:
+        std::string ecmd;
+        switch (res.ref.type) {
+            case Rosenholz::EntityType::F16: ecmd = "-f16"; break;
+            case Rosenholz::EntityType::F22: ecmd = "-f22"; break;
+            case Rosenholz::EntityType::F18: ecmd = "-f18"; break;
+            case Rosenholz::EntityType::AKT: ecmd = "-akt"; break;
+            case Rosenholz::EntityType::PER: ecmd = "-per"; break;
+            default: CLI::printErr("Unbekannter Typ"); return;
+        }
+        dispatch(ecmd, {res.ref.id});
+        return;
+    }
+
     if (cmd == "-search") {
         std::string q;
         for (auto& r : rest) {

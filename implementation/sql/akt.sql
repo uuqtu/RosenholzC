@@ -114,9 +114,9 @@ CREATE INDEX IF NOT EXISTS idx_docrev_state
 -- Naming convention:  {docRegNr}_{revNNN}_{originalFilename}
 -- Example:            XV_DOK_0018_2026_r001_tests-example.xls
 CREATE TABLE IF NOT EXISTS akt_objekte (
-    -- PK: documentId + ":" + 5-char objectId  e.g. "XV/DOK/0018/2026:A1B2C"
+    -- PK: documentId + ":" + 5-char objectId  e.g. "XV/AKT/0018/2026:A1B2C"
     object_id       TEXT    PRIMARY KEY,
-    document_id     TEXT    NOT NULL,       -- XV/DOK/0018/2026
+    document_id     TEXT    NOT NULL,       -- XV/AKT/0018/2026
     rev             INTEGER NOT NULL,       -- revision number (1,2,3,...)
     original_name   TEXT    NOT NULL,       -- original filename as uploaded
     mfs_filename    TEXT,                   -- {docRegNr}_{objectId}_r{revNr}.{ext}
@@ -139,11 +139,11 @@ CREATE INDEX IF NOT EXISTS idx_doc_objects_docrev
 
 CREATE TABLE IF NOT EXISTS akt_objekte (
     -- Primary key: documentId + ":" + 5-char alphanumeric objectId
-    -- e.g. "XV/DOK/0018/2026:A1B2C"
+    -- e.g. "XV/AKT/0018/2026:A1B2C"
     -- objectId is unique per document, not globally. Same ID can exist in different documents.
     object_id       TEXT    PRIMARY KEY,
 
-    document_id     TEXT    NOT NULL,       -- XV/DOK/0018/2026
+    document_id     TEXT    NOT NULL,       -- XV/AKT/0018/2026
     rev             INTEGER NOT NULL,       -- revision number in which this object was created
     original_name   TEXT    NOT NULL,       -- original filename as uploaded (for display/decryption)
     mfs_filename    TEXT,                   -- MFS filename: {docRegNr}_{objectId}_r{revNr}.{ext}

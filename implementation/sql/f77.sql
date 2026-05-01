@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS f77_workflow_templates (
     name            TEXT NOT NULL,
     version         TEXT NOT NULL DEFAULT '1.0',
     description     TEXT,
-    entity_types    TEXT,           -- comma-sep: 'f16,f22,f18,dok'
+    entity_types    TEXT,           -- comma-sep: 'f16,f22,f18,akt'
     target_state    TEXT NOT NULL DEFAULT 'released'
                          CHECK(target_state IN ('in_work','pre_released','released','locked','closed')),
     status          TEXT NOT NULL DEFAULT 'active'
@@ -54,9 +54,6 @@ CREATE TABLE IF NOT EXISTS f77_workflow_template_steps (
     execution_mode      TEXT NOT NULL DEFAULT 'sequential'
                              CHECK(execution_mode IN ('sequential','parallel')),
     predecessor_tpl_step_ids TEXT,   -- comma-sep tpl_step_ids (for parallel/conditional)
-    -- Wait condition: spawn a standard F18_Operation of given type before this step can proceed
-    wait_condition_f18_type TEXT,    -- e.g. 'measure','qualityGate','changeRequest' or NULL
-    wait_condition_title    TEXT,    -- title for the auto-spawned F18 Operation
     -- Step assignment / SLA
     required_role       TEXT,
     sla_hours           INTEGER DEFAULT 0,
@@ -103,12 +100,7 @@ CREATE TABLE IF NOT EXISTS f77_workflow_steps (
     execution_mode      TEXT NOT NULL DEFAULT 'sequential'
                              CHECK(execution_mode IN ('sequential','parallel')),
     predecessor_step_ids TEXT,          -- comma-sep f77_workflow_steps.step_id
-    -- The F18_Operation that executes this step
-    f18_operation_id    TEXT,           -- NULL for Init/End (auto-managed)
-    -- Wait condition F18_Operation (auto-spawned blocker)
-    wait_f18_operation_id TEXT,         -- spawned wait-condition operation
-    wait_condition_f18_type TEXT,       -- type of the wait condition F18
-    -- Status mirrors the linked F18_Operation status
+    -- Status:
     status              TEXT NOT NULL DEFAULT 'pending'
                              CHECK(status IN ('pending','in_progress','approved','rejected','skipped','cancelled')),
     auto_approve        INTEGER NOT NULL DEFAULT 0,

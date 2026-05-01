@@ -145,7 +145,7 @@ OperationResult Document::remove() {
 }
 OperationResult Document::update() {
     if (isFrozen()) {
-        LOG_WARN("[DOK] update() verweigert: Revision ist eingefroren — " + documentId);
+        LOG_WARN("[AKT] update() verweigert: Revision ist eingefroren — " + documentId);
         return OperationResult::DOC_REV_NOT_IN_WORK;
     } updatedAt=nowIso(); dateModified=updatedAt; return save(); }
 
@@ -573,7 +573,7 @@ void Document::ensureReleaseWorkflow() {
     auto wf = Rosenholz::F77_Engine::startDefault("akt", documentId);
     if (!wf) return;
     releaseWorkflowId = wf->workflowId;
-    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for dok/" + documentId);
+    LOG_INFO("[F77] Workflow ensured: " + releaseWorkflowId + " for akt/" + documentId);
 }
 
 
@@ -620,19 +620,25 @@ std::shared_ptr<DocumentRevision> Document::revise(
         return nullptr;
     }
 
-    // Active revision is frozen (pre_released / released / locked / closed):
-    // create the next revision branching from the current one.
+    // Active revision is frozen — create next revision.
+    // Clear the releaseWorkflowId: WFs are revision-specific.
+    // The new revision can start a fresh F77 workflow.
     auto newRev = DocumentRevision::createRevision(
         documentId, cur->rev,
         createdBy.empty() ? authorId : createdBy,
         changeNote.empty() ? "Neue Revision" : changeNote);
     if (newRev) {
         auto* db = DatabasePool::instance().get("akt");
-        if (db) db->exec(
-            "UPDATE akten SET updated_at=? WHERE document_id=?;",
-            {BindParam::text(nowIso()), BindParam::text(documentId)});
+        if (db) {
+            // Clear WF reference — new revision gets a clean slate.
+            db->exec(
+                "UPDATE akten SET release_workflow_id=NULL, updated_at=?"
+                " WHERE document_id=?;",
+                {BindParam::text(nowIso()), BindParam::text(documentId)});
+            releaseWorkflowId = ""; // sync in-memory too
+        }
         LOG_INFO("[Document] Revision " + std::to_string(newRev->rev) +
-                 " angelegt: " + documentId);
+                 " angelegt, WF-Referenz zurückgesetzt: " + documentId);
     }
     return newRev;
 }
@@ -797,6 +803,47 @@ std::string Document::mfsSchluesselText() const {
     }
     s << "\n";
     return s.str();
+}
+
+
+// ── Document::knownMfsPaths ───────────────────────────────────────────────
+// All MFS file paths registered as DocumentObjects for a parent entity.
+// Used by scanners to exclude already-registered files from "loose" lists.
+std::set<std::string>
+Document::knownMfsPaths(const std::string& entityType,
+                          const std::string& entityId)
+{
+    std::set<std::string> known;
+    auto docs = loadForEntity(entityType, entityId);
+    for (auto& d : docs) {
+        auto cur = Rosenholz::DocumentRevision::currentRevision(d->documentId);
+        if (!cur) continue;
+        auto objs = Rosenholz::DocumentObject::loadForRevision(d->documentId, cur->rev);
+        for (auto& o : objs) {
+            if (!o->mfsPath.empty())     known.insert(o->mfsPath);
+            if (!o->mfsFilename.empty() && !d->mfsDir().empty())
+                known.insert(Rosenholz::FileOps::joinPath(d->mfsDir(), o->mfsFilename));
+        }
+    }
+    return known;
+}
+
+// ── Document::mfsDir ─────────────────────────────────────────────────────
+std::string Document::mfsDir() const {
+    const std::string& root = Config::instance().mfsPath();
+    if (root.empty() || documentId.empty()) return "";
+    std::string sane = documentId;
+    for (char& c : sane) if (c == '/') c = '_';
+    return FileOps::joinPath(FileOps::joinPath(root, "AKT"), sane);
+}
+
+// ── Document::ensureWorkingRevision ──────────────────────────────────────
+std::shared_ptr<DocumentRevision>
+Document::ensureWorkingRevision() {
+    auto cur = DocumentRevision::currentRevision(documentId);
+    if (cur && cur->revState == RevState::IN_WORK) return cur;
+    if (!cur) return DocumentRevision::createRevision(documentId, 1);
+    return nullptr; // released/locked — caller decides
 }
 
 } // namespace Rosenholz

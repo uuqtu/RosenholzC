@@ -192,7 +192,7 @@ void printTask(const TaskF22& t) {
         std::cout << "  WFI:" << t.releaseWorkflowId.substr(0,36) << "\n";
 }
 void printDocument(const Document& d) {
-    hdr("DOK " + d.documentId.substr(0,26) + "  " + d.title.substr(0,28));
+    hdr("AKT " + d.documentId.substr(0,26) + "  " + d.title.substr(0,28));
     auto curRev = Rosenholz::DocumentRevision::currentRevision(d.documentId);
     std::cout << "  " << d.docType << "/" << d.format
               << "  Rev:" << (curRev ? std::to_string(curRev->rev) + "[" + curRev->revStateStr() + "]" : "—")
@@ -206,7 +206,7 @@ void printDocument(const Document& d) {
 
 void listDocuments(const std::vector<std::shared_ptr<Document>>& docs,
                    const std::string& title) {
-    hdr(title.empty() ? "DOKUMENTE" : title);
+    hdr(title.empty() ? "AKTEN" : title);
     if (docs.empty()) { std::cout << "  (keine Akten)\n"; return; }
     int n=1;
     for (auto& d : docs) {
@@ -303,4 +303,56 @@ listComms(const std::string& ownerId, const std::string& ownerType) {
     return items;
 }
 
+
+// ── notesMenu ─────────────────────────────────────────────────
+// Shows existing notes and allows adding new ones.
+// Writes _Notizen.txt to the entity's MFS folder when done.
+void notesMenu(const std::string& entityType,
+                    const std::string& entityId,
+                    const std::string& mfsDir)
+{
+    while (true) {
+        auto notes = Rosenholz::Note::loadForEntity(entityType, entityId);
+        hdr("NOTIZEN — " + entityType + "/" + entityId.substr(0, 26));
+        if (notes.empty()) {
+            std::cout << "  (keine Notizen)\n";
+        } else {
+            for (int i = 0; i < (int)notes.size(); i++) {
+                auto& n = notes[i];
+                std::cout << "  " << std::setw(3) << (i+1) << ". ["
+                          << n->createdAt.substr(0,16) << "]";
+                if (!n->author.empty()) std::cout << " " << n->author;
+                std::cout << "\n";
+                // Wrap body at 72 chars:
+                std::string body = n->body;
+                for (std::size_t pos = 0; pos < body.size(); pos += 72)
+                    std::cout << "       " << body.substr(pos, 72) << "\n";
+                std::cout << "\n";
+            }
+        }
+        std::cout << "\n  1.Notiz hinzufuegen  ";
+        if (!notes.empty()) std::cout << "2.<#> loeschen  ";
+        std::cout << "0.Zurueck\n";
+        int hi = notes.empty() ? 1 : 2;
+        int ch = readInt("Wahl", 0, hi);
+        if (ch == 0) break;
+        if (ch == 1) {
+            std::string body = readLine("Notiz: ");
+            if (body.empty()) continue;
+            std::string author = readOpt("Autor/Person-ID (leer=anonym): ");
+            auto n = Rosenholz::Note::create(entityType, entityId, body, author);
+            if (n) {
+                printOk("  >> Notiz gespeichert: " + n->noteId);
+                if (!mfsDir.empty())
+                    Rosenholz::Note::writeNotesFile(entityType, entityId, mfsDir);
+            }
+        } else if (ch == 2 && !notes.empty()) {
+            int pick = readInt("Notiz # loeschen", 1, (int)notes.size());
+            notes[pick-1]->remove();
+            if (!mfsDir.empty())
+                Rosenholz::Note::writeNotesFile(entityType, entityId, mfsDir);
+            printOk("  >> Geloescht.");
+        }
+    }
+}
 } // namespace CLI

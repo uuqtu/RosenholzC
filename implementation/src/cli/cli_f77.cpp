@@ -101,9 +101,6 @@ static void drawF77Chain(const std::vector<F77_WorkflowStep>& steps, bool compac
         std::string label = s.isInitialize ? "Init" : s.isFinal ? "End " : "    ";
         std::cout << "  " << conn << sym << " " << label
                   << std::left << std::setw(20) << s.title.substr(0, 19);
-        if (!s.f18OperationId.empty())
-            std::cout << "  F18:" << s.f18OperationId.substr(0, 16);
-        if (!s.waitF18OperationId.empty())
             std::cout << "  [WARTE auf F18]";
         std::cout << "\n";
     }
@@ -285,7 +282,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
 {
     hdr("F77 STARTEN");
     std::string effType = entityType.empty()
-        ? readLine("Entitaetstyp (f16/f22/f18/dok): ") : entityType;
+        ? readLine("Entitaetstyp (f16/f22/f18/akt): ") : entityType;
     std::string effId = entityId.empty()
         ? readLine("Entitaets-ID: ") : entityId;
 
@@ -384,7 +381,6 @@ static void templateMenu(const std::string& templateId) {
                                   s.isFinal      ? "[ END" : "[    ";
                 std::string flags;
                 if (s.autoApprove) flags += " AUTO";
-                if (!s.waitConditionF18Type.empty()) flags += " WARTE:" + s.waitConditionF18Type;
                 std::cout << "  " << (ai > 0 ? "-->" : "   ")
                           << box << " ] "
                           << std::left << std::setw(22) << s.title.substr(0, 21)
@@ -406,10 +402,6 @@ static void templateMenu(const std::string& templateId) {
             if (!slaS.empty()) try { step.slaHours = std::stoi(slaS); } catch(...) {}
             std::string autoS = readOpt("Automatisch genehmigen? (j/n): ");
             step.autoApprove = (!autoS.empty() && (autoS[0]=='j'||autoS[0]=='J'));
-            std::string waitS = readOpt("Wartebedingung F18-Typ (leer=keine, z.B. measure): ");
-            step.waitConditionF18Type = waitS;
-            if (!waitS.empty())
-                step.waitConditionTitle = readOpt("Titel fuer Warte-F18: ");
             step.save();
             std::cout << "  >> Schritt hinzugefuegt: " << step.tplStepId << "\n";
         }
@@ -457,8 +449,8 @@ void workflowMenu() {
                          "  1.in_work  2.pre_released  3.released  4.locked  5.closed\n";
             static const char* sts[] = {"in_work","pre_released","released","locked","closed"};
             int si = readInt("Zielzustand", 1, 5);
-            std::string entityTypes = readOpt("Entitaetstypen (z.B. f16,f22,dok, leer=alle): ");
-            if (entityTypes.empty()) entityTypes = "f16,f22,f18,dok";
+            std::string entityTypes = readOpt("Entitaetstypen (z.B. f16,f22,akt, leer=alle): ");
+            if (entityTypes.empty()) entityTypes = "f16,f22,f18,akt";
             auto tpl = F77_WorkflowTemplate::create(name, sts[si-1], entityTypes);
             tpl->description = readOpt("Beschreibung: ");
             tpl->save();

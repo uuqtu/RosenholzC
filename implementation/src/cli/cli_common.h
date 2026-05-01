@@ -19,6 +19,12 @@
 #include "../model/f18/F18OperationStep.h"
 #include "../model/f18/Communication.h"
 #include "../workflow/F77Workflow.h"
+#include "../model/NavigationContext.h"
+#include "../model/Note.h"
+#include "../model/HistoryLog.h"
+#include "../model/TreeBuilder.h"
+#include "../model/StatusColor.h"
+#include "../model/WatchPoller.h"
 #include <string>
 #include <vector>
 #include <iostream>
@@ -50,7 +56,12 @@ void printOk(const std::string& msg);
 
 // Print error to stderr and exit(1).
 void die(const std::string& msg);
-void printErr(const std::string& msg);  ///< Non-fatal error — print and return.
+void printErr(const std::string& msg);
+
+/// Show notes for any entity (list + add + delete + write _Notizen.txt).
+void notesMenu(const std::string& entityType,
+               const std::string& entityId,
+               const std::string& mfsDir = "");  ///< Non-fatal error — print and return.
 
 // ── F16 project commands (cli_f16.cpp) ────────────────────────
 void cmdF16(const std::vector<std::string>& args);
@@ -84,7 +95,7 @@ std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
 void cmdAkt(const std::vector<std::string>& args);
 void printDocument(const Rosenholz::Document& d);
 void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Document>>& docs,
-                   const std::string& title = "DOKUMENTE");
+                   const std::string& title = "AKTEN");
 void documentMenu(std::shared_ptr<Rosenholz::Document> doc);
 void documentBrowserMenu(const std::string& taskId  = "",
                          const std::string& f18OpId = "");

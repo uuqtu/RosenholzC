@@ -159,6 +159,7 @@ public:
     //   - Sets status to "planned", dates to today
     //   - Does NOT save — call save() explicitly
     // ------------------------------
+    static int count();
     static std::shared_ptr<ProjectF16> create(
         const std::string& title,
         const std::string& projectType = "OV",

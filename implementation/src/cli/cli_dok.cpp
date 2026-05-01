@@ -35,7 +35,7 @@ using namespace Rosenholz;
 // and finally calls createDocumentWizard with the chosen IDs.
 
 std::shared_ptr<Document> createDocumentWizardGuided() {
-    hdr("DOK ANLEGEN — ENTITÄT WÄHLEN");
+    hdr("AKT ANLEGEN — ENTITÄT WÄHLEN");
     std::cout << "  Wo soll das Dokument abgelegt werden?\n"
               << "  1.  F22 (Vorgangskartei)\n"
               << "  2.  F18 (Vorgang)\n"
@@ -134,7 +134,7 @@ void cmdAkt(const std::vector<std::string>& args) {
         auto all = Document::loadRecent(20);
         if (all.empty()) { std::cout << "  (keine Akten)\n"; return; }
         std::cout << "  " << std::left
-                  << std::setw(26) << "ID (für rh -dok <id>)"
+                  << std::setw(26) << "ID (für rh -akt <id>)"
                   << std::setw(14) << "STATUS"
                   << std::setw(12) << "VERSION"
                   << "TITEL\n"
@@ -179,7 +179,7 @@ void cmdAkt(const std::vector<std::string>& args) {
     if (args[0] == "-f16") {
         auto projects = ProjectF16::loadAll();
         if (projects.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
-        hdr("DOK ANLEGEN — F16 WÄHLEN");
+        hdr("AKT ANLEGEN — F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
@@ -194,7 +194,7 @@ void cmdAkt(const std::vector<std::string>& args) {
     if (args[0] == "-f22") {
         auto projects = ProjectF16::loadAll();
         if (projects.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
-        hdr("DOK ANLEGEN — F16 WÄHLEN");
+        hdr("AKT ANLEGEN — F16 WÄHLEN");
         for (int i = 0; i < (int)projects.size(); ++i)
             std::cout << "  " << std::setw(4) << (i + 1)
                       << "  " << std::setw(26) << projects[i]->regNumber.toString()
@@ -223,7 +223,7 @@ void cmdAkt(const std::vector<std::string>& args) {
     if (args[0] == "-f18") {
         auto ops = F18Operation::loadRecent(40);
         if (ops.empty()) { std::cout << "  (keine F18-Operationen)\n"; return; }
-        hdr("DOK ANLEGEN — F18 WÄHLEN");
+        hdr("AKT ANLEGEN — F18 WÄHLEN");
         for (int i = 0; i < (int)ops.size(); ++i)
             std::cout << "  " << std::setw(4)  << (i + 1)
                       << "  " << std::setw(26) << ops[i]->vorgangId.substr(0, 24)
@@ -1006,6 +1006,9 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
 }
 
 void documentMenu(std::shared_ptr<Document> doc) {
+    Rosenholz::NavigationStack::instance().push({
+        Rosenholz::EntityType::AKT, doc->documentId, doc->title, doc->documentId});
+
     while (true) {
         if (auto fresh = Document::loadById(doc->documentId)) *doc = *fresh;
 

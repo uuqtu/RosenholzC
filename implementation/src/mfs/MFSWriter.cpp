@@ -121,7 +121,7 @@ bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
           << "VERWEISE (alle Unterakten dieser Vorgangsakte):\n"
           << "  F22/   → Aufgabenkartei    [mfs/F22/<reg>/]\n"
           << "  F18/   → Vorgangskartei    [mfs/F18/<id>/]\n"
-          << "  DOK/   → Akten        [mfs/F16/<reg>/DOK/<id>/]\n"
+          << "  AKT/   → Akten        [mfs/F16/<reg>/AKT/<id>/]\n"
           << "\n"
           << "KLARNAMENZUORDNUNG → owner_key.txt\n"
           << "  Alle Registriernummern sind dort aufgeloest.\n"
@@ -140,7 +140,7 @@ bool MFSWriter::writeProject(const ProjectF16& p, const std::string& mfsRoot) {
            << "TYP              : " << p.projectType << "\n"
            << "ANGELEGT         : " << p.createdAt << "\n\n"
            << "Navigation: Unterordner F22/<reg>/_SCHLUESSEL.txt fuer Aufgabendetails\n"
-           << "           Unterordner DOK/<id>/_SCHLUESSEL.txt fuer Aktendetails\n\n"
+           << "           Unterordner AKT/<id>/_SCHLUESSEL.txt fuer Aktendetails\n\n"
            << "Verbundene F22-Aufgaben:\n"
            << "  " << std::left << std::setw(28) << "REG-NR"
            << std::setw(34) << "TITEL" << "STATUS\n"
@@ -363,7 +363,7 @@ bool MFSWriter::writeDocument(const Document& d, const std::string& mfsRoot) {
     conn["VERFASSER"] = d.authorId;
     appendOwnerKey(d.documentId, d.title, conn, mfsRoot);
 
-    LOG_DEBUG("MFS DOK written: " + cardPath);
+    LOG_DEBUG("MFS AKT written: " + cardPath);
     return ok;
 }
 

@@ -10,6 +10,7 @@
 // All field mutations are guarded by canEdit() / update().
 // ============================================================
 #pragma once
+#include <set>
 #include "../../core/OperationResult.h"
 #include "../Utils.h"
 #include <string>
@@ -93,6 +94,10 @@ public:
     bool isInWork()     const;
     bool isFrozen()     const;
     bool canRevise()    const;
+
+    /// Returns the current in_work revision, creating one (rev=1) if none exists.
+    /// Returns nullptr only if the document is locked/released and cannot be revised.
+    std::shared_ptr<DocumentRevision> ensureWorkingRevision();
     bool canCheckout()  const;
     bool canCheckin()   const;
     bool canRevert()    const;
@@ -126,6 +131,7 @@ public:
     // Returns:
     //   Shared pointer to in-memory Document; call save() to persist.
     // ------------------------------
+    static int count();
     static std::shared_ptr<Document> create(
         const std::string& title,
         const std::string& docType     = "report",
@@ -286,6 +292,12 @@ public:
                   const std::string& pathOverride = "") const;
 
     std::string mfsSchluesselText() const;
+    /// Canonical MFS folder for this Akte (mfs/AKT/<sanitised-id>/)
+    std::string mfsDir() const;
+    /// Collect all MFS paths of currently registered objects for a given parent entity.
+    /// Used by F22/F18 scan to know which files are already registered.
+    static std::set<std::string> knownMfsPaths(
+        const std::string& entityType, const std::string& entityId);
 private:
     void fromRow(const Row& r);
 

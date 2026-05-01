@@ -475,12 +475,18 @@ std::string ProjectF16::mfsSchluesselText() const {
     }
     auto docs = Rosenholz::Document::loadForEntity("f22", projectId);
     if (!docs.empty()) {
-        s << "  DOK     :";
+        s << "  AKT     :";
         for (auto& d : docs) s << " " << d->documentId;
         s << "\n";
     }
     s << "\n";
     return s.str();
+}
+
+
+int ProjectF16::count() {
+    auto* d = DatabasePool::instance().get("f16");
+    return d ? d->rowCount("projects") : 0;
 }
 
 } // namespace Rosenholz

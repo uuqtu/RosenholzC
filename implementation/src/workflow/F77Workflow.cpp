@@ -15,7 +15,6 @@
 #include "../mfs/MFSWriter.h"
 #include "../model/f22/TaskF22.h"
 #include "../model/dok/Document.h"
-#include "../model/f18/F18Operation.h"
 #include "../repository/DocumentRevision.h"
 #include <sstream>
 #include <algorithm>
@@ -25,6 +24,43 @@
 
 
 namespace Rosenholz {
+
+// ── WorkflowStatus / StepStatus serialization ────────────────────────────
+std::string toString(WorkflowStatus s) {
+    switch (s) {
+        case WorkflowStatus::ACTIVE:    return "active";
+        case WorkflowStatus::COMPLETED: return "completed";
+        case WorkflowStatus::LOCKED:    return "locked";
+        case WorkflowStatus::CANCELLED: return "cancelled";
+    }
+    return "active";
+}
+WorkflowStatus workflowStatusFrom(const std::string& s) {
+    if (s == "completed") return WorkflowStatus::COMPLETED;
+    if (s == "locked")    return WorkflowStatus::LOCKED;
+    if (s == "cancelled") return WorkflowStatus::CANCELLED;
+    return WorkflowStatus::ACTIVE;
+}
+std::string toString(StepStatus s) {
+    switch (s) {
+        case StepStatus::PENDING:     return "pending";
+        case StepStatus::IN_PROGRESS: return "in_progress";
+        case StepStatus::APPROVED:    return "approved";
+        case StepStatus::REJECTED:    return "rejected";
+        case StepStatus::SKIPPED:     return "skipped";
+        case StepStatus::CANCELLED:   return "cancelled";
+    }
+    return "pending";
+}
+StepStatus stepStatusFrom(const std::string& s) {
+    if (s == "in_progress") return StepStatus::IN_PROGRESS;
+    if (s == "approved")    return StepStatus::APPROVED;
+    if (s == "rejected")    return StepStatus::REJECTED;
+    if (s == "skipped")     return StepStatus::SKIPPED;
+    if (s == "cancelled")   return StepStatus::CANCELLED;
+    return StepStatus::PENDING;
+}
+
 
 // ── DB helper ────────────────────────────────────────────────
 static Database* wfDB() { return DatabasePool::instance().get("f77"); }
@@ -48,8 +84,6 @@ void F77_WorkflowTemplateStep::fromRow(const Row& r) {
     executionMode            = g("execution_mode");
     // Template step predecessors stored as plain CSV (simple, single level)
     predecessorTplStepIds    = g("predecessor_tpl_step_ids");
-    waitConditionF18Type     = g("wait_condition_f18_type");
-    waitConditionTitle       = g("wait_condition_title");
     requiredRole             = g("required_role");
     slaHours                 = gi("sla_hours");
     autoApprove              = gb("auto_approve");
@@ -64,15 +98,17 @@ OperationResult F77_WorkflowTemplateStep::save() const {
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f77_workflow_template_steps
         (tpl_step_id,template_id,title,description,sequence_order,is_initialize,is_final,
-         execution_mode,predecessor_tpl_step_ids,wait_condition_f18_type,wait_condition_title,
-         required_role,sla_hours,auto_approve,requires_comment,requires_document,
-         created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         execution_mode,predecessor_tpl_step_ids,required_role,sla_hours,
+         auto_approve,requires_comment,requires_document,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )SQL", {
         BindParam::text(tplStepId),BindParam::text(templateId),BindParam::text(title),BindParam::nullOrText(description),BindParam::int64(sequenceOrder),
-        BindParam::int64(isInitialize?1:0),BindParam::int64(isFinal?1:0),BindParam::text(executionMode),BindParam::nullOrText(predecessorTplStepIds),
-        BindParam::nullOrText(waitConditionF18Type),BindParam::nullOrText(waitConditionTitle),BindParam::nullOrText(requiredRole),BindParam::int64(slaHours),
-        BindParam::int64(autoApprove?1:0),BindParam::int64(requiresComment?1:0),BindParam::int64(requiresDocument?1:0),
+        BindParam::int64(isInitialize?1:0),BindParam::int64(isFinal?1:0),
+        BindParam::text(executionMode),BindParam::nullOrText(predecessorTplStepIds),
+        BindParam::nullOrText(""), // required_role
+        BindParam::int64(0),       // sla_hours
+        BindParam::int64(autoApprove?1:0),BindParam::int64(requiresComment?1:0),
+        BindParam::int64(requiresDocument?1:0),
         BindParam::text(createdAt),BindParam::text(nowIso())
     }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
@@ -231,9 +267,6 @@ void F77_WorkflowOperation::fromRow(const Row& r) {
     isFinal             = gb("is_final");
     executionMode       = g("execution_mode");
     predecessors = predecessorsFromString(g("predecessor_step_ids"));
-    f18OperationId      = g("f18_operation_id");
-    waitF18OperationId  = g("wait_f18_operation_id");
-    waitConditionF18Type= g("wait_condition_f18_type");
     status              = g("status");
     autoApprove         = gb("auto_approve");
     isSystem            = gb("is_system");
@@ -250,17 +283,17 @@ OperationResult F77_WorkflowOperation::save() const {
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f77_workflow_steps
         (step_id,workflow_id,tpl_step_id,title,sequence_order,is_initialize,is_final,
-         execution_mode,predecessor_step_ids,f18_operation_id,wait_f18_operation_id,
-         wait_condition_f18_type,status,auto_approve,requires_comment,requires_document,
-         is_system,system_action,completed_date,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         execution_mode,predecessor_step_ids,status,auto_approve,is_system,system_action,
+         requires_comment,requires_document,completed_date,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     )SQL", {
-        BindParam::text(stepId),BindParam::text(workflowId),BindParam::nullOrText(tplStepId),BindParam::text(title),BindParam::int64(sequenceOrder),
-        BindParam::int64(isInitialize?1:0),BindParam::int64(isFinal?1:0),BindParam::text(executionMode),BindParam::nullOrText(predecessorsToString()),
-        BindParam::nullOrText(f18OperationId),BindParam::nullOrText(waitF18OperationId),BindParam::nullOrText(waitConditionF18Type),
+        BindParam::text(stepId),BindParam::text(workflowId),BindParam::nullOrText(tplStepId),
+        BindParam::text(title),BindParam::int64(sequenceOrder),
+        BindParam::int64(isInitialize?1:0),BindParam::int64(isFinal?1:0),
+        BindParam::text(executionMode),BindParam::text(predecessorsToString()),
         BindParam::text(status),BindParam::int64(autoApprove?1:0),
-        BindParam::int64(requiresComment?1:0),BindParam::int64(requiresDocument?1:0),
         BindParam::int64(isSystem?1:0),BindParam::int64(static_cast<int>(systemAction)),
+        BindParam::int64(requiresComment?1:0),BindParam::int64(requiresDocument?1:0),
         BindParam::nullOrText(completedDate),BindParam::text(createdAt),BindParam::text(nowIso())
     }) ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
@@ -271,19 +304,9 @@ OperationResult F77_WorkflowOperation::remove() const {
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 
-void F77_WorkflowOperation::syncFromF18() {
-    if(f18OperationId.empty()) return;
-    auto op = F18Operation::loadById(f18OperationId);
-    if(!op) return;
-    // Map F18 operation status to F77 step status
-    if     (op->status == "released") status = "approved";
-    else if(op->status == "cancelled")status = "cancelled";
-    else if(op->status == "draft" || op->status == "in_work") status = "in_progress";
-    save();
-}
 
 bool F77_WorkflowOperation::canStart(const std::vector<F77_WorkflowOperation>& all) const {
-    if (status != "pending" && status != "in_progress") return false;
+    if (stepStatusFrom(status)!=StepStatus::PENDING && stepStatusFrom(status)!=StepStatus::IN_PROGRESS) return false;
     for (const auto& predId : predecessors) {
         bool done = false;
         for (const auto& s : all) {
@@ -497,56 +520,31 @@ void F77_Engine::detachWorkflow(const std::string& entityType,
 }
 
 
-// ── propagateDokWorkflowToParent ─────────────────────────────────────────────
-// When a DOK gets a F77 workflow, create an F18OperationStep on the parent
+// ── // When a DOK gets a F77 workflow, create an F18OperationStep on the parent
 // F22 (via its tracking F18) so the document release is visible in the chain.
-static void propagateDokWorkflowToParent(const std::string& docId,
-                                          const std::string& workflowId,
-                                          const std::string& targetState) {
-    auto doc = Rosenholz::Document::loadById(docId);
-    if (!doc) return;
 
-    // Find or create the parent tracking F18:
-    std::string parentEntityId;
-    std::string parentEntityType;
-    if (!doc->taskId.empty()) {
-        parentEntityId   = doc->taskId;
-        parentEntityType = "f22";
-    } else if (!doc->f18OperationId.empty()) {
-        parentEntityId   = doc->f18OperationId;
-        parentEntityType = "f18";
-    } else {
-        return; // No linked F22 or F18
+
+
+// ── F77_Engine::defaultOperations ────────────────────────────────────────
+// Single configuration point for the default workflow step chain per entity type.
+// To add a system step: add an OperationSpec to the relevant list.
+// To remove a step:   remove its OperationSpec.
+// To reorder:         change the vector order — steps chain sequentially.
+std::vector<F77_Engine::OperationSpec> F77_Engine::defaultOperations(
+    const std::string& entityType)
+{
+    if (entityType == "f16") {
+        // F16 owns no Akten directly — just commit.
+        return {
+            {"DB schreiben", true, SystemAction::COMMIT_DB_OBJECTS, true},
+        };
     }
-
-    // Find existing tracking F18 on the parent (releaseWorkflowId matches, or any F77_STEP type):
-    std::shared_ptr<Rosenholz::F18Operation> trackingF18;
-    auto ops = Rosenholz::F18Operation::loadForTask(parentEntityId);
-    for (auto& op : ops) {
-        if (op->vorgangType == "f77_step" || op->vorgangType == "F77_STEP") {
-            trackingF18 = op; break;
-        }
-    }
-
-    // If none found, create one:
-    if (!trackingF18) {
-        trackingF18 = Rosenholz::F18Operation::create(
-            parentEntityId,
-            "Workflow-Tracking [" + parentEntityType + "]",
-            Rosenholz::F18OperationType::F77_STEP);
-        if (!trackingF18) { LOG_WARN("[F77] propagateDok: could not create tracking F18"); return; }
-        trackingF18->save();
-        trackingF18->loadSteps();
-    } else {
-        trackingF18->loadSteps();
-    }
-
-    // Add a step describing the DOK workflow:
-    std::string stepTitle = "AKT Freigabe [" + workflowId + "] → " + targetState;
-    trackingF18->addStep(stepTitle, "review", "", false);
-    LOG_INFO("[F77] propagateDok: added step '" + stepTitle + "' to F18 " + trackingF18->vorgangId);
+    // f22, akt, f18 — scan for unregistered files, then commit.
+    return {
+        {"Objektverwaltung", true, SystemAction::SCAN_UNREGISTERED_FILES, true},
+        {"DB schreiben",     true, SystemAction::COMMIT_DB_OBJECTS,       true},
+    };
 }
-
 
 
 std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
@@ -560,7 +558,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
         std::string existingId = ectx.valid() ? ectx.getWorkflowId(entityId) : std::string{};
         if (!existingId.empty()) {
             auto existing = F77_Workflow::loadById(existingId);
-            if (existing && existing->status == "active") {
+            if (existing && workflowStatusFrom(existing->status) == WorkflowStatus::ACTIVE) {
                 LOG_WARN("[F77] startFromTemplate verweigert: bereits aktiver Workflow ("
                          + existingId + ") fuer " + entityType + "/" + entityId);
                 return nullptr;
@@ -580,19 +578,6 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
     std::map<std::string,std::string> tplToRuntime;
     tpl->loadSteps();
 
-    // For F22: create ONE F18Operation for the whole workflow.
-    // Each mid-step becomes an F18OperationStep inside it.
-    std::shared_ptr<F18Operation> wfOp;
-    if (entityType == "f22") {
-        wfOp = F18Operation::create(entityId,
-                   "Workflow-Aufgaben [" + wf->workflowId + "]",
-                   F18OperationType::F77_STEP);
-        if (wfOp) {
-            wfOp->releaseWorkflowId = wf->workflowId;
-            wfOp->save();
-            wfOp->loadSteps();
-        }
-    }
 
     for(auto& ts : tpl->steps) {
         F77_WorkflowOperation rs;
@@ -605,10 +590,11 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
         rs.isFinal       = ts.isFinal;
         rs.executionMode = ts.executionMode;
         rs.autoApprove   = ts.autoApprove;
+        rs.isSystem      = ts.isSystem;
+        rs.systemAction  = ts.systemAction;
         rs.requiresComment   = ts.requiresComment;
         rs.requiresDocument  = ts.requiresDocument;
-        rs.waitConditionF18Type = ts.waitConditionF18Type;
-        rs.status        = ts.isInitialize ? "approved" : "pending";
+                rs.status        = ts.isInitialize ? "approved" : "pending";
         rs.completedDate = ts.isInitialize ? nowIso() : "";
         rs.createdAt     = nowIso();
         rs.updatedAt     = nowIso();
@@ -629,11 +615,6 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
             rs.predecessors = F77_WorkflowOperation::predecessorsFromString(resolved);
         }
 
-        // Link mid-steps to the single workflow F18 (F22 only).
-        if(!ts.isInitialize && !ts.isFinal && !ts.isSystem && entityType == "f22" && wfOp) {
-            rs.f18OperationId = wfOp->vorgangId;
-            wfOp->addStep(ts.title, "review", "", true);
-        }
 
         rs.save();
         tplToRuntime[ts.tplStepId] = rs.stepId;
@@ -687,13 +668,10 @@ std::shared_ptr<F77_Workflow> F77_Engine::startFromTemplate(
     }
 
     LOG_INFO("[F77] Workflow started from template '"+tpl->name+"' for "+entityType+"/"+entityId);
-    tick(*wf);
-
-    // Store the workflow ID back into the entity's releaseWorkflowId field
+    // NOTE: tick() is NOT called here.
+    // The caller (startWfInstanceWizard or test) calls tick() after any manual
+    // operations are added. This prevents premature auto-completion.
     storeWorkflowId(entityType, entityId, wf->workflowId);
-    if (entityType == "akt")
-        propagateDokWorkflowToParent(entityId, wf->workflowId, wf->targetState);
-
     return wf;
 }
 
@@ -714,7 +692,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
             auto it = rows[0].find("release_workflow_id");
             if (it != rows[0].end() && !it->second.empty()) {
                 auto existing = F77_Workflow::loadById(it->second);
-                if (existing && existing->status == "active") {
+                if (existing && workflowStatusFrom(existing->status) == WorkflowStatus::ACTIVE) {
                     LOG_WARN("[F77] startDefault: workflow already active: " + it->second);
                     return nullptr;
                 }
@@ -725,8 +703,9 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     // Use first matching active template, else build minimal Init→Freigabe→End
     auto templates = F77_WorkflowTemplate::loadForEntityType(entityType);
     for(auto& t : templates) {
-        if(t->status=="active" && t->targetState==targetState)
+        if(workflowStatusFrom(t->status) == WorkflowStatus::ACTIVE && t->targetState==targetState) {
             return startFromTemplate(t->templateId, entityType, entityId, initiatedBy);
+        }
     }
 
     // No template found — minimal workflow
@@ -735,9 +714,7 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     if (!opOk(wf->save())) return nullptr;
 
     std::string projId;
-    if(entityType=="f16") projId=entityId;
-    else if(entityType=="f22"){ auto t=TaskF22::loadById(entityId); if(t) projId=t->projectId; }
-    else if(entityType=="f18"){ auto op=F18Operation::loadById(entityId); if(op) projId=op->taskId; }
+    if(entityType=="f22"){ auto t=TaskF22::loadById(entityId); if(t) projId=t->projectId; }
 
     // Init step (auto-approved)
     F77_WorkflowOperation init;
@@ -747,60 +724,40 @@ std::shared_ptr<F77_Workflow> F77_Engine::startDefault(
     init.completedDate=nowIso(); init.createdAt=nowIso(); init.updatedAt=nowIso();
     init.save(); wf->steps.push_back(init);
 
-    // For F22: create an F18 tracking operation (no mid step needed).
-    // For DOK:  DB schreiben step commits objects to LMDB.
-    // F16: straight Init → DB schreiben → End.
-    if (entityType == "f22") {
-        auto wfOp = F18Operation::create(entityId,
-                        "Workflow-Aufgaben [" + wf->workflowId + "]",
-                        F18OperationType::F77_STEP);
-        if (wfOp) {
-            wfOp->releaseWorkflowId = wf->workflowId;
-            wfOp->save();
-            wfOp->loadSteps();
-        }
+    // Build step chain from declarative OperationSpec list.
+    // To change which steps run for an entity: edit defaultOperations().
+    auto specs = defaultOperations(entityType);
+    std::string prevStepId = init.stepId;
+    int seq = 1;
+    for (auto& spec : specs) {
+        F77_WorkflowOperation op;
+        op.stepId        = genId("F77S"); op.workflowId = wf->workflowId;
+        op.title         = spec.title;
+        op.sequenceOrder = seq++;
+        op.executionMode = "sequential";
+        op.predecessors  = {prevStepId};
+        op.autoApprove   = spec.autoApprove;
+        op.isSystem      = spec.isSystem;
+        op.systemAction  = spec.action;
+        op.status        = "pending";
+        op.createdAt     = nowIso(); op.updatedAt = nowIso();
+        op.save(); wf->steps.push_back(op);
+        prevStepId = op.stepId;
     }
 
-    // Objektverwaltung step — auto-approved if no loose files exist,
-    // otherwise spawns one F77_Task per unregistered file and waits.
-    F77_WorkflowOperation objStep;
-    objStep.stepId        = genId("F77S"); objStep.workflowId = wf->workflowId;
-    objStep.title         = "Objektverwaltung";
-    objStep.sequenceOrder = 1;
-    objStep.executionMode = "sequential"; objStep.predecessors = {init.stepId};
-    objStep.autoApprove   = true; objStep.isSystem = true;
-    objStep.systemAction  = SystemAction::SCAN_UNREGISTERED_FILES;
-    objStep.status        = "pending";
-    objStep.createdAt     = nowIso(); objStep.updatedAt = nowIso();
-    objStep.save(); wf->steps.push_back(objStep);
-
-    // DB schreiben step — runs after Objektverwaltung.
-    F77_WorkflowOperation dbStep;
-    dbStep.stepId        = genId("F77S"); dbStep.workflowId = wf->workflowId;
-    dbStep.title         = "DB schreiben";
-    dbStep.sequenceOrder = 2;
-    dbStep.executionMode = "sequential"; dbStep.predecessors = {objStep.stepId};
-    dbStep.autoApprove   = true; dbStep.isSystem = true;
-    dbStep.systemAction  = SystemAction::COMMIT_DB_OBJECTS;
-    dbStep.status        = "pending";
-    dbStep.createdAt     = nowIso(); dbStep.updatedAt = nowIso();
-    dbStep.save(); wf->steps.push_back(dbStep);
-
-    // End step — auto-approved once DB schreiben completes.
+    // End step — always last, chains from final system step.
     F77_WorkflowOperation end;
     end.stepId=genId("F77S"); end.workflowId=wf->workflowId;
     end.title="End"; end.sequenceOrder=9999; end.isFinal=true;
-    end.autoApprove=true; end.predecessors={dbStep.stepId};
+    end.autoApprove=true; end.predecessors={prevStepId};
     end.status="pending"; end.executionMode="sequential";
     end.createdAt=nowIso(); end.updatedAt=nowIso();
     end.save(); wf->steps.push_back(end);
 
-    tick(*wf);
-
-    // Store the workflow ID back into the entity's releaseWorkflowId field
+    // NOTE: tick() is NOT called here.
+    // The caller (startWfInstanceWizard or test) calls tick() after any manual
+    // operations are added. This prevents premature auto-completion.
     storeWorkflowId(entityType, entityId, wf->workflowId);
-    if (entityType == "akt")
-        propagateDokWorkflowToParent(entityId, wf->workflowId, targetState);
 
     return wf;
 }
@@ -848,6 +805,56 @@ static void pruneMFSRevisions(const std::string& docId) {
 }
 
 
+// ── F77_Engine::scanLooseFiles ────────────────────────────────────────────
+// Delegates to each entity's own scan logic. F77 does not know internals.
+// Adding a new entity type: add one case here.
+std::vector<std::pair<std::string,std::string>>
+F77_Engine::scanLooseFiles(const std::string& entityType,
+                            const std::string& entityId)
+{
+    using namespace Rosenholz;
+    if (entityType == "f22") {
+        auto t = TaskF22::loadById(entityId);
+        return t ? t->scanMfsForUnregistered()
+                 : std::vector<std::pair<std::string,std::string>>{};
+    }
+    if (entityType == "akt") {
+        auto d = Document::loadById(entityId);
+        if (!d) return {};
+        auto curRev = DocumentRevision::currentRevision(entityId);
+        if (!curRev) return {};
+        auto files = DocumentObject::scanForUnregisteredFiles(entityId, curRev->rev);
+        std::vector<std::pair<std::string,std::string>> result;
+        for (auto& f : files) {
+            std::string dir = d->mfsDir();
+            std::string rel = (f.size() > dir.size() + 1)
+                ? f.substr(dir.size() + 1) : FileOps::baseName(f);
+            result.emplace_back(f, rel);
+        }
+        return result;
+    }
+    if (entityType == "f18") {
+        auto op = F18Operation::loadById(entityId);
+        if (!op) return {};
+        // F18 scan: look for files in its MFS sub-folder
+        const std::string& root = Config::instance().mfsPath();
+        std::string dir = FileOps::joinPath(
+            FileOps::joinPath(root, "F18"), entityId);
+        std::vector<std::pair<std::string,std::string>> result;
+        for (auto& f : FileOps::listFiles(dir, true)) {
+            auto b = FileOps::baseName(f);
+            if (b == "_SCHLUESSEL.txt" || b == "00_KARTE.txt"
+                || b == "owner_key.txt" || b.empty()) continue;
+            std::string rel = (f.size() > dir.size() + 1)
+                ? f.substr(dir.size() + 1) : b;
+            result.emplace_back(f, rel);
+        }
+        return result;
+    }
+    return {}; // unknown entity type
+}
+
+
 // Execute a system step (isSystem=true). Currently only one action exists:
 // SystemAction::COMMIT_DB_OBJECTS — commits all uncommitted DocumentObjects to LMDB.
 // Adding a new system action = adding a case to the switch below.
@@ -865,35 +872,7 @@ static void executeSystemStep(F77_WorkflowOperation& step,
         //          and block until all tasks are closed.
         std::vector<std::pair<std::string,std::string>> loose;
 
-        if (wf.entityType == "f22") {
-            auto t = Rosenholz::TaskF22::loadById(wf.entityId);
-            if (t) loose = t->scanMfsForUnregistered();
-        } else if (wf.entityType == "akt") {
-            auto curRev = Rosenholz::DocumentRevision::currentRevision(wf.entityId);
-            if (curRev) {
-                auto files = Rosenholz::DocumentObject::scanForUnregisteredFiles(
-                    wf.entityId, curRev->rev);
-                for (auto& f : files)
-                    loose.emplace_back(f, Rosenholz::FileOps::baseName(f));
-            }
-        }
-        // F16/F18: scan their MFS sub-folder
-        else if (wf.entityType == "f16") {
-            auto p = Rosenholz::ProjectF16::loadById(wf.entityId);
-            if (p) {
-                const std::string& mfsRoot = Rosenholz::Config::instance().mfsPath();
-                std::string dir = Rosenholz::FileOps::joinPath(
-                    Rosenholz::FileOps::joinPath(mfsRoot, "F16"),
-                    sanitiseRegNr(p->regNumber.toString()));
-                auto files = Rosenholz::FileOps::listFiles(dir, true);
-                for (auto& f : files) {
-                    auto b = Rosenholz::FileOps::baseName(f);
-                    if (b == "_SCHLUESSEL.txt" || b == "00_DECKBLATT.txt"
-                        || b == "owner_key.txt" || b.empty()) continue;
-                    loose.emplace_back(f, b);
-                }
-            }
-        }
+        loose = Rosenholz::F77_Engine::scanLooseFiles(wf.entityType, wf.entityId);
 
         if (loose.empty()) {
             LOG_INFO("[F77] Objektverwaltung: no loose files — auto-approved for "
@@ -986,44 +965,33 @@ bool F77_Engine::tick(F77_Workflow& wf) {
 
     for(auto& s : wf.steps) {
         // Sync status from linked F18_Operation
-        if(!s.f18OperationId.empty()) s.syncFromF18();
 
         // Auto-approve Init and autoApprove steps
-        if(s.status=="pending" && s.autoApprove && s.canStart(wf.steps)) {
+        if(stepStatusFrom(s.status)==StepStatus::PENDING && s.autoApprove && s.canStart(wf.steps)) {
             s.status="approved"; s.completedDate=nowIso(); s.save(); changed=true;
             LOG_INFO("[F77] Auto-approved step '"+s.title+"'");
             if(s.isSystem) executeSystemStep(s, wf, changed);
         }
 
-        // Re-check in_progress SCAN steps: if all F77_Tasks closed, approve
-        if(s.status=="in_progress" && s.isSystem
-           && s.systemAction == SystemAction::SCAN_UNREGISTERED_FILES) {
+        // Re-check in_progress steps: if all F77_Tasks closed, approve.
+        // This handles both SCAN steps (Objektverwaltung) and manual operations.
+        if(stepStatusFrom(s.status)==StepStatus::IN_PROGRESS) {
             auto tasks = F77_Task::loadForOperation(s.stepId);
-            bool allClosed = true;
-            for (auto& t : tasks) if (t->isOpen()) { allClosed = false; break; }
-            if (allClosed && !tasks.empty()) {
+            if (!tasks.empty() && F77_Task::checkOperationComplete(s.stepId)) {
                 s.status="approved"; s.completedDate=nowIso(); s.save(); changed=true;
-                LOG_INFO("[F77] Objektverwaltung approved — all tasks closed: " + s.stepId);
+                LOG_INFO("[F77] Step approved (all tasks closed): " + s.title
+                         + " [" + s.stepId + "]");
             }
         }
 
-        // Spawn wait-condition F18_Operation if needed
-        // Spawn wait condition for pending/in_progress steps
-        if((s.status=="pending" || s.status=="in_progress")
-           && !s.waitConditionF18Type.empty()
-           && s.waitF18OperationId.empty() && s.canStart(wf.steps)) {
-            spawnWaitConditionF18(s, wf.entityId);
-            changed=true;
-        }
-
         // Mark in_progress for ready mid-steps
-        if(s.status=="pending" && !s.isInitialize && !s.isFinal
-           && s.canStart(wf.steps) && s.waitF18OperationId.empty()) {
+        if(stepStatusFrom(s.status)==StepStatus::PENDING && !s.isInitialize && !s.isFinal
+           && s.canStart(wf.steps)) {
             s.status="in_progress"; s.save(); changed=true;
         }
 
         // End step: auto-approve when all mid-steps done AND no open F77_Tasks remain
-        if(s.isFinal && s.status=="pending" && wf.isComplete()) {
+        if(s.isFinal && stepStatusFrom(s.status)==StepStatus::PENDING && wf.isComplete()) {
             // Guard: check all F77_Tasks spawned by this workflow are closed
             auto pendingTasks = F77_Task::loadForWorkflow(wf.workflowId);
             bool hasOpenTasks = false;
@@ -1056,7 +1024,7 @@ std::string F77_Engine::addManualOperation(
     // Always reload from DB to get current status:
     auto fresh = F77_Workflow::loadById(wf.workflowId);
     if (fresh) { wf.status = fresh->status; wf.steps = fresh->steps; }
-    if (wf.status != "active") {
+    if (workflowStatusFrom(wf.status) != WorkflowStatus::ACTIVE) {
         LOG_WARN("[F77] addManualOperation: workflow not active (status=" + wf.status + "): " + wf.workflowId);
         return "";
     }
@@ -1087,7 +1055,7 @@ std::string F77_Engine::addManualOperation(
     op.isInitialize  = false;
     op.isFinal       = false;
     op.isSystem      = false;
-    op.status        = "pending";
+    op.status        = "in_progress"; // task-driven — tick polls this
     op.sequenceOrder = insertBefore;
     op.executionMode = "sequential";
     // Chain after last manual step (or Init if none)
@@ -1161,12 +1129,6 @@ std::string F77_Engine::validateStep(
             return "BLOCKED: Schritt ist bereits abgeschlossen ("+s.status+")";
         if(!s.canStart(wf.steps))
             return "BLOCKED: Vorgaenger-Schritte noch nicht abgeschlossen";
-        if(!s.waitF18OperationId.empty()) {
-            auto waitOp = F18Operation::loadById(s.waitF18OperationId);
-            if(waitOp && waitOp->status != "released")
-                return "BLOCKED: Wartebedingung F18-Operation noch nicht freigegeben ("
-                       + waitOp->status + ")";
-        }
         if(s.isInitialize)
             return "INFO: Init-Schritt wird automatisch genehmigt";
         if(s.isFinal) {
@@ -1196,53 +1158,15 @@ bool F77_Engine::fireStep(F77_Workflow& wf, const std::string& stepId,
     if(!step->canStart(wf.steps)) { LOG_WARN("[F77] Prerequisites not met: "+stepId); return false; }
     if(step->requiresComment && comment.empty()) { LOG_WARN("[F77] Comment required: "+stepId); return false; }
 
-    // Check wait condition
-    if(!step->waitF18OperationId.empty()) {
-        auto waitOp = F18Operation::loadById(step->waitF18OperationId);
-        if(waitOp && waitOp->status != "released") {
-            LOG_WARN("[F77] Wait condition not satisfied for step: "+stepId);
-            return false;
-        }
-    }
 
     step->status = decision;
     step->completedDate = nowIso();
     step->save();
 
-    // Update the linked F18_Operation status via raw SQL
-    // (bypasses the model guard since this is a system-controlled transition).
-    if(!step->f18OperationId.empty()) {
-        auto* f18db = DatabasePool::instance().get("f18");
-        if (f18db) {
-            std::string newStatus = (decision == "approved") ? "released" : "cancelled";
-            f18db->exec(
-                "UPDATE f18_operations SET status=?, updated_at=? WHERE vorgang_id=?;",
-                {BindParam::text(newStatus), BindParam::text(nowIso()),
-                 BindParam::text(step->f18OperationId)});
-        }
-    }
 
     LOG_INFO("[F77] Step fired: "+stepId+" decision="+decision+" by="+actorId);
     tick(wf);
     return true;
-}
-
-void F77_Engine::spawnWaitConditionF18(F77_WorkflowOperation& step, const std::string& entityId) {
-    std::string projId;
-    // F18 resolves to its owning task (taskId)
-    auto op = F18Operation::loadById(entityId);
-    if(op) projId = op->taskId;
-    if(projId.empty()) projId = entityId; // fallback
-
-    if(projId.empty()) projId=entityId;
-    std::string title = step.waitConditionF18Type.empty() ? "Wartebedingung" : step.waitConditionF18Type + " — Wartebedingung";
-    if(step.waitConditionF18Type.empty()) { LOG_WARN("[F77] No wait condition type set"); return; }
-    auto waitOp = F18Operation::create(entityId, title, step.waitConditionF18Type);
-    if(waitOp) {
-        step.waitF18OperationId = waitOp->vorgangId;
-        step.save();
-        LOG_INFO("[F77] Wait condition F18_Operation spawned: "+waitOp->vorgangId);
-    }
 }
 
 bool F77_Engine::checkAndComplete(F77_Workflow& wf) {
@@ -1262,7 +1186,7 @@ bool F77_Engine::applyTargetState(const F77_Workflow& wf) {
         if(rev && DocumentRevision::isTransitionAllowed(rev->revState,
              revStateFromString(wf.targetState))) {
             rev->transitionState(revStateFromString(wf.targetState), true); // F77-gated
-            LOG_INFO("[F77] DOK revision transitioned: "+wf.entityId+" → "+wf.targetState);
+            LOG_INFO("[F77] AKT revision transitioned: "+wf.entityId+" → "+wf.targetState);
         }
     } else {
         // F16/F22/F18: set status via EntityCtx (single dispatch — no scattered if/else)
@@ -1285,23 +1209,21 @@ bool F77_Engine::canRelease(const std::string& entityType, const std::string& en
     // Check the main workflow itself: all steps must be complete.
     auto mainWf = F77_Workflow::loadById(releaseWorkflowId);
     if (!mainWf) {
-        blockerCount = 1; // can't release without a workflow
+        blockerCount = 1;
         return false;
     }
-    if (mainWf->status != "completed") {
-        // Load steps and count incomplete non-Init ones as blockers
+    if (workflowStatusFrom(mainWf->status) != WorkflowStatus::COMPLETED) {
         mainWf->loadSteps();
         for (auto& s : mainWf->steps) {
             if (!s.isInitialize && !s.isComplete()) blockerCount++;
         }
         if (blockerCount > 0) return false;
     }
-
     // Legacy: also count any OTHER active workflows (should be 0 under new model)
     auto all = F77_Workflow::loadForEntity(entityType, entityId);
     for (auto& wf : all) {
         if (wf->workflowId == releaseWorkflowId) continue;
-        if (wf->status == "active") blockerCount++;
+        if (workflowStatusFrom(wf->status) == WorkflowStatus::ACTIVE) blockerCount++;
     }
     return blockerCount == 0;
 }
@@ -1313,7 +1235,7 @@ int F77_Engine::lockAll(const std::string& entityType, const std::string& entity
     auto all = F77_Workflow::loadForEntity(entityType, entityId);
     int locked=0;
     for(auto& wf : all) {
-        if(wf->workflowId==releaseWorkflowId || wf->status!="active") continue;
+        if(wf->workflowId==releaseWorkflowId || workflowStatusFrom(wf->status) != WorkflowStatus::ACTIVE) continue;
         wf->status="locked"; wf->save(); locked++;
     }
     return locked;
@@ -1364,7 +1286,7 @@ void F77_Engine::seedDefaultTemplates() {
         mid.predecessorTplStepIds = createDb.tplStepId;
         mid.save();
 
-        // Step 4: End (auto-approved)
+        // Step 3: End (auto-approved; Objektverwaltung+DBschreiben injected before this)
         auto end = t->addTemplateStep("End", "sequential", false, true);
         end.predecessorTplStepIds = mid.tplStepId;
         end.autoApprove = true;
@@ -1374,22 +1296,22 @@ void F77_Engine::seedDefaultTemplates() {
     // ── Standard templates (all entity types) ──────────────────
     // Dok gets all 5-state transitions; F16/F22/F18 only get released/closed
     const std::string dokTypes  = "akt";
-    const std::string objTypes  = "f16,f22,f18,dok";
+    const std::string objTypes  = "f22,f18"; // f16 no longer uses F77; dok → akt
 
     // 1. Lock Workflow: → locked  (available from in_work and pre_released)
     makeTemplate("Dokument: Einfrieren",        "locked",       dokTypes,  "Sperren prüfen");
-    makeTemplate("Objekt: Einfrieren",          "locked",       "f16,f22,f18", "Sperren prüfen");
+    makeTemplate("Objekt: Einfrieren",          "locked",       "f22,f18", "Sperren prüfen");
 
     // 2. PreRelease Workflow: in_work → pre_released
     makeTemplate("Dokument: Zur Prüfung",       "pre_released", dokTypes,  "Prüfung durchführen");
 
     // 3. Release Workflow: → released
     makeTemplate("Dokument: Freigabe",          "released",     dokTypes,  "Freigabe erteilen");
-    makeTemplate("Objekt: Freigabe",            "released",     "f16,f22,f18", "Freigabe erteilen");
+    makeTemplate("Objekt: Freigabe",            "released",     "f22,f18", "Freigabe erteilen");
 
     // 4. Close Workflow: → closed (= Ungültig markieren)
     makeTemplate("Dokument: Schliessen",        "closed",       dokTypes,  "Ungültigkeit bestätigen");
-    makeTemplate("Objekt: Schliessen",          "closed",       "f16,f22,f18", "Ungültigkeit bestätigen");
+    makeTemplate("Objekt: Schliessen",          "closed",       "f22,f18", "Ungültigkeit bestätigen");
 
     // 5. Unlock Workflow: locked → in_work
     makeTemplate("Dokument: Entsperren",        "in_work",      dokTypes,  "Entsperrung prüfen");

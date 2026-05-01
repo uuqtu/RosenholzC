@@ -532,7 +532,7 @@ std::string F18Operation::mfsSchluesselText() const {
       << "  F22     : " << taskId << "\n";
     auto docs = Rosenholz::Document::loadForEntity("f18", vorgangId);
     if (!docs.empty()) {
-        s << "  DOK     :";
+        s << "  AKT     :";
         for (auto& d : docs) s << " " << d->documentId;
         s << "\n";
     }
@@ -591,5 +591,11 @@ bool F18Operation::tick() {
     return changed;
 }
 
+
+
+int F18Operation::count() {
+    auto* d = DatabasePool::instance().get("f18");
+    return d ? d->rowCount("f18_operations") : 0;
+}
 
 } // namespace Rosenholz
