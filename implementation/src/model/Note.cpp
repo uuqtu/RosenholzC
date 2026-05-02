@@ -184,12 +184,12 @@ std::vector<Note::SearchResult> Note::search(
 
     std::string sql = "SELECT * FROM f99_entries WHERE body LIKE ?";
     std::vector<BindParam> params;
-    params.push_back(BindParam::text("%" + query + "%"));
+    params.push_back(BindParam::text(patternToSQLLike(query)));
     if (!entityType.empty()) {
         sql += " AND entity_type=?";
         params.push_back(BindParam::text(entityType));
     }
-    sql += " ORDER BY created_at DESC;";
+    sql += " ORDER BY created_at DESC LIMIT 100;";
 
     for (auto& r : d->query(sql, params)) {
         auto n = std::make_shared<Note>(); n->fromRow(r);

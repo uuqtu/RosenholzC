@@ -6,6 +6,7 @@
 #include "../src/core/FileOps.h"
 #include "../src/core/RegNumber.h"
 #include "../src/core/Migration.h"
+#include "../src/cli/cli_common.h"
 #include "../src/workflow/F77Workflow.h"
 
 namespace R = Rosenholz;

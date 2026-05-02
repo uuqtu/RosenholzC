@@ -237,6 +237,80 @@ std::string readChar(const std::string& prompt,
 }
 
 
+// ── Wildcard matching ─────────────────────────────────────────────────────────
+// matchesPattern: case-insensitive glob match
+//   * = any number of characters (including zero)
+//   % = exactly one character
+//   all other chars: literal match
+//
+// Examples (pattern → text):
+//   "T*"    → "Test"  = true
+//   "T*t"   → "Test"  = true
+//   "Ts*t"  → "Test"  = false
+//   "T%st"  → "Test"  = true
+//   "T%t"   → "Test"  = false  (% is exactly 1 char)
+bool matchesPattern(const std::string& text, const std::string& pattern) {
+    // Convert both to lowercase for case-insensitive comparison:
+    std::string t = text, p = pattern;
+    std::transform(t.begin(), t.end(), t.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    std::transform(p.begin(), p.end(), p.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+
+    // If pattern has no wildcards: substring match (backward compat)
+    if (p.find('*') == std::string::npos && p.find('%') == std::string::npos)
+        return t.find(p) != std::string::npos;
+
+    // DP wildcard match:
+    // dp[i][j] = pattern[0..i-1] matches text[0..j-1]
+    const std::size_t pn = p.size(), tn = t.size();
+    // Use two rows to save memory:
+    std::vector<bool> prev(tn + 1, false), curr(tn + 1, false);
+    prev[0] = true;
+    // Pattern prefix of only '*' can match empty string:
+    for (std::size_t i = 1; i <= pn; ++i) {
+        if (p[i-1] == '*') prev[0] = prev[0]; // '*' can match zero chars
+        // Actually: reset curr, then:
+        curr.assign(tn + 1, false);
+        curr[0] = (p[i-1] == '*') && prev[0];
+        for (std::size_t j = 1; j <= tn; ++j) {
+            if (p[i-1] == '*') {
+                // '*' matches zero chars (prev[j]) or one+ chars (curr[j-1])
+                curr[j] = prev[j] || curr[j-1];
+            } else if (p[i-1] == '%') {
+                // '%' matches exactly one char
+                curr[j] = prev[j-1];
+            } else {
+                // Literal match
+                curr[j] = prev[j-1] && (p[i-1] == t[j-1]);
+            }
+        }
+        prev = curr;
+    }
+    return prev[tn];
+}
+
+// patternToSQLLike: convert user pattern to SQLite LIKE pattern
+//   User * → SQL %   (any number of chars)
+//   User % → SQL _   (exactly one char)
+//   No wildcards → %pattern% (substring, backward compat)
+std::string patternToSQLLike(const std::string& pattern) {
+    bool hasWild = (pattern.find('*') != std::string::npos ||
+                    pattern.find('%') != std::string::npos);
+    if (!hasWild) return "%" + pattern + "%";
+
+    std::string sql;
+    sql.reserve(pattern.size() * 2);
+    for (char c : pattern) {
+        if      (c == '*') sql += '%';   // * → any number
+        else if (c == '%') sql += '_';   // % → exactly one
+        else if (c == '_') sql += "\_"; // escape SQL's own single-char wildcard
+        else               sql += c;
+    }
+    return sql;
+}
+
+
 std::string readLine(const std::string& prompt) {
     while (true) {
         if (g_interrupted) return "";

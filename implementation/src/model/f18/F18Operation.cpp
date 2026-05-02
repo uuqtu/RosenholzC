@@ -294,7 +294,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
 
     // Auto-create Init and End steps
     auto initStep = std::make_shared<F18OperationStep>();
-    initStep->stepId        = genId("WFS");
+    initStep->stepId        = genId("F18S");
     initStep->operationId     = v->operationId;
     initStep->title         = "Init";
     initStep->description   = "Automatischer Startschritt.";
@@ -311,7 +311,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     initStep->save();
 
     auto endStep = std::make_shared<F18OperationStep>();
-    endStep->stepId         = genId("WFS");
+    endStep->stepId         = genId("F18S");
     endStep->operationId      = v->operationId;
     endStep->title          = "End";
     endStep->description    = "Abschlussschritt.";
@@ -402,7 +402,7 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     }
 
     F18OperationStep newStep;
-    newStep.stepId             = genId("WFS");
+    newStep.stepId             = genId("F18S");
     newStep.operationId          = operationId;
     newStep.title              = title;
     newStep.stepType           = stepType;
@@ -478,7 +478,7 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
 
     // Create the new step
     F18OperationStep newStep;
-    newStep.stepId             = genId("WFS");
+    newStep.stepId             = genId("F18S");
     newStep.operationId          = operationId;
     newStep.title              = title;
     newStep.stepType           = stepType;

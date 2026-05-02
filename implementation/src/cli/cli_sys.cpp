@@ -156,13 +156,9 @@ void globalSearch(const std::string& query) {
     using namespace Rosenholz;
     if (query.empty()) return;
 
-    std::string lq = query;
-    for (char& c : lq) c = (char)std::tolower(c);
-
+    // matchesPattern: * = any chars, % = exactly one char
     auto match = [&](const std::string& s) {
-        std::string ls = s;
-        for (char& c : ls) c = (char)std::tolower(c);
-        return ls.find(lq) != std::string::npos;
+        return CLI::matchesPattern(s, query);
     };
 
     hdr("GLOBALE SUCHE: \"" + query + "\"");

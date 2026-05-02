@@ -124,6 +124,10 @@ inline const char* f18StepSymbolStr(Rosenholz::F18StepSymbol s) {
 // ── Input / output primitives (cli_utils.cpp) ─────────────────
 std::string readLine(const std::string& prompt);
 std::string promptDate(const std::string& label);
+/// Case-insensitive wildcard match: * = any chars, % = exactly one char
+bool matchesPattern(const std::string& text, const std::string& pattern);
+/// Convert user pattern to SQLite LIKE pattern (* → %, % → _)
+std::string patternToSQLLike(const std::string& pattern);
 std::string readChar(const std::string& prompt,
                      const std::vector<std::pair<std::string,std::string>>& aliases,
                      bool optional = true);
@@ -176,6 +180,8 @@ std::shared_ptr<Rosenholz::F22> createTaskWizardGuided();
 
 // ── F18 operation commands (cli_f18.cpp) ──────────────────────
 void cmdF18(const std::vector<std::string>& args);
+void cmdF18s(const std::vector<std::string>& args,
+             std::shared_ptr<Rosenholz::F18Operation> v = nullptr);
 std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& projectId = "",
     const std::string& taskId    = "",

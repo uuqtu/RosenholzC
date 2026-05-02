@@ -47,16 +47,10 @@ void cmdF16(const std::vector<std::string>& args) {
     if (args[0] == "-s" || args[0] == "--search" || searchOpen) {
         std::string q = args.size() > 1 ? args[1] : readLine("  Suche: ");
         if (q.empty()) return;
-        std::string ql = q;
-        std::transform(ql.begin(), ql.end(), ql.begin(), ::tolower);
-
         auto all = F16::loadAll();
         std::vector<std::shared_ptr<F16>> hits;
         for (auto& p : all) {
-            std::string t = p->title, r = p->regNumber.toString();
-            std::transform(t.begin(), t.end(), t.begin(), ::tolower);
-            std::transform(r.begin(), r.end(), r.begin(), ::tolower);
-            if (t.find(ql) != std::string::npos || r.find(ql) != std::string::npos)
+            if (matchesPattern(p->title, q) || matchesPattern(p->regNumber.toString(), q))
                 hits.push_back(p);
         }
         if (hits.empty()) { std::cout << "  (keine Treffer)\n"; return; }

@@ -10,6 +10,7 @@
 // ============================================================
 #include "cli_registry.h"
 #include "cli_common.h"
+#include "../model/f18/F18Operation.h"
 #include "../model/NavigationContext.h"
 #include <algorithm>
 
@@ -26,6 +27,7 @@ void cmdContextual(const std::string& name, const std::vector<std::string>&);
 void cmdF16(const std::vector<std::string>&);
 void cmdF22(const std::vector<std::string>&);
 void cmdF18(const std::vector<std::string>&);
+void cmdF18s(const std::vector<std::string>&, std::shared_ptr<Rosenholz::F18Operation>);
 void cmdAkt(const std::vector<std::string>&);
 void cmdF77(const std::vector<std::string>&);
 void cmdPer(const std::vector<std::string>&);
@@ -101,6 +103,21 @@ const std::vector<CliCommand>& registry() {
       "f77 -s  Workflow starten  f77 -d  anzeigen  f77 -o/-so  listen/suchen",
       {"-s","-d","-o","-so","-tpl"},
       ctx("f77"),   global(cmdF77) },
+
+    // ── F18S: F18-Schritte ────────────────────────────────────────────────────
+    { "f18s", "-f18s", ET::NONE,
+      "f18s -n  Neuer Schritt  f18s -o/-so  listen/suchen  f18s -e <n>  bearbeiten",
+      {"-n","-e","-o","-so","-s"},
+      [](const std::vector<std::string>& a) {
+          auto& nav = Rosenholz::NavigationStack::instance();
+          auto cur = nav.current();
+          std::shared_ptr<Rosenholz::F18Operation> v;
+          if (cur.valid() && cur.type == Rosenholz::EntityType::F18)
+              v = Rosenholz::F18Operation::loadById(cur.id);
+          cmdF18s(a, v);
+      },
+      [](const std::vector<std::string>& a) { cmdF18s(a, nullptr); }
+    },
 
     // ── AKT-only ─────────────────────────────────────────────────────────────
     { "rev", nullptr,  ET::AKT, "rev        Neue Revision anlegen",

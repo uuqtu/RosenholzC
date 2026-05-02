@@ -49,6 +49,7 @@ namespace RegDept {
     constexpr const char* TEAM      = "DE";   ///< Diensteinheit
     constexpr const char* OPERATION = "F18";  ///< F18 Operation (vormals Incident)
     constexpr const char* RELEASE   = "F77";
+    constexpr const char* F18STEP   = "F18S"; ///< F18 Operation Step
     constexpr const char* NOTE      = "NOTE"; ///< Notes  ///< F77 Freigabe-Workflow (lifecycle)
 }
 

@@ -125,16 +125,13 @@ void cmdKom(const std::vector<std::string>& args) {
     bool doList   = (!args.empty() && args[0] == "-o");
     if (doList || doSearch) {
         std::string q = (doSearch && args.size() > 1) ? args[1] : "";
-        std::string lq = q;
-        std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
         // Load all comms (flat — across all owners):
         auto all = Communication::loadAll(200);
         std::vector<std::shared_ptr<Communication>> hits;
         for (auto& c : all) {
-            if (lq.empty()) { hits.push_back(c); continue; }
-            std::string chk = c->title + " " + c->communicationId;
-            std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
-            if (chk.find(lq) != std::string::npos) hits.push_back(c);
+            if (q.empty()) { hits.push_back(c); continue; }
+            if (matchesPattern(c->title, q) || matchesPattern(c->communicationId, q))
+                hits.push_back(c);
         }
         if (hits.empty()) { std::cout << "  (keine Kommunikation)\n"; return; }
         std::cout << "\n  " << std::left << std::setw(4) << "#"

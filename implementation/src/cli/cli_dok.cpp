@@ -153,13 +153,10 @@ void cmdAkt(const std::vector<std::string>& args) {
         std::string q;
         for (size_t i=1; i<args.size(); ++i) { if(!q.empty()) q+=" "; q+=args[i]; }
         if (q.empty()) { printErr("-s benoetigt einen Suchbegriff"); return; }
-        std::string lq=q; for(char& c:lq) c=(char)std::tolower((unsigned char)c);
         auto all = Folder::loadRecent(9999);
         bool found=false;
         for (auto& d : all) {
-            std::string chk = d->title + " " + d->folderId;
-            for(char& c:chk) c=(char)std::tolower((unsigned char)c);
-            if (chk.find(lq)!=std::string::npos) {
+            if (matchesPattern(d->title, q) || matchesPattern(d->folderId, q)) {
                 std::cout << "  AKT  " << std::left << std::setw(28) << d->folderId
                           << " " << d->title << "  [" << d->docType << "]\n";
                 found=true;

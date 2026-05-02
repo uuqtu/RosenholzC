@@ -181,6 +181,7 @@ void cmdLs(const std::vector<std::string>& args) {
     case EntityType::F18: {
         auto v = F18Operation::loadById(cur.id);
         if (!v) { printErr("F18 nicht gefunden: " + cur.id); return; }
+        v->loadSteps();  // always load steps before listing
         std::cout << "\n  " << Color::bold("F18") << " " << Color::magenta(cur.id)
                   << " — " << v->title << "\n"
                   << "  Typ: " << v->operationType
@@ -666,104 +667,12 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (v) printF18Operation(*v);
             return;
         }
-        // -stp: F18 step navigation
+        // -stp: redirect to f18s (backward compat, show hint)
         if (!args.empty() && args[0] == "-stp" && cur.type == EntityType::F18) {
-            auto v = F18Operation::loadById(cur.id);
-            if (!v) { printErr("F18 nicht gefunden: " + cur.id); return; }
-            v->loadSteps();
-
-            // -stp -n : neuen Schritt hinzufuegen (mit Datumsfeldern)
-            if (args.size() >= 2 && args[1] == "-n") {
-                std::string title = readLine("  Schritt-Titel: ");
-                if (title.empty()) return;
-                std::cout << "  Typ: 1.task  2.approval  3.review  4.notification  ";
-                int st = readInt("", 1, 4);
-                static const char* sts[]={"task","approval","review","notification"};
-                std::string ass   = readOpt("  Zugewiesen an (Person-ID, leer=offen): ");
-                std::string start = promptDate("  Geplanter Start (.  +Nd  YYYY-MM-DD, leer): ");
-                std::string end   = promptDate("  Geplantes Ende  (.  +Nd  YYYY-MM-DD, leer): ");
-                bool freeStep = yesno("  Freier Schritt (kein Vorgaenger)?");
-                v->addStep(title, sts[st-1], ass, freeStep, start, end);
-                printOk("Schritt hinzugefuegt.");
-                return;
-            }
-
-            // -stp -e <n>: Schritt N bearbeiten
-            if (args.size() >= 2 && args[1] == "-e") {
-                int n = 0;
-                if (args.size() >= 3) { try { n = std::stoi(args[2]); } catch(...) {} }
-                if (n < 1 || n > (int)v->steps.size()) {
-                    // Show list and ask:
-                    if (v->steps.empty()) { std::cout << "  (keine Schritte)\n"; return; }
-                    for (int i=0; i<(int)v->steps.size(); i++)
-                        std::cout << "  " << std::setw(3) << (i+1) << ". "
-                                  << v->steps[i].title.substr(0,30)
-                                  << "  " << Rosenholz::f18StepStatusToString(v->steps[i].status) << "\n";
-                    n = readInt("  Schritt", 1, (int)v->steps.size());
-                }
-                auto& s = v->steps[n-1];
-                // Edit fields:
-                std::string newTitle = readOpt("  Titel (leer=behalten): ");
-                if (!newTitle.empty()) s.title = newTitle;
-                std::string newAss = readOpt("  Zugewiesen an (leer=behalten): ");
-                if (!newAss.empty()) s.assignedTo = newAss;
-                std::string newPrio = readChar(
-                    "Prioritaet (h=high m=medium l=low c=critical, leer=behalten): ",
-                    {{"h","high"},{"m","medium"},{"l","low"},{"c","critical"}}, true);
-                if (!newPrio.empty()) s.priority = newPrio;
-                std::string newStart = promptDate("  Geplanter Start (.  +Nd, leer=behalten): ");
-                if (!newStart.empty()) s.startDatePlanned = newStart;
-                std::string newEnd = promptDate("  Geplantes Ende  (.  +Nd, leer=behalten): ");
-                if (!newEnd.empty()) { s.endDatePlanned = newEnd; s.dueDate = newEnd; }
-                std::string pctStr = readOpt("  Fortschritt % (0-100, leer=behalten): ");
-                if (!pctStr.empty()) try { s.percentComplete = std::stoi(pctStr); } catch(...) {}
-                s.computeTrackingStatus();
-                if (s.update()) printOk("Schritt aktualisiert.");
-                else            printErr("Fehler beim Speichern.");
-                return;
-            }
-
-            // -stp <n> : Schritt #n direkt oeffnen
-            if (args.size() >= 2) {
-                int n = 0;
-                try { n = std::stoi(args[1]); } catch (...) {}
-                if (n >= 1 && n <= (int)v->steps.size()) {
-                    stepMenu(v->steps[n-1], v->steps);
-                    return;
-                }
-                printErr("Ungueltige Schritt-Nummer: " + args[1]);
-                return;
-            }
-
-            // -stp (kein Argument) : liste und waehle
-            if (v->steps.empty()) {
-                std::cout << "  (keine Schritte)\n"
-                          << "  f18 -stp -n    neuen Schritt hinzufuegen\n";
-                return;
-            }
-            std::cout << "\n  Schritte fuer " << Color::magenta(v->operationId)
-                      << " — " << v->title << ":\n"
-                      << "  " << std::left << std::setw(4) << "#"
-                      << std::setw(26) << "ID"
-                      << std::setw(12) << "STATUS"
-                      << std::setw(28) << "TITEL"
-                      << "TYP\n"
-                      << "  " << std::string(74,'-') << "\n";
-            int n = 1;
-            for (auto& s : v->steps) {
-                std::string sym = f18StepSymbolStr(s.displaySymbol());
-                std::cout << "  " << std::setw(4) << n++
-                          << std::setw(26) << s.stepId
-                          << std::setw(12) << Rosenholz::f18StepStatusToString(s.status)
-                          << std::setw(28) << s.title.substr(0,26)
-                          << s.stepType << "\n";
-            }
-            std::cout << "\n  f18 -stp <n>    Schritt oeffnen"
-                      << "  |  f18 -stp -n    neuer Schritt\n\n";
-            // Optional: pick one directly
-            int pick = readInt("  Schritt [0=Abbrechen]", 0, (int)v->steps.size());
-            if (pick >= 1)
-                stepMenu(v->steps[pick-1], v->steps);
+            std::cout << "  Tipp: Verwende 'f18s' statt 'f18 -stp'\n";
+            auto vptr = F18Operation::loadById(cur.id);
+            std::vector<std::string> fwd(args.begin()+1, args.end());
+            cmdF18s(fwd, vptr);
             return;
         }
         // -note: quick note on current entity
@@ -871,9 +780,6 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         if (!args.empty() && (args[0] == "-oo" || args[0] == "-soo")) {
             bool doOpen = (args[0] == "-soo");
             std::string q = (doOpen && args.size() > 1) ? args[1] : "";
-            std::string lq = q;
-            std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
-
             // Determine which folders to scan based on context:
             std::vector<std::shared_ptr<Folder>> contextFolders;
             std::string entType, entId;
@@ -894,11 +800,8 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 auto rev = FolderRevision::currentRevision(d->folderId);
                 if (!rev) continue;
                 for (auto& o : FolderObject::loadForRevision(d->folderId, rev->rev)) {
-                    if (!lq.empty()) {
-                        std::string chk = o->originalName + " " + o->displayName();
-                        std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
-                        if (chk.find(lq) == std::string::npos) continue;
-                    }
+                    if (!q.empty() && !matchesPattern(o->originalName, q)
+                                   && !matchesPattern(o->displayName(), q)) continue;
                     hits.push_back({o, d->title, d->folderId});
                 }
             }

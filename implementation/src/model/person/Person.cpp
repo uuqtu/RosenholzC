@@ -175,7 +175,7 @@ std::vector<std::shared_ptr<Person>> Person::search(const std::string& frag) {
     auto* db = DatabasePool::instance().get("core");
     std::vector<std::shared_ptr<Person>> result;
     if (!db) return result;
-    auto pat = "%" + frag + "%";
+    auto pat = patternToSQLLike(frag);
     auto rows = db->query(
         "SELECT * FROM persons WHERE last_name LIKE ? OR first_name LIKE ? OR email LIKE ? "
         "ORDER BY last_name;",

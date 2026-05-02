@@ -244,13 +244,11 @@ void cmdTasks(const std::vector<std::string>& args) {
     // -so <q>: search tasks by title/entity, pick to open
     if (args[0] == "-so") {
         std::string q = args.size()>1 ? args[1] : readLine("  Suche: ");
-        std::string lq=q; std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
         auto all = F77Task::loadAll(500);
         std::vector<std::shared_ptr<F77Task>> hits;
         for (auto& t : all) {
-            std::string chk = t->title + " " + t->targetEntityId + " " + t->targetEntityType;
-            std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
-            if (chk.find(lq) != std::string::npos) hits.push_back(t);
+            if (matchesPattern(t->title, q) || matchesPattern(t->targetEntityId, q))
+                hits.push_back(t);
         }
         if (hits.empty()) { std::cout << "  (keine Treffer)\n"; return; }
         printTaskList(hits, "Suchergebnis F77-Aufgaben");

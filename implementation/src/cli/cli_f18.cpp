@@ -69,6 +69,67 @@ void cmdF18(const std::vector<std::string>& args) {
         return;
     }
 
+    // -o: list F18, pick → navigate
+    // -so [q]: search + navigate
+    if (args[0] == "-o" || args[0] == "-so") {
+        bool doSearch = (args[0] == "-so");
+        std::string q;
+        for (std::size_t i=1; i<args.size(); i++) { if(!q.empty()) q+=" "; q+=args[i]; }
+        auto all = F18Operation::loadRecent(200);
+        std::vector<std::shared_ptr<F18Operation>> hits;
+        for (auto& v : all) {
+            if (q.empty()) { hits.push_back(v); continue; }
+            if (matchesPattern(v->title, q) || matchesPattern(v->operationId, q))
+                hits.push_back(v);
+        }
+        if (hits.empty()) { std::cout << "  (keine F18)\n"; return; }
+        std::cout << "\n  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(12) << "TYP"
+                  << std::setw(28) << "TITEL"
+                  << std::setw(18) << "F22-AUFGABE"
+                  << "STATUS\n"
+                  << "  " << std::string(92,'-') << "\n";
+        for (int i=0; i<(int)hits.size(); i++) {
+            auto t = F22::loadById(hits[i]->taskId);
+            std::string tname = t ? t->regNumber.toString() : hits[i]->taskId;
+            std::cout << "  " << std::setw(4) << (i+1)
+                      << std::setw(26) << hits[i]->operationId
+                      << std::setw(12) << hits[i]->operationType.substr(0,10)
+                      << std::setw(28) << hits[i]->title.substr(0,26)
+                      << std::setw(18) << tname
+                      << Color::statusColor(entityStatusToString(hits[i]->status)) << "\n";
+        }
+        if (!doSearch) return;
+        int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)hits.size());
+        if (pick < 1) return;
+        CLI::cmdCd({hits[pick-1]->operationId});
+        return;
+    }
+
+    // -s <q>: search and list (no navigation)
+    if (args[0] == "-s") {
+        std::string q;
+        for (std::size_t i=1; i<args.size(); i++) { if(!q.empty()) q+=" "; q+=args[i]; }
+        if (q.empty()) { printErr("-s benoetigt einen Suchbegriff"); return; }
+        auto all = F18Operation::loadRecent(9999);
+        bool found = false;
+        for (auto& v : all) {
+            if (matchesPattern(v->title, q) || matchesPattern(v->operationId, q)) {
+                auto t = F22::loadById(v->taskId);
+                std::string tname = t ? t->regNumber.toString() : v->taskId;
+                std::cout << "  " << std::left << std::setw(26) << v->operationId
+                          << std::setw(12) << v->operationType.substr(0,10)
+                          << std::setw(28) << v->title.substr(0,26)
+                          << "  " << tname
+                          << "  [" << entityStatusToString(v->status) << "]\n";
+                found = true;
+            }
+        }
+        if (!found) std::cout << "  (keine Treffer)\n";
+        return;
+    }
+
     // -n  —  guided creation
     if (args[0] == "-n" || args[0] == "--neu") {
         auto op = createF18WizardGuided();
@@ -466,4 +527,171 @@ void f18Menu(std::shared_ptr<F18Operation> v) {
             if (!f18MenuTable[ch](v)) break;
     }
 }
+
+// ── cmdF18s: F18 Step (F18S) management ──────────────────────────────────────
+// Global: asks which F18. Contextual (via cmdContextual): uses current F18.
+void cmdF18s(const std::vector<std::string>& args,
+             std::shared_ptr<Rosenholz::F18Operation> v) {
+    using namespace Rosenholz;
+
+    // If no F18 provided: global — ask:
+    if (!v) {
+        if (!args.empty() && isId(args[0])) {
+            v = F18Operation::loadById(args[0]);
+            if (!v) { printErr("F18 nicht gefunden: " + args[0]); return; }
+            // Shift args past the ID:
+            std::vector<std::string> rest(args.begin()+1, args.end());
+            cmdF18s(rest, v);
+            return;
+        }
+        // No ID — try global search/list for F18 selection:
+        auto all = F18Operation::loadRecent(50);
+        if (all.empty()) { printErr("Keine F18-Vorgaenge vorhanden."); return; }
+        std::cout << "\n  F18 waehlen:\n";
+        for (int i=0; i<(int)all.size(); i++)
+            std::cout << "  " << std::setw(3) << (i+1) << ". "
+                      << std::left << std::setw(26) << all[i]->operationId
+                      << "  " << all[i]->title.substr(0,30) << "\n";
+        int pick = readInt("  F18 [0=Abbrechen]", 0, (int)all.size());
+        if (pick < 1) return;
+        v = all[pick-1];
+    }
+    v->loadSteps();
+
+    // -n: new step
+    if (!args.empty() && args[0] == "-n") {
+        std::string title = readLine("  Schritt-Titel: ");
+        if (title.empty()) return;
+        std::cout << "  Typ: 1.task  2.approval  3.review  4.notification  ";
+        int st = readInt("", 1, 4);
+        static const char* sts[]={"task","approval","review","notification"};
+        std::string ass   = readOpt("  Zugewiesen an (Person-ID, leer=offen): ");
+        std::string start = promptDate("  Geplanter Start (.  +Nd  YYYY-MM-DD, leer): ");
+        std::string end   = promptDate("  Geplantes Ende  (.  +Nd  YYYY-MM-DD, leer): ");
+        bool freeStep = yesno("  Freier Schritt (kein Vorgaenger)?");
+        v->addStep(title, sts[st-1], ass, freeStep, start, end);
+        printOk("F18S hinzugefuegt.");
+        return;
+    }
+
+    // -e [n]: edit step
+    if (!args.empty() && args[0] == "-e") {
+        int n = 0;
+        if (args.size() >= 2) { try { n = std::stoi(args[1]); } catch(...) {} }
+        if (v->steps.empty()) { std::cout << "  (keine Schritte)\n"; return; }
+        if (n < 1 || n > (int)v->steps.size()) {
+            for (int i=0; i<(int)v->steps.size(); i++)
+                std::cout << "  " << std::setw(3) << (i+1) << ". "
+                          << v->steps[i].title.substr(0,30) << "\n";
+            n = readInt("  Schritt", 1, (int)v->steps.size());
+        }
+        auto& s = v->steps[n-1];
+        std::string newTitle = readOpt("  Titel (leer=behalten): ");
+        if (!newTitle.empty()) s.title = newTitle;
+        std::string newAss = readOpt("  Zugewiesen an (leer=behalten): ");
+        if (!newAss.empty()) s.assignedTo = newAss;
+        std::string newPrio = readChar(
+            "Prioritaet (h=high m=medium l=low c=critical, leer=behalten): ",
+            {{"h","high"},{"m","medium"},{"l","low"},{"c","critical"}}, true);
+        if (!newPrio.empty()) s.priority = newPrio;
+        std::string newStart = promptDate("  Geplanter Start (leer=behalten): ");
+        if (!newStart.empty()) s.startDatePlanned = newStart;
+        std::string newEnd = promptDate("  Geplantes Ende  (leer=behalten): ");
+        if (!newEnd.empty()) { s.endDatePlanned = newEnd; s.dueDate = newEnd; }
+        std::string pctStr = readOpt("  Fortschritt % (0-100, leer=behalten): ");
+        if (!pctStr.empty()) try { s.percentComplete = std::stoi(pctStr); } catch(...) {}
+        s.computeTrackingStatus();
+        if (s.update()) printOk("F18S aktualisiert.");
+        else            printErr("Fehler beim Speichern.");
+        return;
+    }
+
+    // -o / -so: list steps, pick → open stepMenu
+    if (!args.empty() && (args[0] == "-o" || args[0] == "-so")) {
+        bool doSearch = (args[0] == "-so");
+        std::string q = (doSearch && args.size()>1) ? args[1] : "";
+        if (v->steps.empty()) { std::cout << "  (keine Schritte)\n"; return; }
+        std::vector<F18OperationStep*> hits;
+        for (auto& s : v->steps) {
+            if (q.empty() || matchesPattern(s.title, q) || matchesPattern(s.stepId, q))
+                hits.push_back(&s);
+        }
+        if (hits.empty()) { std::cout << "  (keine Treffer)\n"; return; }
+        std::cout << "\n  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(12) << "STATUS"
+                  << std::setw(28) << "TITEL"
+                  << "TYP\n"
+                  << "  " << std::string(74,'-') << "\n";
+        for (int i=0; i<(int)hits.size(); i++)
+            std::cout << "  " << std::setw(4) << (i+1)
+                      << std::setw(26) << hits[i]->stepId
+                      << std::setw(12) << f18StepStatusToString(hits[i]->status)
+                      << std::setw(28) << hits[i]->title.substr(0,26)
+                      << hits[i]->stepType << "\n";
+        if (!doSearch) return;
+        int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)hits.size());
+        if (pick < 1) return;
+        stepMenu(*hits[pick-1], v->steps);
+        return;
+    }
+
+    // -s <q>: search and list steps
+    if (!args.empty() && args[0] == "-s") {
+        std::string q;
+        for (std::size_t i=1; i<args.size(); i++) { if(!q.empty()) q+=" "; q+=args[i]; }
+        if (q.empty()) { printErr("-s benoetigt Suchbegriff"); return; }
+        bool found = false;
+        for (auto& s : v->steps) {
+            if (matchesPattern(s.title, q) || matchesPattern(s.stepId, q)) {
+                std::cout << "  " << std::setw(26) << s.stepId
+                          << "  " << f18StepStatusToString(s.status)
+                          << "  " << s.title << "\n";
+                found = true;
+            }
+        }
+        if (!found) std::cout << "  (keine Treffer)\n";
+        return;
+    }
+
+    // <n>: open step #n directly
+    if (!args.empty()) {
+        int n = 0;
+        try { n = std::stoi(args[0]); } catch(...) {}
+        if (n >= 1 && n <= (int)v->steps.size()) {
+            stepMenu(v->steps[n-1], v->steps);
+            return;
+        }
+    }
+
+    // No args: list all steps and pick
+    if (v->steps.empty()) {
+        std::cout << "  (keine F18S)\n"
+                  << "  f18s -n    neuen Schritt anlegen\n";
+        return;
+    }
+    std::cout << "\n  F18S-Schritte fuer " << Color::magenta(v->operationId)
+              << " — " << v->title << ":\n"
+              << "  " << std::left << std::setw(4) << "#"
+              << std::setw(26) << "ID"
+              << std::setw(12) << "STATUS"
+              << std::setw(24) << "TITEL"
+              << std::setw(12) << "START-PLAN"
+              << "ENDE-PLAN\n"
+              << "  " << std::string(82,'-') << "\n";
+    for (int i=0; i<(int)v->steps.size(); i++) {
+        auto& s = v->steps[i];
+        std::string sym = f18StepSymbolStr(s.displaySymbol());
+        std::cout << "  " << std::setw(4) << (i+1)
+                  << std::setw(26) << s.stepId
+                  << std::setw(12) << f18StepStatusToString(s.status)
+                  << std::setw(24) << s.title.substr(0,22)
+                  << std::setw(12) << (s.startDatePlanned.empty() ? "-" : s.startDatePlanned.substr(0,10))
+                  << (s.endDatePlanned.empty() ? "-" : s.endDatePlanned.substr(0,10)) << "\n";
+    }
+    std::cout << "\n  f18s <n>  oeffnen  |  f18s -n  neu  |  f18s -e <n>  bearbeiten\n\n";
+    int pick = readInt("  Schritt oeffnen [0=Abbrechen]", 0, (int)v->steps.size());
+    if (pick >= 1) stepMenu(v->steps[pick-1], v->steps);
+}
+
 } // namespace CLI

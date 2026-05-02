@@ -43,6 +43,7 @@ static std::string fval(const std::string& v) {
 #include "../model/akt/Folder.h"
 #include "../model/akt/FolderObject.h"
 #include "../model/f18/F18Operation.h"
+#include "../model/f18/F18OperationStep.h"
 #include "../model/person/Person.h"
 #include "../model/team/Team.h"
 #include "../workflow/F77Workflow.h"
@@ -216,44 +217,91 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
         LOG_WARN("MFSWriter::writeF18 — no task reference for " + v.operationId);
         return false;
     }
-    // F18 is filed under its owning task (F22)
+    // F18 is a SINGLE TEXT FILE under mfs/F18/<sane-id>.txt (no subfolder).
+    // F18S steps each get their own folder: mfs/F18S/<step-id>/<step-id>.txt
     auto task = F22::loadById(v.taskId);
     if (!task) return false;
 
-    std::string dir = f18Dir(mfsRoot, v.operationId);
-    FileOps::makeDirs(dir);
+    // ── F18 index card: single file ─────────────────────────────────────────
+    std::string f18Root = FileOps::joinPath(mfsRoot, "F18");
+    FileOps::makeDirs(f18Root);
+    std::string cardPath = FileOps::joinPath(f18Root,
+                               sanitiseRegNr(v.operationId) + ".txt");
 
-    std::string cardPath = FileOps::joinPath(dir, "00_KARTE.txt");
     std::ostringstream oss;
     oss << "VORGANGSKARTE F18 (" << v.operationType << ")\n"
         << "=======================================================\n"
         << "VORGANG-ID       : " << v.operationId              << "\n"
-        << "TITEL            : " << v.title                  << "\n"
+        << "TITEL            : " << v.title                    << "\n"
         << "VORGANGSART      : " << v.operationType             << "\n"
-        << "STATUS           : " << entityStatusToString(v.status)                  << "\n"
-        << "F77-FREIGABE-WFI : " << v.releaseWorkflowId       << "\n"
-        << "ANGELEGT         : " << v.createdAt               << "\n"
+        << "STATUS           : " << entityStatusToString(v.status) << "\n"
+        << "F22 (AUFGABE)    : " << v.taskId                   << "\n"
+        << "F77-FREIGABE-WFI : " << v.releaseWorkflowId        << "\n"
+        << "ANGELEGT         : " << v.createdAt                << "\n"
         << "=======================================================\n\n";
+
     if (!v.description.empty())
         oss << "BESCHREIBUNG:\n" << v.description << "\n\n";
     if (!v.rootCause.empty())
         oss << "URSACHE/ROOT-CAUSE:\n" << v.rootCause << "\n\n";
-    oss << "VERWEISE:\n"
-        << "  F22 (AUFGABE)   : " << v.taskId
-        << "  [mfs/F22/" << sanitiseRegNr(v.taskId) << "/00_KARTE.txt]\n";
-    if (!v.parentVorgangId.empty())
-        oss << "  ELTERN-F18      : " << v.parentVorgangId
-            << "  [mfs/F18/" << sanitiseRegNr(v.parentVorgangId) << "/]\n";
-    oss << "\nKLARNAMENZUORDNUNG → owner_key.txt\n";
+
+    // List all steps inline:
+    auto steps = F18OperationStep::loadForVorgang(v.operationId);
+    if (!steps.empty()) {
+        oss << "F18S-SCHRITTE (" << steps.size() << "):\n"
+            << std::string(40, '-') << "\n";
+        for (auto& s : steps) {
+            oss << "  " << s.stepId
+                << "  [" << f18StepStatusToString(s.status) << "]"
+                << "  " << s.title << "\n";
+            if (!s.startDatePlanned.empty())
+                oss << "    Start: " << s.startDatePlanned << "\n";
+            if (!s.endDatePlanned.empty())
+                oss << "    Ende : " << s.endDatePlanned   << "\n";
+            oss << "    mfs/F18S/" << sanitiseRegNr(s.stepId) << "/\n";
+        }
+        oss << "\n";
+    }
+    oss << "KLARNAMENZUORDNUNG → owner_key.txt\n";
 
     ownerOnlyWrite(cardPath, oss.str());
+
+    // ── F18S step folders ────────────────────────────────────────────────────
+    std::string f18sRoot = FileOps::joinPath(mfsRoot, "F18S");
+    FileOps::makeDirs(f18sRoot);
+    for (auto& s : steps) {
+        std::string stepDir = FileOps::joinPath(f18sRoot, sanitiseRegNr(s.stepId));
+        FileOps::makeDirs(stepDir);
+        std::string stepCard = FileOps::joinPath(stepDir,
+                                   sanitiseRegNr(s.stepId) + ".txt");
+        std::ostringstream soss;
+        soss << "F18S-SCHRITT\n"
+             << "=======================================================\n"
+             << "SCHRITT-ID     : " << s.stepId           << "\n"
+             << "F18 (VORGANG)  : " << v.operationId       << "\n"
+             << "TITEL          : " << s.title             << "\n"
+             << "TYP            : " << s.stepType          << "\n"
+             << "STATUS         : " << f18StepStatusToString(s.status) << "\n"
+             << "TRACKING       : " << s.trackingStatus    << "\n"
+             << "START-PLAN     : " << fval(s.startDatePlanned) << "\n"
+             << "ENDE-PLAN      : " << fval(s.endDatePlanned)   << "\n"
+             << "FORTSCHRITT    : " << s.percentComplete << "%\n"
+             << "ZUGEWIESEN     : " << fval(s.assignedTo) << "\n"
+             << "=======================================================\n";
+        if (!s.decision.empty())
+            soss << "ENTSCHEIDUNG   : " << s.decision << "\n";
+        if (!s.comment.empty())
+            soss << "KOMMENTAR      : " << s.comment << "\n";
+        ownerOnlyWrite(stepCard, soss.str());
+    }
 
     std::map<std::string,std::string> conn;
     conn["F22"]   = v.taskId;
     conn["OWNER"] = v.ownerId;
     appendOwnerKey(v.operationId, v.title, conn, mfsRoot);
 
-    LOG_DEBUG("MFS F18 written: " + cardPath);
+    LOG_DEBUG("MFS F18 written: " + cardPath + " + " +
+              std::to_string(steps.size()) + " F18S folders");
     return true;
 }
 

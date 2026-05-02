@@ -16,12 +16,7 @@
     <option name="reloaded" value="true" />
   </component>
   <component name="CMakeRunConfigurationManager">
-    <generated>
-      <config projectName="Rosenholz" targetName="rosenholz_lib" />
-      <config projectName="Rosenholz" targetName="rosenholz_test" />
-      <config projectName="Rosenholz" targetName="rosenholz_cli" />
-      <config projectName="Rosenholz" targetName="generate_schemas" />
-    </generated>
+    <generated />
   </component>
   <component name="CMakeSettings" AUTO_RELOAD="true">
     <configurations>
@@ -31,28 +26,116 @@
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/settings.json" beforeDir="false" afterPath="$PROJECT_DIR$/settings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/f16.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/f16.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_f16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_nav.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_nav.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_registry.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_registry.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_utils.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_utils.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/main_cli.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Database.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Database.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Migration.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/Stats.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Stats.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Note.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Note.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Note.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Note.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/F16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/F16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/F16.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/F16.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/ProjectF16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/ProjectF16.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_core.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_core.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/gen_schema_files.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/settings.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/shell.nix" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/akt.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/core.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/f16.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/f18.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/f22.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/f77.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/f77task.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/f99.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/notes.sql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/AppController.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/AppController.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_comm.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_de.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_dok.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f16.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f18.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f22.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f77.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f99.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_nav.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_per.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_sys.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_tasks.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_utils.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/BackupManager.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/BackupManager.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Config.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Config.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Database.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Database.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/FileOps.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/FileOps.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Logger.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Logger.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Migration.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Migration.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/OperationResult.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/RegNumber.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/RegNumber.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Repository.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Stats.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/Stats.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/HistoryLog.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/HistoryLog.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/NavigationContext.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/NavigationContext.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Note.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Note.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/StatusColor.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/StatusColor.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/TreeBuilder.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/TreeBuilder.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Utils.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Utils.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/WatchPoller.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/WatchPoller.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/ArchiveStore.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/ArchiveStore.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/Folder.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/Folder.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderObject.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderObject.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderRevision.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderRevision.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/Document.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/Document.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f16/F16.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f16/F16.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f18/Communication.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f18/Communication.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f18/F18OperationStep.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f18/F18OperationStep.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f22/F22.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f22/F22.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f22/TaskF22.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f22/TaskF22.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/person/Person.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/person/Person.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/team/Team.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/team/Team.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/ArchiveStore.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/ArchiveStore.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/DocumentRevision.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/DocumentRevision.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/workflow/F77Task.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/workflow/F77Task.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/TestFixtures.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/TestFramework.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/main_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_core.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_model.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_workflow.cpp" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -109,38 +192,12 @@
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
-  <component name="RunManager" selected="CMake Application.rosenholz_cli">
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+  <component name="RunManager">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
       </method>
     </configuration>
-    <configuration name="generate_schemas" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="generate_schemas" CONFIG_NAME="Debug">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="rosenholz_cli" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_cli" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz_cli">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="rosenholz_lib" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_lib" CONFIG_NAME="Debug">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="rosenholz_test" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="rosenholz_test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="Rosenholz" RUN_TARGET_NAME="rosenholz_test">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
-    <list>
-      <item itemvalue="CMake Application.generate_schemas" />
-      <item itemvalue="CMake Application.rosenholz_cli" />
-      <item itemvalue="CMake Application.rosenholz_lib" />
-      <item itemvalue="CMake Application.rosenholz_test" />
-    </list>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -185,6 +242,7 @@
       <workItem from="1777706905252" duration="949000" />
       <workItem from="1777707956159" duration="1488000" />
       <workItem from="1777710313585" duration="1307000" />
+      <workItem from="1777711981193" duration="1532000" />
     </task>
     <servers />
   </component>

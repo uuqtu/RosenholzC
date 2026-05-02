@@ -218,10 +218,7 @@ void cmdF22(const std::vector<std::string>& args) {
         std::vector<std::shared_ptr<F22>> hits;
         for (auto& t : all) {
             if (q.empty()) { hits.push_back(t); continue; }
-            std::string tl = t->title, ql = q;
-            std::transform(tl.begin(), tl.end(), tl.begin(), ::tolower);
-            std::transform(ql.begin(), ql.end(), ql.begin(), ::tolower);
-            if (tl.find(ql) != std::string::npos || t->taskId.find(ql) != std::string::npos)
+            if (matchesPattern(t->title, q) || matchesPattern(t->taskId, q))
                 hits.push_back(t);
         }
         if (hits.empty()) { std::cout << "  (keine F22)\n"; return; }
@@ -262,13 +259,10 @@ void cmdF22(const std::vector<std::string>& args) {
         std::string q;
         for (size_t i=1; i<args.size(); ++i) { if(!q.empty()) q+=" "; q+=args[i]; }
         if (q.empty()) { printErr("-s benoetigt einen Suchbegriff"); return; }
-        std::string lq=q; for(char& c:lq) c=(char)std::tolower((unsigned char)c);
         auto all = F22::loadRecent(9999);
         bool found=false;
         for (auto& t : all) {
-            std::string chk = t->title + " " + t->taskId;
-            for(char& c:chk) c=(char)std::tolower((unsigned char)c);
-            if (chk.find(lq)!=std::string::npos) {
+            if (matchesPattern(t->title, q) || matchesPattern(t->taskId, q)) {
                 std::cout << "  F22  " << std::left << std::setw(28) << t->taskId
                           << " " << t->title << "  [" << entityStatusToString(t->status) << "]\n";
                 found=true;

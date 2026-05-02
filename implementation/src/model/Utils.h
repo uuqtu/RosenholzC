@@ -86,6 +86,11 @@ TemplateStatus templateStatusFrom(const std::string& s);
 /// Generate a typed registration ID: genId("F22") → "XV/F22/0001/26"
 std::string genId(const std::string& typePart);
 
+/// Convert user search pattern to SQLite LIKE pattern.
+/// User: * = any chars, % = exactly one char.
+/// No wildcards → wraps with %%...%% (substring match).
+std::string patternToSQLLike(const std::string& pattern);
+
 /// Current UTC time as ISO-8601 string: "2026-01-01T12:00:00"
 std::string nowIso();
 

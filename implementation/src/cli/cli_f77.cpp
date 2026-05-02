@@ -49,14 +49,12 @@ void cmdF77(const std::vector<std::string>& args) {
     if (args[0] == "-o" || args[0] == "-so") {
         bool doSearch = (args[0] == "-so");
         std::string q = (doSearch && args.size()>1) ? args[1] : "";
-        std::string lq=q; std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
         auto all = F77W::loadAll(100);
         std::vector<std::shared_ptr<F77W>> hits;
         for (auto& w : all) {
-            if (lq.empty()) { hits.push_back(w); continue; }
-            std::string chk = w->templateName + " " + w->entityId + " " + w->workflowId;
-            std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
-            if (chk.find(lq) != std::string::npos) hits.push_back(w);
+            if (q.empty()) { hits.push_back(w); continue; }
+            if (matchesPattern(w->templateName, q) || matchesPattern(w->entityId, q)
+                || matchesPattern(w->workflowId, q)) hits.push_back(w);
         }
         if (hits.empty()) { std::cout << "  (keine F77)\n"; return; }
         std::cout << "\n  " << std::left << std::setw(4) << "#"

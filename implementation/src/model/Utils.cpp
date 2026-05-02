@@ -132,4 +132,21 @@ TemplateStatus templateStatusFrom(const std::string& s) {
     return s == "inactive" ? TemplateStatus::INACTIVE : TemplateStatus::ACTIVE;
 }
 
+
+std::string patternToSQLLike(const std::string& pattern) {
+    // If pattern has no user wildcards, wrap for substring match:
+    bool hasWild = (pattern.find('*') != std::string::npos ||
+                    pattern.find('%') != std::string::npos);
+    if (!hasWild) return "%" + pattern + "%";
+
+    std::string sql;
+    sql.reserve(pattern.size() * 2);
+    for (char c : pattern) {
+        if      (c == '*') sql += '%';    // * → any number of chars in SQL
+        else if (c == '%') sql += '_';    // % → exactly one char in SQL
+        else if (c == '_') sql += "\_";  // escape SQL's own single-char wildcard
+        else               sql += c;
+    }
+    return sql;
+}
 } // namespace Rosenholz
