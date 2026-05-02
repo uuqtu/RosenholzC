@@ -44,6 +44,7 @@ struct F77Task {
     std::string completionNote;   ///< What was decided/done
 
     bool isOpen()     const { return status == "open"; }
+    std::string statusLabel() const; ///< German: offen/erledigt/...
     bool isClosed()   const { return !isOpen(); }
 
     // ── CRUD ─────────────────────────────────────────────────

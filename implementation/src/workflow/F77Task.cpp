@@ -204,4 +204,12 @@ bool F77Task::checkOperationComplete(const std::string& operationId) {
     return true;
 }
 
+
+std::string F77Task::statusLabel() const {
+    if (status == "open")      return "offen";
+    if (status == "completed") return "erledigt";
+    if (status == "skipped")   return "uebersprungen";
+    if (status == "cancelled") return "abgebrochen";
+    return status;
+}
 } // namespace Rosenholz

@@ -47,9 +47,7 @@ static void printTaskList(const std::vector<std::shared_ptr<F77Task>>& tasks,
         }
 
         std::string ent = t->targetEntityType + ":" + t->targetEntityId.substr(0, 20);
-        std::string statusStr = t->status == "open" ? "offen" :
-                                t->status == "completed" ? "erledigt" :
-                                t->status == "skipped" ? "überspr." : t->status;
+        std::string statusStr = t->statusLabel();
 
         std::cout << "  " << std::setw(4) << n++
                   << std::left
@@ -165,6 +163,50 @@ static void executeTask(std::shared_ptr<F77Task> task) {
         return;
     }
 
+    // ── start_release_workflow / start_lock_workflow: trigger child workflow ─
+    if (task->targetAction == "start_release_workflow" ||
+        task->targetAction == "start_lock_workflow"    ||
+        task->targetAction == "start_unlock_workflow") {
+
+        std::string action = task->targetAction;
+        std::string childType = task->targetEntityType;
+        std::string childId   = task->targetEntityId;
+
+        // Resolve child entity name:
+        std::string childName;
+        if (childType == "f18") {
+            auto v = F18Operation::loadById(childId);
+            if (v) childName = v->title;
+        } else if (childType == "akt") {
+            auto d = Folder::loadById(childId);
+            if (d) childName = d->title;
+        }
+
+        std::string verb = (action == "start_release_workflow") ? "freigeben" :
+                           (action == "start_lock_workflow")    ? "sperren"   : "entsperren";
+
+        std::cout << "\n  Aktion: " << childType << " " << childId;
+        if (!childName.empty()) std::cout << " \"" << childName << "\"";
+        std::cout << " muss " << verb << " werden.\n\n"
+                  << "  1. F77-Workflow fuer dieses Objekt jetzt starten\n"
+                  << "  2. Aufgabe ueberspringen (Objekt bleibt unveraendert)\n"
+                  << "  0. Spaeter\n";
+        int ch = readInt("Wahl", 0, 2);
+        if (ch == 0) return;
+        if (ch == 2) {
+            task->skip("Kindpropagation uebersprungen");
+            std::cout << "  >> Uebersprungen.\n";
+            return;
+        }
+        // Start workflow on the child entity:
+        std::string wfId = startWfInstanceWizard(childType, childId);
+        if (!wfId.empty()) {
+            task->complete("F77 gestartet: " + wfId);
+            std::cout << "  >> Aufgabe abgeschlossen — F77 " << wfId << " laeuft.\n";
+        }
+        return;
+    }
+
     // ── Generic task: review/approve ─────────────────────────────────────
     std::cout << "\n  1. Aufgabe abschliessen\n"
               << "  2. Ueberspringen\n"
@@ -196,6 +238,24 @@ void cmdTasks(const std::vector<std::string>& args) {
     if (args[0] == "-a" || args[0] == "--all") {
         auto all = F77Task::loadAll(200);
         printTaskList(all, "Alle F77-Aufgaben");
+        return;
+    }
+
+    // -so <q>: search tasks by title/entity, pick to open
+    if (args[0] == "-so") {
+        std::string q = args.size()>1 ? args[1] : readLine("  Suche: ");
+        std::string lq=q; std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
+        auto all = F77Task::loadAll(500);
+        std::vector<std::shared_ptr<F77Task>> hits;
+        for (auto& t : all) {
+            std::string chk = t->title + " " + t->targetEntityId + " " + t->targetEntityType;
+            std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
+            if (chk.find(lq) != std::string::npos) hits.push_back(t);
+        }
+        if (hits.empty()) { std::cout << "  (keine Treffer)\n"; return; }
+        printTaskList(hits, "Suchergebnis F77-Aufgaben");
+        int pick = readInt("  Aufgabe oeffnen [0=Abbrechen]", 0, (int)hits.size());
+        if (pick >= 1) executeTask(hits[pick-1]);
         return;
     }
 

@@ -41,27 +41,37 @@ void cmdF16(const std::vector<std::string>& args) {
         return;
     }
 
-    // -s <query>  —  search by title or registration number
-    if (args[0] == "-s" || args[0] == "--search") {
-        std::string q = args.size() > 1 ? args[1] : readLine("Suche: ");
+    // -s <query>  —  search, list results
+    // -so <query> —  search, then navigate into selection
+    bool searchOpen = (args[0] == "-so");
+    if (args[0] == "-s" || args[0] == "--search" || searchOpen) {
+        std::string q = args.size() > 1 ? args[1] : readLine("  Suche: ");
         if (q.empty()) return;
         std::string ql = q;
         std::transform(ql.begin(), ql.end(), ql.begin(), ::tolower);
 
         auto all = F16::loadAll();
-        int found = 0;
+        std::vector<std::shared_ptr<F16>> hits;
         for (auto& p : all) {
             std::string t = p->title, r = p->regNumber.toString();
             std::transform(t.begin(), t.end(), t.begin(), ::tolower);
             std::transform(r.begin(), r.end(), r.begin(), ::tolower);
-            if (t.find(ql) != std::string::npos || r.find(ql) != std::string::npos) {
-                std::cout << "  " << std::left << std::setw(26) << p->regNumber.toString()
-                          << "  " << std::setw(36) << p->title.substr(0, 35)
-                          << "  [" << (p->archived ? "archiviert" : "aktiv") << "]\n";
-                ++found;
-            }
+            if (t.find(ql) != std::string::npos || r.find(ql) != std::string::npos)
+                hits.push_back(p);
         }
-        if (!found) std::cout << "  (keine Treffer für \"" << q << "\")\n";
+        if (hits.empty()) { std::cout << "  (keine Treffer)\n"; return; }
+
+        std::cout << "\n";
+        for (int i = 0; i < (int)hits.size(); i++)
+            std::cout << "  " << std::setw(4) << (i+1)
+                      << std::left << std::setw(26) << hits[i]->regNumber.toString()
+                      << std::setw(34) << hits[i]->title.substr(0,32)
+                      << Color::statusColor(hits[i]->archived ? "archiviert" : "aktiv") << "\n";
+
+        if (!searchOpen) return;
+        int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)hits.size());
+        if (pick < 1) return;
+        cmdCd({hits[pick-1]->projectId});
         return;
     }
 
@@ -87,32 +97,31 @@ void cmdF16(const std::vector<std::string>& args) {
         return;
     }
 
-    // -o  —  list and select project to open
+    // -o  —  list and select project → navigate (cd) into it
     if (args[0] == "-o" || args[0] == "--open") {
         auto all = F16::loadAll();
         if (all.empty()) { std::cout << "  (keine F16-Karten vorhanden)\n"; return; }
-        std::cout << "\n  F16-KARTEN:\n";
-        std::cout << "  " << std::left << std::setw(4) << "#"
-                  << std::setw(28) << "REG-NR"
-                  << std::setw(38) << "TITEL"
-                  << "STATUS\n";
-        std::cout << "  " << std::string(74, '-') << "\n";
+        std::cout << "\n  F16-KARTEN:\n"
+                  << "  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(36) << "TITEL"
+                  << "STATUS\n"
+                  << "  " << std::string(72, '-') << "\n";
         for (int i = 0; i < (int)all.size(); i++)
             std::cout << "  " << std::setw(4) << (i+1)
-                      << std::setw(28) << all[i]->regNumber.toString()
-                      << std::setw(38) << all[i]->title.substr(0, 36)
-                      << (all[i]->archived ? "archiviert" : "aktiv") << "\n";
-        int pick = readInt("Auswahl [0=Abbrechen]", 0, (int)all.size());
+                      << std::setw(26) << all[i]->regNumber.toString()
+                      << std::setw(36) << all[i]->title.substr(0, 34)
+                      << Color::statusColor(all[i]->archived ? "archiviert" : "aktiv") << "\n";
+        int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)all.size());
         if (pick < 1) return;
-        projectMenu(all[pick-1]);
+        // Navigate into the selected F16:
+        cmdCd({all[pick-1]->projectId});
         return;
     }
 
-    // <id>  —  open project menu
+    // <id>  —  navigate into this F16
     if (isId(args[0])) {
-        auto p = F16::loadById(args[0]);
-        if (!p) { printErr("F16 nicht gefunden: " + args[0]); return; }
-        projectMenu(p);
+        cmdCd({args[0]});
         return;
     }
 
@@ -200,57 +209,78 @@ static void editMenu(std::shared_ptr<Rosenholz::F16> p) {
 //           methodology, scope, start/end dates, budget.
 // Saves to DB and writes MFS file if MFS is enabled.
 
+// Helper: inline date prompt that shows the resolved date after input
+static std::string promptDate(const std::string& label) {
+    std::cout << "  " << label;
+    std::cout.flush();
+    std::string raw;
+    if (!std::getline(std::cin, raw)) return "";
+    raw.erase(0, raw.find_first_not_of(" \t"));
+    raw.erase(raw.find_last_not_of(" \t") + 1);
+    std::string resolved = parseDate(raw);
+    if (!resolved.empty() && resolved != raw) {
+        // Move cursor up 1 line, clear it, reprint with resolved date + checkmark
+        if (::isatty(STDOUT_FILENO))
+            std::cout << "\033[1A\033[2K  " << label << resolved << " \u2611\n";
+        else
+            std::cout << "  => " << resolved << "\n";
+    }
+    return resolved;
+}
+
 std::shared_ptr<Rosenholz::F16> createProjectWizard() {
-    hdr("F16 ANLEGEN (Projektkartei)");
-    std::string title = readLine("Title: ");
-    std::cout << "  F16-Typ:\n"
-              << "    1. OV  (Operativer Vorgang — active investigation)\n"
-              << "    2. IM  (IM-Vorgang — contributor engagement)\n"
-              << "    3. OPK (Operative Personenkontrolle — due diligence)\n"
-              << "    4. GMS (GMS-Akte — advisory relationship)\n"
-              << "    5. AU  (Untersuchungsvorgang — formal inquiry)\n"
-              << "    6. SVG (Sicherungsvorgang — monitoring)\n";
-    int tc = readInt("Choose type", 1, 6);
+    hdr("F16 ANLEGEN");
+    std::string title = readLine("  Titel: ");
+    if (title.empty()) return nullptr;
+
+    // Type: inline numbered list
+    std::cout << "  Typ: 1.OV  2.IM  3.OPK  4.GMS  5.AU  6.SVG  ";
+    int tc = readInt("", 1, 6);
     static const char* types[] = {"OV","IM","OPK","GMS","AU","SVG"};
     std::string ptype = types[tc-1];
 
-    std::cout << "  Size class:\n"
-              << "    1. large   2. medium   3. small\n";
-    int sc = readInt("Choose size", 1, 3);
-    static const char* sizes[] = {"large","medium","small"};
-    std::string size = sizes[sc-1];
+    // Size: inline, single char shortcut
+    std::string size = readChar(
+        "Groesse (l=large m=medium s=small): ",
+        {{"l","large"},{"1","large"},{"m","medium"},{"2","medium"},{"s","small"},{"3","small"}},
+        false);
 
-    std::string codename   = readOpt("Codename (optional): ");
-    std::string priority   = readOpt("Priority (high/medium/low, optional): ");
-    std::string complexity = readOpt("Complexity (complex/moderate/simple, optional): ");
-    std::string method     = readOpt("Methodology (agile/waterfall/kanban, optional): ");
-    std::string scope      = readOpt("Scope statement (optional): ");
-    std::string startPlan  = parseDate(readOpt("Geplanter Start (YYYY-MM-DD / . +1d +2w +3m, optional): "));
-    std::string endPlan    = parseDate(readOpt("Geplantes Ende (YYYY-MM-DD / . +1d +2w +3m, optional): "));
+    std::string codename = readOpt("  Codename (optional): ");
+    std::string priority = readChar(
+        "Prioritaet (h=high m=medium l=low, leer=überspringen): ",
+        {{"h","high"},{"m","medium"},{"l","low"}}, true);
+    std::string complexity = readChar(
+        "Komplexitaet (c=complex m=moderate s=simple, leer=überspringen): ",
+        {{"c","complex"},{"m","moderate"},{"s","simple"}}, true);
+    std::string method = readChar(
+        "Methodik (a=agile w=waterfall k=kanban, leer=überspringen): ",
+        {{"a","agile"},{"w","waterfall"},{"k","kanban"}}, true);
+    std::string scope = readOpt("  Scope (optional): ");
 
-    std::string budgetStr  = readOpt("Budget planned (EUR, optional): ");
+    std::string startPlan = promptDate("Geplanter Start (YYYY-MM-DD / . +Nd +Nw +Nm +Ny, leer=überspringen): ");
+    std::string endPlan   = promptDate("Geplantes Ende  (YYYY-MM-DD / . +Nd +Nw +Nm +Ny, leer=überspringen): ");
+
+    std::string budgetStr = readOpt("  Budget EUR (optional): ");
     double budget = 0.0;
     if (!budgetStr.empty()) try { budget = std::stod(budgetStr); } catch(...) {}
 
     auto p = Rosenholz::F16::create(title, ptype, size);
-    p->codename        = codename;
-    p->priority        = priority;
-    p->complexity      = complexity;
-    p->methodology     = method;
-    p->scopeStatement  = scope;
-    p->startDatePlanned= startPlan;
-    p->endDatePlanned  = endPlan;
-    p->budgetPlanned   = budget;
+    p->codename         = codename;
+    p->priority         = priority;
+    p->complexity       = complexity;
+    p->methodology      = method;
+    p->scopeStatement   = scope;
+    p->startDatePlanned = startPlan;
+    p->endDatePlanned   = endPlan;
+    p->budgetPlanned    = budget;
 
     if (opOk(p->save())) {
-        // write MFS file
         auto& cfg = Rosenholz::Config::instance();
         if (cfg.mfs().enabled) p->writeMFSFile(cfg.mfsPath());
         return p;
-    } else {
-        std::cout << "\n  >> FEHLER: F16 konnte nicht gespeichert werden.\n";
-        return nullptr;
     }
+    std::cout << "  >> FEHLER: F16 konnte nicht gespeichert werden.\n";
+    return nullptr;
 }
 
 

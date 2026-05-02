@@ -10,6 +10,7 @@
 //   globalSearch(query)    — search across all entity types
 // ============================================================
 #include "cli_common.h"
+#include "../core/Stats.h"
 #include "../model/WatchPoller.h"
 #include "../model/akt/FolderObject.h"
 #include "../model/akt/Folder.h"
@@ -36,33 +37,21 @@ using namespace Rosenholz;
 
 void cmdStatus() {
     auto& cfg = Config::instance();
+    auto c = Rosenholz::Stats::load();
     auto row = [](const std::string& label, int n, const std::string& unit) {
         std::cout << "  " << std::left << std::setw(18) << label
                   << std::setw(6) << n << "  " << unit << "\n";
     };
-    std::cout << "\n  Rosenholz PM  —  System-Status\n";
-    std::cout << "  " << std::string(42,'-') << "\n";
-    std::cout << "  Basispfad : " << cfg.basePath() << "\n";
-
-    if (auto* db = DatabasePool::instance().get("f16"))
-        row("F16-Karten:", db->rowCount("projects"), "F16-Karten");
-    if (auto* db = DatabasePool::instance().get("f22"))
-        row("F22-Vorgänge:", db->rowCount("tasks"), "F22-Vorgänge");
-    if (auto* db = DatabasePool::instance().get("f18")) {
-        row("F18 Operationen:",       db->rowCount("f18_operations"),     "Operationen");
-        row("F18 Schritte (F18OperationStep):",  db->rowCount("f18_operation_steps"),"Schritte");
-        row("Comms:",         db->rowCount("communications"),     "Communications");
-    }
-    if (auto* db = DatabasePool::instance().get("f77")) {
-        row("F77-Hinweise:", db->rowCount("f77_workflows"),          "laufend");
-        row("F77 Templates:", db->rowCount("f77_workflow_templates"), "Vorlagen");
-    }
-    if (auto* db = DatabasePool::instance().get("akt"))
-        row("Akten:",         db->rowCount("folders"),     "Akten");
-    if (auto* db = DatabasePool::instance().get("core")) {
-        row("Personen:",      db->rowCount("persons"),  "Personen");
-        row("Teams:",         db->rowCount("teams"),    "Diensteinheiten");
-    }
+    std::cout << "\n  Rosenholz PM v7 — Datenbankzaehler\n"
+              << "  " << cfg.basePath() << "\n"
+              << "  " << std::string(42, '-') << "\n";
+    row("F16-Karten",    c.f16,       "Projektkarten");
+    row("F22-Vorgaenge", c.f22,       "Aufgaben");
+    row("F18-Ops",       c.f18,       "Vorgaenge");
+    row("Akten",         c.akt,       "Dokumente");
+    row("F77-Workflows", c.f77Active, "aktive Workflows");
+    row("F77-Tasks",     c.f77Tasks,  "offene Aufgaben");
+    row("Notizen",       c.notes,     "Notizen");
     std::cout << "\n";
 }
 
@@ -358,4 +347,23 @@ void cmdIndexDokFolders() {
               << totalAdded << " hinzugefügt.\n";
 }
 
+
+void cmdHist() {
+    auto hist = Rosenholz::HistoryLog::instance().recent(20);
+    if (hist.empty()) { std::cout << "  (kein Verlauf)\n"; return; }
+    std::cout << "\n  Zuletzt geoeffnet:\n";
+    for (int i = 0; i < (int)hist.size(); i++) {
+        auto& r = hist[i];
+        std::cout << "  " << std::setw(3) << (i+1) << ". "
+                  << std::left << std::setw(6) << Rosenholz::entityTypeLabel(r.type)
+                  << "  " << std::setw(28) << r.id
+                  << "  " << r.displayName.substr(0,30) << "\n";
+    }
+    std::cout << "\n  cd <ID>  zum Navigieren\n\n";
+}
+
+void cmdGo(const std::vector<std::string>& args) {
+    if (args.empty()) { CLI::printErr("go <ID>"); return; }
+    CLI::cmdCd(args);
+}
 } // namespace CLI

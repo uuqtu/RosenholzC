@@ -116,4 +116,52 @@ void communicationMenu(const std::string& ownerId, const std::string& ownerType)
     }
 }
 
+
+// ── cmdKom: standalone kom command with -o/-so ────────────────────────────
+void cmdKom(const std::vector<std::string>& args) {
+    // -o: list all recent communications, navigate (open commDetailMenu)
+    // -so <q>: search by title
+    bool doSearch = (!args.empty() && args[0] == "-so");
+    bool doList   = (!args.empty() && args[0] == "-o");
+    if (doList || doSearch) {
+        std::string q = (doSearch && args.size() > 1) ? args[1] : "";
+        std::string lq = q;
+        std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
+        // Load all comms (flat — across all owners):
+        auto all = Communication::loadAll(200);
+        std::vector<std::shared_ptr<Communication>> hits;
+        for (auto& c : all) {
+            if (lq.empty()) { hits.push_back(c); continue; }
+            std::string chk = c->title + " " + c->communicationId;
+            std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
+            if (chk.find(lq) != std::string::npos) hits.push_back(c);
+        }
+        if (hits.empty()) { std::cout << "  (keine Kommunikation)\n"; return; }
+        std::cout << "\n  " << std::left << std::setw(4) << "#"
+                  << std::setw(8)  << "TYP"
+                  << std::setw(28) << "TITEL"
+                  << std::setw(14) << "GEPLANT"
+                  << std::setw(18) << "OWNER"
+                  << "STATUS\n"
+                  << "  " << std::string(82, '-') << "\n";
+        for (int i = 0; i < (int)hits.size(); i++) {
+            std::cout << "  " << std::setw(4) << (i+1)
+                      << std::setw(8)  << hits[i]->commType.substr(0,7)
+                      << std::setw(28) << hits[i]->title.substr(0,26)
+                      << std::setw(14) << fdate(hits[i]->scheduledDate)
+                      << std::setw(18) << (hits[i]->ownerType + ":" + hits[i]->ownerId.substr(0,12))
+                      << Color::statusColor(commStatusToString(hits[i]->status)) << "\n";
+        }
+        if (!doList) return;  // -so: just list
+        int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)hits.size());
+        if (pick < 1) return;
+        commDetailMenu(hits[pick-1]);
+        return;
+    }
+    // No args or -n: show usage hint
+    std::cout << "  kom -o    Alle Kommunikationen listen und öffnen\n"
+              << "  kom -so <q>  Suchen und öffnen\n"
+              << "  kom -n    Neue Kommunikation (im Kontext)\n";
+}
+
 } // namespace CLI

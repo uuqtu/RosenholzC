@@ -395,4 +395,11 @@ void F16::recalcEarnedValue() {
 OperationResult F16::reassignLead(const std::string& newLeadId) {
     leadId = newLeadId; return update(); }
 
+
+OperationResult F16::archive() {
+    if (archived) return OperationResult::OPERATION_ACK; // idempotent
+    archived = true;
+    LOG_INFO("[F16] Archived: " + projectId);
+    return update();
+}
 } // namespace Rosenholz

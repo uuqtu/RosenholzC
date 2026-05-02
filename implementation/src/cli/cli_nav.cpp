@@ -543,8 +543,8 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         // -arc: archive current F16
         if (!args.empty() && args[0] == "-arc" && cur.type == EntityType::F16) {
             auto p = F16::loadById(cur.id);
-            if (p) { p->archived = true; p->update();
-                     std::cout << "  >> Archiviert.\n"; }
+            if (p) { if (opOk(p->archive())) std::cout << "  >> Archiviert.\n";
+                    else std::cout << "  >> Fehler beim Archivieren.\n"; }
             return;
         }
         // -o: selection list
@@ -662,10 +662,67 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (v) printF18Operation(*v);
             return;
         }
-        // -stp: add step to current F18
+        // -stp: F18 step navigation
         if (!args.empty() && args[0] == "-stp" && cur.type == EntityType::F18) {
             auto v = F18Operation::loadById(cur.id);
-            if (v) f18Menu(v);  // f18Menu has step management
+            if (!v) { printErr("F18 nicht gefunden: " + cur.id); return; }
+            v->loadSteps();
+
+            // -stp -n : neuen Schritt hinzufuegen
+            if (args.size() >= 2 && args[1] == "-n") {
+                std::string title = readLine("  Schritt-Titel: ");
+                if (title.empty()) return;
+                std::cout << "  Typ: 1.task  2.approval  3.review  4.notification\n";
+                int st = readInt("Typ",1,4);
+                static const char* sts[]={"task","approval","review","notification"};
+                std::string ass = readOpt("  Zugewiesen an (Person-ID, leer=offen): ");
+                bool req = yesno("  Pflichtschritt?");
+                v->addStep(title, sts[st-1], ass, req);
+                printOk("Schritt hinzugefuegt.");
+                return;
+            }
+
+            // -stp <n> : Schritt #n direkt oeffnen
+            if (args.size() >= 2) {
+                int n = 0;
+                try { n = std::stoi(args[1]); } catch (...) {}
+                if (n >= 1 && n <= (int)v->steps.size()) {
+                    stepMenu(v->steps[n-1], v->steps);
+                    return;
+                }
+                printErr("Ungueltige Schritt-Nummer: " + args[1]);
+                return;
+            }
+
+            // -stp (kein Argument) : liste und waehle
+            if (v->steps.empty()) {
+                std::cout << "  (keine Schritte)\n"
+                          << "  f18 -stp -n    neuen Schritt hinzufuegen\n";
+                return;
+            }
+            std::cout << "\n  Schritte fuer " << Color::magenta(v->operationId)
+                      << " — " << v->title << ":\n"
+                      << "  " << std::left << std::setw(4) << "#"
+                      << std::setw(26) << "ID"
+                      << std::setw(12) << "STATUS"
+                      << std::setw(28) << "TITEL"
+                      << "TYP\n"
+                      << "  " << std::string(74,'-') << "\n";
+            int n = 1;
+            for (auto& s : v->steps) {
+                std::string sym = f18StepSymbolStr(s.displaySymbol());
+                std::cout << "  " << std::setw(4) << n++
+                          << std::setw(26) << s.stepId
+                          << std::setw(12) << Rosenholz::f18StepStatusToString(s.status)
+                          << std::setw(28) << s.title.substr(0,26)
+                          << s.stepType << "\n";
+            }
+            std::cout << "\n  f18 -stp <n>    Schritt oeffnen"
+                      << "  |  f18 -stp -n    neuer Schritt\n\n";
+            // Optional: pick one directly
+            int pick = readInt("  Schritt [0=Abbrechen]", 0, (int)v->steps.size());
+            if (pick >= 1)
+                stepMenu(v->steps[pick-1], v->steps);
             return;
         }
         // -note: quick note on current entity
@@ -768,6 +825,60 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (d) documentMenu(d);
             return;
         }
+        // -oo / -soo: list FolderObjects in current context
+        // Context-aware: only shows objects in AKT attached to current entity
+        if (!args.empty() && (args[0] == "-oo" || args[0] == "-soo")) {
+            bool doOpen = (args[0] == "-soo");
+            std::string q = (doOpen && args.size() > 1) ? args[1] : "";
+            std::string lq = q;
+            std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
+
+            // Determine which folders to scan based on context:
+            std::vector<std::shared_ptr<Folder>> contextFolders;
+            std::string entType, entId;
+            if (cur.type == EntityType::F16)  { entType="f16"; entId=cur.id; }
+            else if (cur.type == EntityType::F22) { entType="f22"; entId=cur.id; }
+            else if (cur.type == EntityType::F18) { entType="f18"; entId=cur.id; }
+            else if (cur.type == EntityType::AKT) {
+                // In AKT context: show objects of THIS folder
+                contextFolders.push_back(Folder::loadById(cur.id));
+            }
+            if (contextFolders.empty() && !entType.empty())
+                contextFolders = Folder::loadForEntity(entType, entId);
+
+            struct ObjRow { std::shared_ptr<FolderObject> obj; std::string folderTitle, folderId; };
+            std::vector<ObjRow> hits;
+            for (auto& d : contextFolders) {
+                if (!d) continue;
+                auto rev = FolderRevision::currentRevision(d->folderId);
+                if (!rev) continue;
+                for (auto& o : FolderObject::loadForRevision(d->folderId, rev->rev)) {
+                    if (!lq.empty()) {
+                        std::string chk = o->originalName + " " + o->displayName();
+                        std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
+                        if (chk.find(lq) == std::string::npos) continue;
+                    }
+                    hits.push_back({o, d->title, d->folderId});
+                }
+            }
+            if (hits.empty()) { std::cout << "  (keine Objekte im Kontext)\n"; return; }
+            std::cout << "\n  " << std::left << std::setw(4) << "#"
+                      << std::setw(30) << "DATEI"
+                      << std::setw(10) << "FORMAT"
+                      << "AKTE\n"
+                      << "  " << std::string(60,'-') << "\n";
+            for (int i=0; i<(int)hits.size(); i++)
+                std::cout << "  " << std::setw(4) << (i+1)
+                          << std::setw(30) << hits[i].obj->displayName().substr(0,28)
+                          << std::setw(10) << hits[i].obj->format.substr(0,8)
+                          << hits[i].folderTitle.substr(0,28) << "\n";
+            if (!doOpen) return;
+            int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)hits.size());
+            if (pick < 1) return;
+            cmdCd({hits[pick-1].folderId});
+            return;
+        }
+
         // -note: quick note on current AKT (no ID needed)
         if (!args.empty() && args[0] == "-note" && cur.type == EntityType::AKT) {
             std::string text;

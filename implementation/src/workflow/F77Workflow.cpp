@@ -1283,7 +1283,24 @@ bool F77Engine::applyTargetState(const F77W& wf) {
             }
         }
 
-        // Spawn F77Tasks for each child that needs a workflow started
+        // Spawn F77Tasks for each child that needs a workflow started.
+        // If propagating LOCK or RELEASE and children are IN_WORK:
+        //   → revert the parent status back to IN_WORK (blocking)
+        //   → the parent is only released once all children complete their workflows
+        if (!childEntities.empty() && propagateLockOrRelease) {
+            // Revert parent entity to IN_WORK — it must wait for children
+            auto actx2 = entityContext(wf.entityType);
+            if (actx2.valid()) {
+                actx2.db->exec(
+                    "UPDATE " + actx2.table + " SET status='in_work', updated_at=? WHERE "
+                    + actx2.idCol + "=?;",
+                    {BindParam::text(nowIso()), BindParam::text(wf.entityId)});
+                LOG_WARN("[F77] Parent " + wf.entityType + "/" + wf.entityId
+                         + " reverted to in_work — waiting for " 
+                         + std::to_string(childEntities.size()) + " child(ren)");
+            }
+        }
+
         for (auto& [childType, childId] : childEntities) {
             std::string action = propagateUnlock ? "start_unlock_workflow" : 
                                  (wf.targetState == EntityStatus::LOCKED ? 
@@ -1291,7 +1308,7 @@ bool F77Engine::applyTargetState(const F77W& wf) {
             std::string taskTitle = (propagateUnlock ? "Entsperren: " : 
                                      wf.targetState == EntityStatus::LOCKED ? "Sperren: " : "Freigabe: ")
                 + childType + " " + childId
-                + " (ausgelöst durch: " + wf.entityType + "/" + wf.entityId + ")";
+                + " (ausgeloest durch: " + wf.entityType + "/" + wf.entityId + ")";
             F77Task::create(wf.workflowId, "", taskTitle, childType, childId, action);
             LOG_INFO("[F77] Propagation F77Task spawned for child " + childType + "/" + childId);
         }
@@ -1404,5 +1421,17 @@ void F77Engine::seedDefaultTemplates() {
         makeTemplate("ADMIN: Obj → released",     EntityStatus::RELEASED,     "f22,f18", true);
         makeTemplate("ADMIN: Obj → closed",       EntityStatus::CLOSED,       "f22,f18", true);
     }
+}
+
+std::vector<std::shared_ptr<F77W>> F77W::loadAll(int limit) {
+    auto* db = wfDB(); if (!db) return {};
+    auto rows = db->query(
+        "SELECT * FROM f77_workflows ORDER BY started_at DESC LIMIT ?;",
+        {BindParam::int64(limit)});
+    std::vector<std::shared_ptr<F77W>> result;
+    for (auto& r : rows) {
+        auto w = std::make_shared<F77W>(); w->fromRow(r); result.push_back(w);
+    }
+    return result;
 }
 } // namespace Rosenholz

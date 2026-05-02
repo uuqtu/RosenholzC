@@ -95,6 +95,7 @@ set(CORE_SOURCES
     src/core/RegNumber.cpp
     src/core/BackupManager.cpp
     src/core/Migration.cpp
+    src/core/Stats.cpp
 )
 
 set(MODEL_SOURCES
@@ -185,6 +186,7 @@ set(CLI_SOURCES
     src/cli/cli_comm.cpp
     src/cli/cli_tasks.cpp
     src/cli/cli_nav.cpp
+    src/cli/cli_registry.cpp
     src/cli/cli_sys.cpp
 )
 

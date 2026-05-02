@@ -12,6 +12,7 @@
 //   cli_sys.cpp  cli_comm.cpp cli_utils.cpp
 // ============================================================
 #include "cli_common.h"
+#include "cli_registry.h"
 #include "../app/AppController.h"
 #include "../core/Config.h"
 #include "../core/Logger.h"
@@ -43,18 +44,99 @@ static void printHelp() {
 
 
 // Forward declaration so runShell can call dispatch
-static void dispatch(const std::string& cmd, const std::vector<std::string>& rest);
+static void dispatch(const std::string& cmd,
+                     const std::vector<std::string>& rest)
+{
+    if (cmd.empty()) return;
 
-// ── SIGINT handler ────────────────────────────────────────────
-// Ctrl+C during a wizard or menu: abort the current input/prompt
-// and return to the rh> shell prompt. Does NOT exit the process.
-static void sigintHandler(int) {
-    CLI::cliMarkInterrupted();
-    // Tell readline to abandon the current line cleanly
-    rl_done = 1;
-    std::cout << "\n  (Ctrl+C — zurück zur rh>-Shell)\n";
+    // ── Context-sensitive -h ─────────────────────────────────────────────
+    if (cmd == "-h" || cmd == "--help") {
+        auto cur = Rosenholz::NavigationStack::instance().current();
+        if (cur.valid()) { CLI::printContextHelp(); return; }
+        printHelp(); return;
+    }
+
+    // ── Exit ─────────────────────────────────────────────────────────────
+    if (cmd == "exit" || cmd == "quit" || cmd == "q") {
+        std::cout << "  Auf Wiedersehen.\n\n";
+        AppController::instance().shutdown();
+        std::exit(0);
+    }
+
+    // ── Navigate back ─────────────────────────────────────────────────────
+    if (cmd == "..") {
+        auto& nav = Rosenholz::NavigationStack::instance();
+        nav.pop();
+        CLI::cmdLs({});
+        return;
+    }
+
+    // ── Log level ─────────────────────────────────────────────────────────
+    if (cmd == "-log") {
+        if (!rest.empty()) {
+            auto& logger = Rosenholz::Logger::instance();
+            if      (rest[0] == "debug") logger.setLevel(Rosenholz::LogLevel::DEBUG);
+            else if (rest[0] == "info")  logger.setLevel(Rosenholz::LogLevel::INFO);
+            else if (rest[0] == "warn")  logger.setLevel(Rosenholz::LogLevel::WARN);
+            else if (rest[0] == "error") logger.setLevel(Rosenholz::LogLevel::ERR);
+            std::cout << "  >> Log-Level: " << rest[0] << "\n";
+        }
+        return;
+    }
+
+    // ── Context set / clear ───────────────────────────────────────────────
+    if (cmd == "-ctx") {
+        auto& nav = Rosenholz::NavigationStack::instance();
+        if (!rest.empty() && rest[0] == "clear") { nav.clear(); return; }
+        if (!rest.empty()) CLI::cmdCd(rest);
+        return;
+    }
+
+    // ── Registry dispatch (handles all other commands) ────────────────────
+    if (CLI::dispatch(cmd, rest)) return;
+
+    // ── Unknown ───────────────────────────────────────────────────────────
+    std::cout << "  >> Unbekannter Befehl: " << Color::red(cmd) << "\n"
+              << "     lo  oder  -h  = Optionen  |  Tab = Vervollstaendigung\n";
 }
 
+// main_cli.cpp  —  Rosenholz PM  Unix-style CLI — Einstiegspunkt
+//
+// This file contains only:
+//   printHelp()  — full usage text
+//   dispatch()   — routes the command to the right cli_*.cpp module
+//   main()       — arg parsing, AppController bootstrap, shutdown
+//
+// All command implementations live in:
+//   cli_f16.cpp  cli_f22.cpp  cli_f18.cpp  cli_dok.cpp
+//   cli_f77.cpp  cli_per.cpp  cli_de.cpp
+//   cli_sys.cpp  cli_comm.cpp cli_utils.cpp
+// ============================================================
+#include "cli_common.h"
+#include "cli_registry.h"
+#include "../app/AppController.h"
+#include "../core/Config.h"
+#include "../core/Logger.h"
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <algorithm>
+#include <cstring>
+#include <csignal>
+#include "../model/NavigationContext.h"
+#include <signal.h>
+#include <readline/readline.h>
+#include <readline/history.h>
+
+using namespace Rosenholz;
+
+// ── printHelp ─────────────────────────────────────────────────
+//
+// Full usage reference. Printed when no command is given or
+// when -h / --help is requested. Does not initialise the DB.
+
+// Forward declaration so runShell can call dispatch
 // ── Tab-completion ─────────────────────────────────────────────
 //
 // Context-aware: completes command tokens at the start of the line,
@@ -216,6 +298,14 @@ static char** rhCompletion(const char* text, int /*start*/, int /*end*/) {
     return rl_completion_matches(text, candidateGenerator);
 }
 
+
+// ── SIGINT handler (Ctrl+C) ──────────────────────────────────────────
+static void sigintHandler(int) {
+    CLI::cliMarkInterrupted();
+    rl_done = 1;
+    std::cout << "\n";
+}
+
 // ── runShell ──────────────────────────────────────────────────
 //
 // Interactive command shell. Launched when rh is run without arguments.
@@ -325,225 +415,6 @@ static void runShell() {
 // Routes the command string to the correct module function.
 // All cmd* functions are declared in cli_common.h and defined
 // in their respective cli_*.cpp files.
-
-static void dispatch(const std::string& cmd, const std::vector<std::string>& rest) {
-    if (cmd == "-f16")              { CLI::cmdF16(rest);           return; }
-    if (cmd == "-f22")              { CLI::cmdF22(rest);           return; }
-    if (cmd == "-f18")              { CLI::cmdF18(rest);           return; }
-    if (cmd == "-akt")              { CLI::cmdAkt(rest);           return; }
-    if (cmd == "-f77")              { CLI::cmdF77(rest);           return; }
-    if (cmd == "-per")              { CLI::cmdPer(rest);           return; }
-    if (cmd == "-de")               { CLI::cmdDe(rest);            return; }
-    if (cmd == "-tasks")            { CLI::cmdTasks(rest);         return; }
-    if (cmd == "-status")           { CLI::cmdStatus();            return; }
-    if (cmd == "-backup")           { CLI::cmdBackup();            return; }
-    if (cmd == "-mfs")              { CLI::cmdMfs(rest);           return; }
-    if (cmd == "-h" || cmd == "--help") { printHelp();             return; }
-    if (cmd == "-log") {
-        if (rest.empty()) CLI::die("-log benoetigt einen Level: debug|info|warn|error");
-        CLI::cmdLog(rest[0]);
-        return;
-    }
-    if (cmd == "-ctx") {
-        auto& nav = Rosenholz::NavigationStack::instance();
-        if (rest.empty() || rest[0] == "clear") {
-            nav.clear();
-            std::cout << "  Kontext gelöscht.\n";
-            return;
-        }
-        // rest[0] could be "f22:XV/F22/0001/26" or a short id
-        auto& qr = Rosenholz::QuickResolver::instance();
-        auto cur = nav.current();
-        auto res = qr.resolve(rest[0],
-                              cur.valid() ? cur.type : Rosenholz::EntityType::NONE,
-                              cur.valid() ? cur.id   : "");
-        if (res.ref.valid()) {
-            nav.push(res.ref);
-            std::cout << "  Kontext: " << res.ref.shortForm()
-                      << "  " << res.ref.displayName << "\n";
-        } else {
-            CLI::printErr("Nicht gefunden: " + rest[0]);
-        }
-        return;
-    }
-
-    if (cmd == "-hist") {
-        auto hist = Rosenholz::HistoryLog::instance().recent(20);
-        if (hist.empty()) { std::cout << "  (kein Verlauf)\n"; return; }
-        std::cout << "\n  Zuletzt geoeffnet:\n";
-        for (int i = 0; i < (int)hist.size(); i++) {
-            auto& r = hist[i];
-            std::cout << "  " << std::setw(3) << (i+1) << ". "
-                      << std::left << std::setw(8) << Rosenholz::entityTypeLabel(r.type)
-                      << "  " << std::setw(26) << r.id
-                      << "  " << r.displayName.substr(0,30) << "\n";
-        }
-        std::cout << "\n  Oeffnen [1-" << hist.size() << "] oder 0: ";
-        int pick;
-        if (!(std::cin >> pick)) { std::cin.clear(); std::cin.ignore(9999,'\n'); return; }
-        std::cin.ignore(9999,'\n');
-        if (pick < 1 || pick > (int)hist.size()) return;
-        auto& ref = hist[pick-1];
-        std::string ecmd;
-        switch (ref.type) {
-            case Rosenholz::EntityType::F16: ecmd="-f16"; break;
-            case Rosenholz::EntityType::F22: ecmd="-f22"; break;
-            case Rosenholz::EntityType::F18: ecmd="-f18"; break;
-            case Rosenholz::EntityType::AKT: ecmd="-akt"; break;
-            case Rosenholz::EntityType::PER: ecmd="-per"; break;
-            default: return;
-        }
-        dispatch(ecmd, {ref.id});
-        return;
-    }
-
-    if (cmd == "-tree") {
-        // Tree view: optional F16 ID, else all
-        if (!rest.empty()) {
-            auto tree = Rosenholz::TreeBuilder::buildF16Tree(rest[0]);
-            std::cout << "\n" << Rosenholz::TreeBuilder::format(tree) << "\n";
-        } else {
-            auto all = Rosenholz::TreeBuilder::buildAllF16();
-            if (all.empty()) { std::cout << "  (keine F16-Karten)\n"; return; }
-            std::cout << "\n  Rosenholz PM — Hierarchie\n\n";
-            std::cout << Rosenholz::TreeBuilder::formatAll(all) << "\n";
-            std::cout << "  Tipp: -tree <F16-ID> fuer Detailbaum\n\n";
-        }
-        return;
-    }
-
-    if (cmd == "-watch") {
-        int interval = 30;
-        if (!rest.empty()) {
-            try { interval = std::stoi(rest[0]); } catch (...) {}
-        }
-        Rosenholz::WatchPoller::run(
-            [](const std::string& msg) {
-                std::cout << "  " << Rosenholz::nowIso().substr(11,8)
-                          << "  " << msg << "\n";
-                std::cout.flush();
-            }, interval);
-        return;
-    }
-
-    if (cmd == "-cal") {
-        // Calendar view: F16 and F22 entries with dates
-        std::cout << "\n  -- KALENDER --\n";
-        auto projs = Rosenholz::F16::loadWithDates();
-        if (projs.empty()) {
-            std::cout << "  (keine Datumseintraege)\n";
-        } else {
-            for (auto& p : projs) {
-                std::cout << "  F16 "
-                          << std::left << std::setw(26) << p->regNumber.toString()
-                          << "  " << std::setw(28) << p->title.substr(0,26)
-                          << "  Start:" << CLI::fval(p->startDatePlanned)
-                          << "  Ende:"  << CLI::fval(p->endDatePlanned) << "\n";
-            }
-        }
-        std::cout << "\n";
-        return;
-    }
-
-    if (cmd == "-note") {
-        // -note <id> "<text>" OR -note <id> (then prompt)
-        if (rest.empty()) { CLI::printErr("-note <entityId> [Notiztext]"); return; }
-        std::string targetId = rest[0];
-        // Resolve type from ID:
-        auto& qr = Rosenholz::QuickResolver::instance();
-        auto cur = Rosenholz::NavigationStack::instance().current();
-        auto res = qr.resolve(targetId,
-                              cur.valid() ? cur.type : Rosenholz::EntityType::NONE,
-                              cur.valid() ? cur.id   : "");
-        if (!res.ref.valid()) { CLI::printErr("Entity nicht gefunden: " + targetId); return; }
-        std::string noteText;
-        if (rest.size() > 1) {
-            for (std::size_t i = 1; i < rest.size(); i++) {
-                if (!noteText.empty()) noteText += " ";
-                noteText += rest[i];
-            }
-        } else {
-            noteText = CLI::readLine("Notiz: ");
-        }
-        if (noteText.empty()) return;
-        auto n = Rosenholz::Note::create(
-            Rosenholz::entityTypeLabel(res.ref.type),
-            res.ref.id, noteText);
-        if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
-        else   CLI::printErr("Fehler beim Speichern");
-        return;
-    }
-
-    if (cmd == "-go") {
-        if (rest.empty()) { CLI::printErr("-go <id|type:N|seq>"); return; }
-        auto& qr  = Rosenholz::QuickResolver::instance();
-        auto& nav = Rosenholz::NavigationStack::instance();
-        auto cur  = nav.current();
-        auto res  = qr.resolve(rest[0],
-                               cur.valid() ? cur.type : Rosenholz::EntityType::NONE,
-                               cur.valid() ? cur.id   : "");
-        if (res.isBack)   { nav.pop(); return; }
-        if (!res.ref.valid() && res.ambiguous) {
-            std::cout << "  Mehrdeutig — bitte Typ angeben (z.B. f22:1):\n";
-            int i = 1;
-            for (auto& c : res.candidates)
-                std::cout << "  " << i++ << "  " << c.shortForm() << "  " << c.displayName << "\n";
-            return;
-        }
-        if (!res.ref.valid()) { CLI::printErr("Nicht gefunden: " + rest[0]); return; }
-        // Route to the right module:
-        std::string ecmd;
-        switch (res.ref.type) {
-            case Rosenholz::EntityType::F16: ecmd = "-f16"; break;
-            case Rosenholz::EntityType::F22: ecmd = "-f22"; break;
-            case Rosenholz::EntityType::F18: ecmd = "-f18"; break;
-            case Rosenholz::EntityType::AKT: ecmd = "-akt"; break;
-            case Rosenholz::EntityType::PER: ecmd = "-per"; break;
-            default: CLI::printErr("Unbekannter Typ"); return;
-        }
-        dispatch(ecmd, {res.ref.id});
-        return;
-    }
-
-    if (cmd == "-search") {
-        std::string q;
-        for (auto& r : rest) {
-            if (!q.empty()) q += " ";
-            q += r;
-        }
-        CLI::cmdSearch(q);
-        // Also search notes:
-        auto notes = Rosenholz::Note::search(q);
-        if (!notes.empty()) {
-            std::cout << "\n  -- NOTIZEN (" << notes.size() << ") --\n";
-            for (auto& n : notes)
-                std::cout << "  [" << n->createdAt.substr(0,16) << "] "
-                          << n->entityType << "/" << n->entityId.substr(0,20)
-                          << "  " << n->body.substr(0,50) << "\n";
-        }
-        return;
-    }
-
-    if (cmd == "cd") { CLI::cmdCd(rest); return; }
-    if (cmd == "ls") { CLI::cmdLs(rest); return; }
-    if (cmd == "lo" || cmd == "-h" || cmd == "--help") {
-        auto cur = Rosenholz::NavigationStack::instance().current();
-        if (cur.valid()) { CLI::cmdLo(rest); return; }
-        printHelp(); return;
-    }
-
-    // Short contextual commands (≤ 3 chars, no leading dash):
-    static const char* kCtxCmds[] = {
-        "f16","f22","f18","akt","f77",
-        "rev","kom","note","tsk","srch",
-        "sts","bak","wch","tree","cal","his",nullptr};
-    for (int i = 0; kCtxCmds[i]; ++i) {
-        if (cmd == kCtxCmds[i]) { CLI::cmdContextual(cmd, rest); return; }
-    }
-
-    std::cout << "  >> Unbekannter Befehl: " << Color::red(cmd) << "\n"
-              << "     lo  oder  -h  = Optionen  |  Tab = Vervollstaendigung\n";
-}
 
 // ── main ──────────────────────────────────────────────────────
 //

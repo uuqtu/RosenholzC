@@ -235,6 +235,7 @@ struct F77W {
     static std::vector<std::shared_ptr<F77W>> loadForEntity(
         const std::string& entityType, const std::string& entityId);
     static std::vector<std::shared_ptr<F77W>> loadActive();
+    static std::vector<std::shared_ptr<F77W>> loadAll(int limit = 100);
 
 private:
     static Database* db();

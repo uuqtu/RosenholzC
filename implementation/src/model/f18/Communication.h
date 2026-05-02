@@ -70,6 +70,7 @@ public:
         const std::string& title,
         const std::string& commType = "meeting");
 
+    static std::vector<std::shared_ptr<Communication>> loadAll(int limit = 200);
     static std::shared_ptr<Communication> loadById(const std::string& id);
 
     // ------------------------------

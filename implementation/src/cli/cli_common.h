@@ -123,6 +123,9 @@ inline const char* f18StepSymbolStr(Rosenholz::F18StepSymbol s) {
 
 // ── Input / output primitives (cli_utils.cpp) ─────────────────
 std::string readLine(const std::string& prompt);
+std::string readChar(const std::string& prompt,
+                     const std::vector<std::pair<std::string,std::string>>& aliases,
+                     bool optional = true);
 std::string readOpt(const std::string& prompt);
 int         readInt(const std::string& prompt, int lo, int hi);
 int         readChoice(const std::string& menuText, int lo, int hi); ///< ? shows menu
@@ -228,6 +231,7 @@ std::vector<std::pair<std::string,std::string>> getContextChildren();
 void teamMenu();
 
 // ── Communication menu (cli_comm.cpp) ────────────────────────
+void cmdKom(const std::vector<std::string>& args);
 void communicationMenu(const std::string& ownerId,
                        const std::string& ownerType);
 void commDetailMenu(std::shared_ptr<Rosenholz::Communication> c);
@@ -236,6 +240,8 @@ std::vector<std::shared_ptr<Rosenholz::Communication>>
 
 // ── System commands (cli_sys.cpp) ─────────────────────────────
 void cmdStatus();
+void cmdHist();
+void cmdGo(const std::vector<std::string>& args);
 void cmdBackup();
 void cmdMfs(const std::vector<std::string>& args);
 void cmdLog(const std::string& level);
@@ -244,6 +250,8 @@ void globalSearch(const std::string& query);
 
     // ── F18 functions (defined in cli_f18.cpp) ──────────────
     void f18Menu(std::shared_ptr<Rosenholz::F18Operation> v);
+void stepMenu(Rosenholz::F18OperationStep& step,
+              std::vector<Rosenholz::F18OperationStep>& allSteps);
     void printF18Operation(const Rosenholz::F18Operation& v);
     std::shared_ptr<Rosenholz::F18Operation> createF18WizardGuided();
 } // namespace CLI

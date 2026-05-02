@@ -139,8 +139,8 @@ static void drawF18Chain(const std::vector<Rosenholz::F18OperationStep>& steps) 
 // Handles: execution (approve/reject/skip), tracking updates,
 // notes, communications, and document attachments.
 
-static void stepMenu(Rosenholz::F18OperationStep& step,
-                     std::vector<Rosenholz::F18OperationStep>& allSteps) {
+void stepMenu(Rosenholz::F18OperationStep& step,
+              std::vector<Rosenholz::F18OperationStep>& allSteps) {
     using namespace Rosenholz;
     while (true) {
         hdr("F18S — " + step.stepId.substr(0, 22));

@@ -166,4 +166,19 @@ std::string Communication::notizTemplate(CommType type) {
     return "";
 }
 
+
+std::vector<std::shared_ptr<Communication>> Communication::loadAll(int limit) {
+    auto* db = DatabasePool::instance().get("f18");
+    if (!db) return {};
+    auto rows = db->query(
+        "SELECT * FROM communications ORDER BY created_at DESC LIMIT ?;",
+        {BindParam::int64(limit)});
+    std::vector<std::shared_ptr<Communication>> result;
+    for (auto& r : rows) {
+        auto c = std::make_shared<Communication>();
+        c->fromRow(r);
+        result.push_back(c);
+    }
+    return result;
+}
 } // namespace Rosenholz

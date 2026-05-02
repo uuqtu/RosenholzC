@@ -44,6 +44,43 @@ void cmdF77(const std::vector<std::string>& args) {
         return;
     }
 
+    // -o: list all F77 workflows (active + recent), pick one to open
+    // -so <q>: search by template name or entity ID
+    if (args[0] == "-o" || args[0] == "-so") {
+        bool doSearch = (args[0] == "-so");
+        std::string q = (doSearch && args.size()>1) ? args[1] : "";
+        std::string lq=q; std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
+        auto all = F77W::loadAll(100);
+        std::vector<std::shared_ptr<F77W>> hits;
+        for (auto& w : all) {
+            if (lq.empty()) { hits.push_back(w); continue; }
+            std::string chk = w->templateName + " " + w->entityId + " " + w->workflowId;
+            std::transform(chk.begin(), chk.end(), chk.begin(), ::tolower);
+            if (chk.find(lq) != std::string::npos) hits.push_back(w);
+        }
+        if (hits.empty()) { std::cout << "  (keine F77)\n"; return; }
+        std::cout << "\n  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(22) << "VORLAGE"
+                  << std::setw(8)  << "TYP"
+                  << std::setw(18) << "ENTITÄT"
+                  << std::setw(12) << "ZIEL"
+                  << "STATUS\n"
+                  << "  " << std::string(92,'-') << "\n";
+        for (int i=0; i<(int)hits.size(); i++)
+            std::cout << "  " << std::setw(4) << (i+1)
+                      << std::setw(26) << hits[i]->workflowId
+                      << std::setw(22) << hits[i]->templateName.substr(0,20)
+                      << std::setw(8)  << hits[i]->entityType
+                      << std::setw(18) << hits[i]->entityId.substr(0,16)
+                      << std::setw(12) << entityStatusToString(hits[i]->targetState)
+                      << Color::statusColor(std::string(toString(hits[i]->status))) << "\n";
+        int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)hits.size());
+        if (pick < 1) return;
+        CLI::instanceMenu(hits[pick-1]->workflowId);
+        return;
+    }
+
     if (args[0] == "-tpl" || args[0] == "--templates") {
         auto tpls = F77W_Template::loadAll();
         if (tpls.empty()) { std::cout << "  (keine Vorlagen)\n"; return; }

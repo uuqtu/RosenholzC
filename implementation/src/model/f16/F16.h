@@ -116,6 +116,7 @@ public:
     // ── CRUD ──────────────────────────────────────────────
     OperationResult save() const;
     OperationResult update();
+    OperationResult archive();   ///< soft-delete (sets archived=true)
     OperationResult updateScope(const std::string& scopeText); ///< Sets scope + timestamp
     bool load(const std::string& id);
     OperationResult remove();

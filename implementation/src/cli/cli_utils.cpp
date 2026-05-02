@@ -199,6 +199,44 @@ int readChoice(const std::string& menuText, int lo, int hi) {
 }
 
 
+// ── readChar: read a single-char shortcut with alias table ──────────────────
+// aliases: {{"h","high"},{"m","medium"},{"l","low"}} etc.
+// Returns the mapped value, or the raw input if no match.
+// Displays the prompt and waits for a full line (no raw terminal needed).
+std::string readChar(const std::string& prompt,
+                     const std::vector<std::pair<std::string,std::string>>& aliases,
+                     bool optional)
+{
+    while (true) {
+        std::cout << "  " << prompt;
+        std::cout.flush();
+        std::string raw;
+        if (!std::getline(std::cin, raw)) { g_interrupted = 1; return ""; }
+        // strip whitespace:
+        raw.erase(0, raw.find_first_not_of(" \t"));
+        raw.erase(raw.find_last_not_of(" \t") + 1);
+        if (raw.empty()) {
+            if (optional) return "";
+            continue;
+        }
+        // lowercase for matching:
+        std::string lo = raw;
+        std::transform(lo.begin(), lo.end(), lo.begin(), ::tolower);
+        for (auto& [key, val] : aliases)
+            if (lo == key || lo == val) return val;
+        // numeric: try mapping to alias by position
+        // unknown input: re-prompt
+        std::string hint = "(";
+        for (int i = 0; i < (int)aliases.size(); i++) {
+            if (i) hint += "/";
+            hint += aliases[i].first + "=" + aliases[i].second;
+        }
+        hint += ")";
+        std::cout << "  Ungueltig. " << hint << "\n";
+    }
+}
+
+
 std::string readLine(const std::string& prompt) {
     while (true) {
         if (g_interrupted) return "";

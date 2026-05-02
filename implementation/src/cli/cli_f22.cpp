@@ -209,7 +209,47 @@ void cmdF22(const std::vector<std::string>& args) {
         return;
     }
 
-    // -n  —  guided creation (list F16, pick one, then create task)
+    // -o  / -so  —  list all F22, pick one → navigate
+    if (args[0] == "-o" || args[0] == "-so") {
+        bool doOpen = (args[0] == "-so");
+        std::string q;
+        if (doOpen && args.size() > 1) q = args[1];
+        auto all = F22::loadRecent(200);
+        std::vector<std::shared_ptr<F22>> hits;
+        for (auto& t : all) {
+            if (q.empty()) { hits.push_back(t); continue; }
+            std::string tl = t->title, ql = q;
+            std::transform(tl.begin(), tl.end(), tl.begin(), ::tolower);
+            std::transform(ql.begin(), ql.end(), ql.begin(), ::tolower);
+            if (tl.find(ql) != std::string::npos || t->taskId.find(ql) != std::string::npos)
+                hits.push_back(t);
+        }
+        if (hits.empty()) { std::cout << "  (keine F22)\n"; return; }
+        std::cout << "\n  " << std::left << std::setw(4) << "#"
+                  << std::setw(26) << "ID"
+                  << std::setw(28) << "TITEL"
+                  << std::setw(22) << "F16-PROJEKT"
+                  << std::setw(12) << "STATUS"
+                  << "PRIO\n"
+                  << "  " << std::string(90, '-') << "\n";
+        for (int i = 0; i < (int)hits.size(); i++) {
+            auto p = F16::loadById(hits[i]->projectId);
+            std::string pname = p ? (p->regNumber.toString()) : hits[i]->projectId;
+            std::cout << "  " << std::setw(4) << (i+1)
+                      << std::setw(26) << hits[i]->regNumber.toString()
+                      << std::setw(28) << hits[i]->title.substr(0,26)
+                      << std::setw(22) << pname.substr(0,20)
+                      << std::setw(12) << Color::statusColor(entityStatusToString(hits[i]->status))
+                      << hits[i]->priority << "\n";
+        }
+        if (!doOpen) return;
+        int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)hits.size());
+        if (pick < 1) return;
+        cmdCd({hits[pick-1]->taskId});
+        return;
+    }
+
+        // -n  —  guided creation (list F16, pick one, then create task)
     if (args[0] == "-n" || args[0] == "--neu") {
         auto task = createTaskWizardGuided();
         if (task) printOk("  >> F22 angelegt: " + task->regNumber.toString()
