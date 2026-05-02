@@ -240,3 +240,57 @@ TEST_CASE("F16: all six project types saved and reloaded correctly", "[f16][type
     }
     CHECK(rowCount("f16","projects") == 6);
 }
+
+TEST_CASE("F16: recalcEarnedValue() computes CPI and SPI", "[f16][model][ev]") {
+    // EV metrics: CPI = EV/AC,  SPI = EV/PV.
+    // Both must be positive after recalc when all inputs are positive.
+    TempDB db("f16_ev");
+    auto p = makeF16("EV-Test", "OV");
+    p->earnedValue   = 75000.0;
+    p->plannedValue  = 90000.0;
+    p->actualCost    = 80000.0;
+    p->recalcEarnedValue();
+    REQUIRE(opOk(p->save()));
+
+    SECTION("CPI > 0") { CHECK(p->costPerformanceIndex     > 0.0); }
+    SECTION("SPI > 0") { CHECK(p->schedulePerformanceIndex > 0.0); }
+    SECTION("CPI = EV/AC") {
+        CHECK_THAT(p->costPerformanceIndex,
+                   Catch::Matchers::WithinRel(75000.0/80000.0, 0.001));
+    }
+    SECTION("persists after reload") {
+        auto r = F16::loadById(p->projectId);
+        REQUIRE(r != nullptr);
+        CHECK(r->costPerformanceIndex     > 0.0);
+        CHECK(r->schedulePerformanceIndex > 0.0);
+    }
+}
+
+TEST_CASE("F16: reassignLead and reassignSponsor persist", "[f16][model][reassign]") {
+    TempDB db("f16_reassign");
+    auto p = makeF16("Reassign-Test");
+    auto lead = Person::create("Neue", "Leiterin", "nl@test.de", "internal");
+    REQUIRE(opOk(lead->save()));
+
+    REQUIRE(opOk(p->reassignLead(lead->personId)));
+    REQUIRE(opOk(p->reassignSponsor(lead->personId)));
+
+    auto r = F16::loadById(p->projectId);
+    REQUIRE(r != nullptr);
+    CHECK(r->leadId    == lead->personId);
+    CHECK(r->sponsorId == lead->personId);
+    // SQL:
+    CHECK(colValue("f16","projects","lead_id","project_id='"+p->projectId+"'")
+          == lead->personId);
+}
+
+TEST_CASE("F16: milestones free-text field survives save/load", "[f16][fields]") {
+    TempDB db("f16_milestones");
+    auto p = makeF16("Milestone-Test");
+    p->milestones = "2026-06-01: Kick-off\n2026-08-01: Design-Freeze";
+    REQUIRE(opOk(p->update()));
+    auto r = F16::loadById(p->projectId);
+    REQUIRE(r != nullptr);
+    CHECK_FALSE(r->milestones.empty());
+    CHECK(r->milestones.find("Kick-off") != std::string::npos);
+}

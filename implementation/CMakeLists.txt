@@ -200,18 +200,7 @@ target_include_directories(rosenholz_cli PRIVATE
     ${CMAKE_BINARY_DIR}/generated
 )
 
-# ── Test binary ───────────────────────────────────────────────
-file(GLOB TEST_SOURCES "tests/*.cpp")
-
-add_executable(rosenholz_test
-    tests/main_test.cpp
-    ${TEST_SOURCES}
-)
-target_link_libraries(rosenholz_test PRIVATE rosenholz_lib)
-target_include_directories(rosenholz_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_BINARY_DIR}/generated
-)
+# Legacy test binary removed in v9 — all tests now use Catch2 (rosenholz_unit)
 
 
 # ── Catch2 unit tests ──────────────────────────────────────────
@@ -243,7 +232,6 @@ endif()
 
 # ── Install ───────────────────────────────────────────────────
 install(TARGETS rosenholz_cli DESTINATION bin)
-install(TARGETS rosenholz_test DESTINATION bin)
 install(FILES settings.json DESTINATION bin)
 
 message(STATUS "Rosenholz PM v2.0.0")
