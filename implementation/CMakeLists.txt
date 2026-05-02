@@ -213,6 +213,34 @@ target_include_directories(rosenholz_test PRIVATE
     ${CMAKE_BINARY_DIR}/generated
 )
 
+
+# ── Catch2 unit tests ──────────────────────────────────────────
+include(FetchContent)
+FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG        v3.7.1
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(Catch2)
+include(CTest)
+include(Catch)
+
+file(GLOB_RECURSE UNIT_TEST_SOURCES "tests/unit/**/*.cpp" "tests/unit/*.cpp")
+if(UNIT_TEST_SOURCES)
+    add_executable(rosenholz_unit ${UNIT_TEST_SOURCES})
+    target_link_libraries(rosenholz_unit PRIVATE
+        rosenholz_lib
+        Catch2::Catch2WithMain
+    )
+    target_include_directories(rosenholz_unit PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit
+        ${CMAKE_BINARY_DIR}/generated
+    )
+    catch_discover_tests(rosenholz_unit)
+endif()
+
 # ── Install ───────────────────────────────────────────────────
 install(TARGETS rosenholz_cli DESTINATION bin)
 install(TARGETS rosenholz_test DESTINATION bin)

@@ -215,7 +215,7 @@ void stepMenu(Rosenholz::F18OperationStep& step,
 
         // Numbered KOM and DOK sub-lists
         auto koms = Communication::loadForOwner(step.stepId, "f18step");
-        auto docs  = Folder::loadForEntity("f18step", step.stepId);
+        auto docs  = Folder::loadForEntity("f18s", step.stepId);
 
         std::cout << "  1.Ausführen | 2.Tracking | 3.Notiz\n"
                   << "  KOM: 4.listen(" << koms.size() << ") | 5.<#> | 6.neu\n"

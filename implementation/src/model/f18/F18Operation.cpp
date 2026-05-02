@@ -425,6 +425,24 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     newStep.save();
     auto step = std::make_shared<F18OperationStep>(newStep);
 
+    // V9: every manual step (not Init, not End) gets its own "Allgemeine Akte"
+    // Init and End are lifecycle bookends and need no document storage.
+    if (!newStep.isInitialize && !newStep.isFinal) {
+        auto allgAkte = Rosenholz::Folder::create(
+            "Allgemeine Akte " + step->stepId,
+            "general",
+            taskId,  // parent task context for AKT pool
+            "");     // no f18OpId — this Akte belongs to the F18S, not the F18
+        if (allgAkte && opOk(allgAkte->save())) {
+            allgAkte->attachToEntity("f18s", step->stepId);
+            LOG_INFO("[F18S] Allgemeine Akte angelegt: " + allgAkte->folderId
+                     + " fuer F18S " + step->stepId);
+        } else {
+            LOG_WARN("[F18S] Allgemeine Akte konnte nicht angelegt werden fuer "
+                     + step->stepId);
+        }
+    }
+
     // Only wire regular steps into the End step's predecessor list
     if (!isFree && endIdx >= 0) {
         auto& endRef = steps[endIdx];

@@ -86,6 +86,14 @@ TemplateStatus templateStatusFrom(const std::string& s);
 /// Generate a typed registration ID: genId("F22") → "XV/F22/0001/26"
 std::string genId(const std::string& typePart);
 
+/// Case-insensitive wildcard match: * = any chars, % = exactly one char.
+/// No wildcard → substring search (backward compat).
+bool matchesPattern(const std::string& text, const std::string& pattern);
+
+/// Case-insensitive wildcard match.
+/// * = any number of chars, % = exactly one char, no wildcards = substring.
+bool matchesPattern(const std::string& text, const std::string& pattern);
+
 /// Convert user search pattern to SQLite LIKE pattern.
 /// User: * = any chars, % = exactly one char.
 /// No wildcards → wraps with %%...%% (substring match).

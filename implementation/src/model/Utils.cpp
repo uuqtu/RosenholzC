@@ -2,6 +2,8 @@
 // Utils.cpp  —  Shared model utility implementations
 // ============================================================
 #include "Utils.h"
+#include <vector>
+#include <algorithm>
 #include "../core/RegNumber.h"
 #include <chrono>
 #include <iomanip>
@@ -134,19 +136,53 @@ TemplateStatus templateStatusFrom(const std::string& s) {
 
 
 std::string patternToSQLLike(const std::string& pattern) {
-    // If pattern has no user wildcards, wrap for substring match:
     bool hasWild = (pattern.find('*') != std::string::npos ||
                     pattern.find('%') != std::string::npos);
-    if (!hasWild) return "%" + pattern + "%";
-
+    if (!hasWild) {
+        // No user wildcards → substring search.
+        // Escape any literal SQL metachar _ in the pattern:
+        std::string escaped;
+        for (char c : pattern) {
+            if (c == '_') escaped += "\_";
+            else          escaped += c;
+        }
+        return "%" + escaped + "%";
+    }
     std::string sql;
     sql.reserve(pattern.size() * 2);
     for (char c : pattern) {
-        if      (c == '*') sql += '%';    // * → any number of chars in SQL
-        else if (c == '%') sql += '_';    // % → exactly one char in SQL
-        else if (c == '_') sql += "\_";  // escape SQL's own single-char wildcard
+        if      (c == '*') sql += '%';
+        else if (c == '%') sql += '_';
+        else if (c == '_') sql += "\_";
         else               sql += c;
     }
     return sql;
 }
+
+bool matchesPattern(const std::string& text, const std::string& pattern) {
+    std::string t = text, p = pattern;
+    std::transform(t.begin(), t.end(), t.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    std::transform(p.begin(), p.end(), p.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+
+    if (p.find('*') == std::string::npos && p.find('%') == std::string::npos)
+        return t.find(p) != std::string::npos;
+
+    const std::size_t pn = p.size(), tn = t.size();
+    std::vector<bool> prev(tn + 1, false), curr(tn + 1, false);
+    prev[0] = true;
+    for (std::size_t i = 1; i <= pn; ++i) {
+        curr.assign(tn + 1, false);
+        curr[0] = (p[i-1] == '*') && prev[0];
+        for (std::size_t j = 1; j <= tn; ++j) {
+            if      (p[i-1] == '*') curr[j] = prev[j] || curr[j-1];
+            else if (p[i-1] == '%') curr[j] = prev[j-1];
+            else                    curr[j] = prev[j-1] && (p[i-1] == t[j-1]);
+        }
+        prev = curr;
+    }
+    return prev[tn];
+}
+
 } // namespace Rosenholz
