@@ -147,20 +147,6 @@ static void editMenu(std::shared_ptr<Rosenholz::F16> p) {
     std::string phase = readOpt("Phase (leer = behalten): ");
     if (!phase.empty()) p->phase = phase;
 
-    std::cout << "  Priorität: 1.low  2.medium  3.high  4.critical  (leer = behalten)\n";
-    std::string pr = readOpt("Priorität: ");
-    static const char* prios[] = {"low","medium","high","critical"};
-    if (pr == "1") p->priority = prios[0];
-    else if (pr == "2") p->priority = prios[1];
-    else if (pr == "3") p->priority = prios[2];
-    else if (pr == "4") p->priority = prios[3];
-
-    std::string complex = readOpt("Komplexität (simple/moderate/complex, leer = behalten): ");
-    if (!complex.empty()) p->complexity = complex;
-
-    std::string meth = readOpt("Methodik (agile/waterfall/kanban, leer = behalten): ");
-    if (!meth.empty()) p->methodology = meth;
-
     // Scope
     std::string scope = readOpt("Scope-Beschreibung (leer = behalten): ");
     if (!scope.empty()) {
@@ -210,7 +196,7 @@ static void editMenu(std::shared_ptr<Rosenholz::F16> p) {
 // Saves to DB and writes MFS file if MFS is enabled.
 
 // Helper: inline date prompt that shows the resolved date after input
-static std::string promptDate(const std::string& label) {
+std::string promptDate(const std::string& label) {
     std::cout << "  " << label;
     std::cout.flush();
     std::string raw;
@@ -240,22 +226,8 @@ std::shared_ptr<Rosenholz::F16> createProjectWizard() {
     std::string ptype = types[tc-1];
 
     // Size: inline, single char shortcut
-    std::string size = readChar(
-        "Groesse (l=large m=medium s=small): ",
-        {{"l","large"},{"1","large"},{"m","medium"},{"2","medium"},{"s","small"},{"3","small"}},
-        false);
-
     std::string codename = readOpt("  Codename (optional): ");
-    std::string priority = readChar(
-        "Prioritaet (h=high m=medium l=low, leer=überspringen): ",
-        {{"h","high"},{"m","medium"},{"l","low"}}, true);
-    std::string complexity = readChar(
-        "Komplexitaet (c=complex m=moderate s=simple, leer=überspringen): ",
-        {{"c","complex"},{"m","moderate"},{"s","simple"}}, true);
-    std::string method = readChar(
-        "Methodik (a=agile w=waterfall k=kanban, leer=überspringen): ",
-        {{"a","agile"},{"w","waterfall"},{"k","kanban"}}, true);
-    std::string scope = readOpt("  Scope (optional): ");
+    std::string scope    = readOpt("  Scope (optional): ");
 
     std::string startPlan = promptDate("Geplanter Start (YYYY-MM-DD / . +Nd +Nw +Nm +Ny, leer=überspringen): ");
     std::string endPlan   = promptDate("Geplantes Ende  (YYYY-MM-DD / . +Nd +Nw +Nm +Ny, leer=überspringen): ");
@@ -264,11 +236,8 @@ std::shared_ptr<Rosenholz::F16> createProjectWizard() {
     double budget = 0.0;
     if (!budgetStr.empty()) try { budget = std::stod(budgetStr); } catch(...) {}
 
-    auto p = Rosenholz::F16::create(title, ptype, size);
+    auto p = Rosenholz::F16::create(title, ptype);
     p->codename         = codename;
-    p->priority         = priority;
-    p->complexity       = complexity;
-    p->methodology      = method;
     p->scopeStatement   = scope;
     p->startDatePlanned = startPlan;
     p->endDatePlanned   = endPlan;

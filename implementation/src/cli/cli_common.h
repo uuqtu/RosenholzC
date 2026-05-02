@@ -123,6 +123,7 @@ inline const char* f18StepSymbolStr(Rosenholz::F18StepSymbol s) {
 
 // ── Input / output primitives (cli_utils.cpp) ─────────────────
 std::string readLine(const std::string& prompt);
+std::string promptDate(const std::string& label);
 std::string readChar(const std::string& prompt,
                      const std::vector<std::pair<std::string,std::string>>& aliases,
                      bool optional = true);
@@ -232,6 +233,7 @@ void teamMenu();
 
 // ── Communication menu (cli_comm.cpp) ────────────────────────
 void cmdKom(const std::vector<std::string>& args);
+void cmdF99(const std::vector<std::string>& args);
 void communicationMenu(const std::string& ownerId,
                        const std::string& ownerType);
 void commDetailMenu(std::shared_ptr<Rosenholz::Communication> c);

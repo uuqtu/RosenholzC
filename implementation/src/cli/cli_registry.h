@@ -2,18 +2,22 @@
 // ============================================================
 // cli_registry.h  —  Command Registry (Dispatcher)
 //
-// EXTENSIBILITY: To add a new command, add ONE entry to the
-// kCommands[] table in cli_registry.cpp. The dispatcher,
-// lo() help display, and tab completion all read from this
-// table automatically. No other files need to change.
+// EXTENSIBILITY: To add a command, add ONE entry to kCommands[]
+// in cli_registry.cpp. Dispatch, lo(), and Tab-completion all
+// read from this single table automatically.
 //
-// Entry fields:
-//   name       short form, no dash: "f22", "tsk", "note"
-//   dashName   with dash or nullptr: "-f22", nullptr
-//   context    EntityType the command requires, or NONE for all
-//   loHint     one-line help shown in lo() for that context
-//   subHints   tab-completable sub-arguments: {"-n","-e","-v"}
-//   handler    the actual implementation function
+// Entry semantics:
+//   name           short form (no dash): "f22", "tsk"
+//   dashName       with dash or nullptr: "-f22", nullptr
+//   context        EntityType filter for lo() display (NONE = always shown)
+//   loHint         one-line help string in lo()
+//   subHints       tab-completable sub-arguments
+//   contextHandler called for plain form: "f22 -n"  (context-aware)
+//   globalHandler  called for dash form:  "-f22 -n" (global, no context)
+//                  nullptr → falls back to contextHandler
+//
+// RULE: dash = global (no context used), no-dash = contextual.
+// dispatch() enforces this automatically from the handlers.
 // ============================================================
 #include "../model/NavigationContext.h"
 #include <functional>
@@ -22,29 +26,33 @@
 
 namespace CLI {
 
+using Handler = std::function<void(const std::vector<std::string>&)>;
+
 struct CliCommand {
-    const char*  name;       ///< short form without dash: "f22"
-    const char*  dashName;   ///< with dash or nullptr: "-f22"
-    Rosenholz::EntityType context; ///< EntityType::NONE = available everywhere
-    const char*  loHint;     ///< one-line shown in lo() when in this context
+    const char*  name;           ///< plain form: "f22"
+    const char*  dashName;       ///< dash form or nullptr: "-f22"
+    Rosenholz::EntityType context; ///< ET::NONE = show in lo() everywhere
+    const char*  loHint;         ///< one-line help for lo()
     std::vector<const char*> subHints; ///< tab-completable sub-commands
-    std::function<void(const std::vector<std::string>&)> handler;
+    Handler contextHandler;      ///< called for plain "f22 ..." (context-aware)
+    Handler globalHandler;       ///< called for dash "-f22 ..." (global); nullptr→contextHandler
 };
 
-/// Returns the full command registry.
+/// Returns the full command registry (single source of truth).
 const std::vector<CliCommand>& registry();
 
-/// Dispatch: try to find and run a command.
-/// Returns true if handled, false if unknown.
+/// Dispatch a command. Returns false if unknown.
+/// Automatically routes: dash→globalHandler, plain→contextHandler.
 bool dispatch(const std::string& cmd, const std::vector<std::string>& args);
 
-/// Print context-sensitive help (lo).
+/// Print context-sensitive help (lo / -h in context).
 void printContextHelp();
 
-/// Returns tab-completion candidates for a given prefix.
+/// Tab-completion candidates for a given prefix and previous token.
 std::vector<std::string> completions(const std::string& prefix,
                                      const std::string& prev);
 
-/// Context children for tab completion (cd command)
+/// Returns context children for 'cd' Tab-completion.
 std::vector<std::pair<std::string,std::string>> getContextChildren();
+
 } // namespace CLI

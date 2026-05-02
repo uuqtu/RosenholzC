@@ -16,7 +16,7 @@
 #include "../model/f16/F16.h"
 #include "../model/f22/F22.h"
 #include "../model/f18/F18Operation.h"
-#include "../model/f18/F18OperationStep.h"lo
+#include "../model/f18/F18OperationStep.h"
 #include "../model/akt/Folder.h"
 #include "../model/akt/FolderRevision.h"
 #include "../model/akt/FolderObject.h"
@@ -191,15 +191,19 @@ void cmdLs(const std::vector<std::string>& args) {
             std::cout << "  Schritte (" << v->steps.size() << "):\n"
                       << "  " << std::left << std::setw(4) << "#"
                       << std::setw(26) << "ID"
-                      << std::setw(28) << "TITEL"
+                      << std::setw(24) << "TITEL"
+                      << std::setw(12) << "START-PLAN"
+                      << std::setw(12) << "ENDE-PLAN"
                       << "STATUS\n"
-                      << "  " << std::string(66,'-') << "\n";
+                      << "  " << std::string(78,'-') << "\n";
             int n = 1;
             for (auto& s : v->steps) {
                 std::string sym = f18StepSymbolStr(s.displaySymbol());
                 std::cout << "  " << std::setw(4) << n++
                           << std::setw(26) << s.stepId
-                          << std::setw(28) << s.title.substr(0,26);
+                          << std::setw(24) << s.title.substr(0,22)
+                      << std::setw(12) << (s.startDatePlanned.empty() ? "-" : s.startDatePlanned.substr(0,10))
+                      << std::setw(12) << (s.endDatePlanned.empty() ? "-" : s.endDatePlanned.substr(0,10));
                 if (s.status == F18StepStatus::DONE)
                     std::cout << Color::green(sym);
                 else if (s.status == F18StepStatus::IN_PROGRESS)
@@ -668,17 +672,54 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (!v) { printErr("F18 nicht gefunden: " + cur.id); return; }
             v->loadSteps();
 
-            // -stp -n : neuen Schritt hinzufuegen
+            // -stp -n : neuen Schritt hinzufuegen (mit Datumsfeldern)
             if (args.size() >= 2 && args[1] == "-n") {
                 std::string title = readLine("  Schritt-Titel: ");
                 if (title.empty()) return;
-                std::cout << "  Typ: 1.task  2.approval  3.review  4.notification\n";
-                int st = readInt("Typ",1,4);
+                std::cout << "  Typ: 1.task  2.approval  3.review  4.notification  ";
+                int st = readInt("", 1, 4);
                 static const char* sts[]={"task","approval","review","notification"};
-                std::string ass = readOpt("  Zugewiesen an (Person-ID, leer=offen): ");
-                bool req = yesno("  Pflichtschritt?");
-                v->addStep(title, sts[st-1], ass, req);
+                std::string ass   = readOpt("  Zugewiesen an (Person-ID, leer=offen): ");
+                std::string start = promptDate("  Geplanter Start (.  +Nd  YYYY-MM-DD, leer): ");
+                std::string end   = promptDate("  Geplantes Ende  (.  +Nd  YYYY-MM-DD, leer): ");
+                bool freeStep = yesno("  Freier Schritt (kein Vorgaenger)?");
+                v->addStep(title, sts[st-1], ass, freeStep, start, end);
                 printOk("Schritt hinzugefuegt.");
+                return;
+            }
+
+            // -stp -e <n>: Schritt N bearbeiten
+            if (args.size() >= 2 && args[1] == "-e") {
+                int n = 0;
+                if (args.size() >= 3) { try { n = std::stoi(args[2]); } catch(...) {} }
+                if (n < 1 || n > (int)v->steps.size()) {
+                    // Show list and ask:
+                    if (v->steps.empty()) { std::cout << "  (keine Schritte)\n"; return; }
+                    for (int i=0; i<(int)v->steps.size(); i++)
+                        std::cout << "  " << std::setw(3) << (i+1) << ". "
+                                  << v->steps[i].title.substr(0,30)
+                                  << "  " << Rosenholz::f18StepStatusToString(v->steps[i].status) << "\n";
+                    n = readInt("  Schritt", 1, (int)v->steps.size());
+                }
+                auto& s = v->steps[n-1];
+                // Edit fields:
+                std::string newTitle = readOpt("  Titel (leer=behalten): ");
+                if (!newTitle.empty()) s.title = newTitle;
+                std::string newAss = readOpt("  Zugewiesen an (leer=behalten): ");
+                if (!newAss.empty()) s.assignedTo = newAss;
+                std::string newPrio = readChar(
+                    "Prioritaet (h=high m=medium l=low c=critical, leer=behalten): ",
+                    {{"h","high"},{"m","medium"},{"l","low"},{"c","critical"}}, true);
+                if (!newPrio.empty()) s.priority = newPrio;
+                std::string newStart = promptDate("  Geplanter Start (.  +Nd, leer=behalten): ");
+                if (!newStart.empty()) s.startDatePlanned = newStart;
+                std::string newEnd = promptDate("  Geplantes Ende  (.  +Nd, leer=behalten): ");
+                if (!newEnd.empty()) { s.endDatePlanned = newEnd; s.dueDate = newEnd; }
+                std::string pctStr = readOpt("  Fortschritt % (0-100, leer=behalten): ");
+                if (!pctStr.empty()) try { s.percentComplete = std::stoi(pctStr); } catch(...) {}
+                s.computeTrackingStatus();
+                if (s.update()) printOk("Schritt aktualisiert.");
+                else            printErr("Fehler beim Speichern.");
                 return;
             }
 
@@ -971,8 +1012,45 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         return;
     }
 
-    // ── note — quick note ─────────────────────────────────────────────────────
-    if (cmd == "note") {
+    // ── f99 — F99-Notiz (im Kontext, Kurzbefehle) ────────────────────────────
+    if (cmd == "f99" || cmd == "note") {
+        // -s <q>: search in context (or global if no context)
+        if (!args.empty() && args[0] == "-s") {
+            std::string q;
+            for (std::size_t i=1; i<args.size(); i++) { if(!q.empty()) q+=" "; q+=args[i]; }
+            if (q.empty()) q = readLine("  Suche: ");
+            std::string etype_filter;
+            if (cur.valid()) {
+                etype_filter = entityTypeLabel(cur.type);
+                std::transform(etype_filter.begin(), etype_filter.end(), etype_filter.begin(), ::tolower);
+            }
+            auto hits = Note::search(q, etype_filter);
+            if (hits.empty()) { std::cout << "  (keine F99-Notizen gefunden)\n"; return; }
+            std::cout << "\n  " << std::left << std::setw(22) << "ID"
+                      << std::setw(18) << "DATUM"
+                      << std::setw(32) << "PFAD"
+                      << "INHALT\n"
+                      << "  " << std::string(88,'-') << "\n";
+            for (auto& r : hits)
+                std::cout << "  " << std::setw(22) << r.note->noteId
+                          << std::setw(18) << r.note->createdAt.substr(0,16)
+                          << std::setw(32) << (r.entityPath + " " + r.entityTitle).substr(0,30)
+                          << r.note->body.substr(0,36) << "\n";
+            std::cout << "\n";
+            return;
+        }
+        // -so [q]: F99 Manager — suchen, auswählen, bearbeiten/löschen
+        if (!args.empty() && args[0] == "-so") {
+            cmdF99({"-so", args.size()>1 ? args[1] : ""});
+            return;
+        }
+        // -o <id>: open specific note
+        if (!args.empty() && args[0] == "-o") {
+            std::string nid = args.size()>1 ? args[1] : readLine("  F99-ID: ");
+            cmdF99({"-o", nid});
+            return;
+        }
+        // Default: create note in context
         if (!cur.valid()) { printErr("Kein Kontext — cd <ID>  um zu navigieren"); return; }
         std::string text;
         for (auto& a : args) { if (!text.empty()) text += " "; text += a; }
@@ -981,7 +1059,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         std::string etype = entityTypeLabel(cur.type);
         std::transform(etype.begin(), etype.end(), etype.begin(), ::tolower);
         auto n = Note::create(etype, cur.id, text);
-        if (n) std::cout << "  >> Notiz gespeichert: " << n->noteId << "\n";
+        if (n) std::cout << "  >> F99 gespeichert: " << n->noteId << "\n";
         else   printErr("Fehler beim Speichern");
         return;
     }

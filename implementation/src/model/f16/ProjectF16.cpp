@@ -30,7 +30,6 @@ namespace Rosenholz {
 std::shared_ptr<ProjectF16> ProjectF16::create(
     const std::string& title,
     const std::string& projectType,
-    const std::string& sizeClass,
     const std::string& /*createdBy*/)
 {
     auto project = std::make_shared<ProjectF16>();
@@ -38,7 +37,6 @@ std::shared_ptr<ProjectF16> ProjectF16::create(
     project->regNumber   = RegNumber::fromString(project->projectId);
     project->title       = title;
     project->projectType = projectType;
-    project->sizeClass   = sizeClass;
     project->currency    = "EUR";
     project->createdAt   = nowIso();
     project->updatedAt   = project->createdAt;
@@ -56,7 +54,7 @@ OperationResult ProjectF16::save() const {
         INSERT OR REPLACE INTO projects (
             project_id, workflow_instance_id, workflow_status, workflow_current_state,
             archived, reg_number, reg_dept, reg_sequence, reg_year,
-            title, codename, project_type, size_class,
+            title, codename, project_type,
             owner_team_id, lead_id, sponsor_id,
             phase, methodology, classification, priority, complexity, strategic_alignment,
             start_date_planned, start_date_actual, end_date_planned, end_date_actual,
@@ -88,7 +86,6 @@ OperationResult ProjectF16::save() const {
         BindParam::text(title),
         BindParam::nullOrText(codename),
         BindParam::text(projectType),
-        BindParam::text(sizeClass),
         BindParam::nullOrText(ownerTeamId),
         BindParam::nullOrText(leadId),
         BindParam::nullOrText(sponsorId),
@@ -151,7 +148,6 @@ void ProjectF16::fromRow(const Row& row) {
     title                = rowGet(row, "title");
     codename             = rowGet(row, "codename");
     projectType          = rowGet(row, "project_type");
-    sizeClass            = rowGet(row, "size_class");
     ownerTeamId          = rowGet(row, "owner_team_id");
     leadId               = rowGet(row, "lead_id");
     sponsorId            = rowGet(row, "sponsor_id");
@@ -371,7 +367,6 @@ json ProjectF16::toJson() const {
     j["title"]                    = title;
     j["codename"]                 = codename;
     j["projectType"]              = projectType;
-    j["sizeClass"]                = sizeClass;
     j["archived"]                 = archived;
     j["phase"]                    = phase;
     j["leadId"]                   = leadId;
@@ -393,7 +388,6 @@ std::shared_ptr<ProjectF16> ProjectF16::fromJson(const json& j) {
     project->title                    = j.value("title",       "");
     project->codename                 = j.value("codename",    "");
     project->projectType              = j.value("projectType", "OV");
-    project->sizeClass                = j.value("sizeClass",   "medium");
     project->archived                 = j.value("archived",    false);
     project->costPerformanceIndex     = j.value("costPerformanceIndex",     1.0);
     project->schedulePerformanceIndex = j.value("schedulePerformanceIndex", 1.0);
@@ -410,8 +404,7 @@ std::string ProjectF16::mfsSchluesselText() const {
     text << "  ID       : " << projectId  << "\n"
          << "  Titel    : " << title       << "\n"
          << "  Typ      : " << projectType << "\n"
-         << "  Groesse  : " << sizeClass   << "\n"
-         << "  Archiv   : " << (archived ? "ja" : "nein") << "\n";
+             << "  Archiv   : " << (archived ? "ja" : "nein") << "\n";
     auto tasks = Rosenholz::TaskF22::loadForProject(projectId);
     if (!tasks.empty()) {
         text << "  F22      :";

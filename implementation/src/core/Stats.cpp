@@ -26,7 +26,7 @@ EntityCounts Stats::load() {
     c.akt      = count("akt",     "folders");
     c.f77Active= count("f77",     "f77_workflows");
     c.f77Tasks = count("f77task", "f77_tasks");
-    c.notes    = count("notes",   "notes");
+    c.notes    = count("f99",     "f99_entries");
     return c;
 }
 

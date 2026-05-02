@@ -354,7 +354,7 @@ private:
 
 
 struct Version {
-    static constexpr int  major       = 7;
+    static constexpr int  major       = 8;
     static constexpr int  minor       = 0;
     static constexpr int  patch       = 0;
     static constexpr char tag[]       = "";

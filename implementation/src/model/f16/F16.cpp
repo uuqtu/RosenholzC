@@ -30,7 +30,6 @@ namespace Rosenholz {
 std::shared_ptr<F16> F16::create(
     const std::string& title,
     const std::string& projectType,
-    const std::string& sizeClass,
     const std::string& /*createdBy*/)
 {
     auto project = std::make_shared<F16>();
@@ -38,7 +37,6 @@ std::shared_ptr<F16> F16::create(
     project->regNumber   = RegNumber::fromString(project->projectId);
     project->title       = title;
     project->projectType = projectType;
-    project->sizeClass   = sizeClass;
     project->currency    = "EUR";
     project->createdAt   = nowIso();
     project->updatedAt   = project->createdAt;
@@ -55,10 +53,8 @@ OperationResult F16::save() const {
     OperationResult result = db->exec(R"(
         INSERT OR REPLACE INTO projects (
             project_id,             archived, reg_number, reg_dept, reg_sequence, reg_year,
-            title, codename, project_type, size_class,
-            owner_team_id, lead_id, sponsor_id,
-            phase, methodology, classification, priority, complexity, strategic_alignment,
-            start_date_planned, start_date_actual, end_date_planned, end_date_actual,
+            title, codename, project_type, owner_team_id, lead_id, sponsor_id,
+            phase, classification,             start_date_planned, start_date_actual, end_date_planned, end_date_actual,
             duration_planned_days, duration_actual_days, schedule_variance_days,
             budget_planned, budget_approved, budget_committed, budget_actual, cost_variance,
             cost_performance_index, schedule_performance_index,
@@ -67,15 +63,13 @@ OperationResult F16::save() const {
             scope_statement, scope_version, scope_last_changed, scope_change_reason, scope_change_count,
                         currency, external_ref, links, milestones, notes,
             created_at, updated_at
-        ) VALUES (
+                ) VALUES (
             ?,?,?,?,?,?,
-            ?,?,?,?,
+            ?,?,?,
             ?,?,?,
             ?,?,?,?,?,?,
-            ?,?,?,?,
             ?,?,?,
-            ?,?,?,?,?,
-            ?,?,
+            ?,?,?,?,?,?,?,
             ?,?,?,
             ?,?,?,
             ?,?,?,?,?,
@@ -92,16 +86,11 @@ OperationResult F16::save() const {
         BindParam::text(title),
         BindParam::nullOrText(codename),
         BindParam::text(projectType),
-        BindParam::text(sizeClass),
         BindParam::nullOrText(ownerTeamId),
         BindParam::nullOrText(leadId),
         BindParam::nullOrText(sponsorId),
         BindParam::nullOrText(phase),
-        BindParam::nullOrText(methodology),
         BindParam::nullOrText(classification),
-        BindParam::nullOrText(priority),
-        BindParam::nullOrText(complexity),
-        BindParam::nullOrText(strategicAlignment),
         BindParam::nullOrText(startDatePlanned),
         BindParam::nullOrText(startDateActual),
         BindParam::nullOrText(endDatePlanned),
@@ -150,16 +139,11 @@ void F16::fromRow(const Row& row) {
     title                = rowGet(row, "title");
     codename             = rowGet(row, "codename");
     projectType          = rowGet(row, "project_type");
-    sizeClass            = rowGet(row, "size_class");
     ownerTeamId          = rowGet(row, "owner_team_id");
     leadId               = rowGet(row, "lead_id");
     sponsorId            = rowGet(row, "sponsor_id");
     phase                = rowGet(row, "phase");
-    methodology          = rowGet(row, "methodology");
     classification       = rowGet(row, "classification");
-    priority             = rowGet(row, "priority");
-    complexity           = rowGet(row, "complexity");
-    strategicAlignment   = rowGet(row, "strategic_alignment");
     startDatePlanned     = rowGet(row, "start_date_planned");
     startDateActual      = rowGet(row, "start_date_actual");
     endDatePlanned       = rowGet(row, "end_date_planned");
@@ -297,7 +281,7 @@ std::string F16::convertToTask(const std::string& parentProjectId) {
     db->exec(R"(
         INSERT OR REPLACE INTO tasks (
             task_id, reg_number, project_id, title, description,
-            status, priority, cost_planned, start_date_planned, due_date_planned,
+            status, cost_planned, start_date_planned, due_date_planned,
             wbs_code, notes, created_at, updated_at
         ) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?)
     )", {
@@ -307,7 +291,6 @@ std::string F16::convertToTask(const std::string& parentProjectId) {
         BindParam::text(title + " [aus F16/" + projectId + "]"),
         BindParam::nullOrText(scopeStatement),
         BindParam::text(entityStatusToString(EntityStatus::IN_WORK)),
-        BindParam::nullOrText(priority),
         BindParam::real(budgetPlanned),
         BindParam::nullOrText(startDatePlanned),
         BindParam::nullOrText(endDatePlanned),
@@ -328,7 +311,6 @@ json F16::toJson() const {
     j["title"]                    = title;
     j["codename"]                 = codename;
     j["projectType"]              = projectType;
-    j["sizeClass"]                = sizeClass;
     j["archived"]                 = archived;
     j["phase"]                    = phase;
     j["leadId"]                   = leadId;
@@ -346,7 +328,6 @@ std::shared_ptr<F16> F16::fromJson(const json& j) {
     project->title                    = j.value("title",       "");
     project->codename                 = j.value("codename",    "");
     project->projectType              = j.value("projectType", "OV");
-    project->sizeClass                = j.value("sizeClass",   "medium");
     project->archived                 = j.value("archived",    false);
     project->costPerformanceIndex     = j.value("costPerformanceIndex",     1.0);
     project->schedulePerformanceIndex = j.value("schedulePerformanceIndex", 1.0);
@@ -363,7 +344,6 @@ std::string F16::mfsSchluesselText() const {
     text << "  ID       : " << projectId  << "\n"
          << "  Titel    : " << title       << "\n"
          << "  Typ      : " << projectType << "\n"
-         << "  Groesse  : " << sizeClass   << "\n"
          << "  Archiv   : " << (archived ? "ja" : "nein") << "\n";
     auto tasks = Rosenholz::F22::loadForProject(projectId);
     if (!tasks.empty()) {

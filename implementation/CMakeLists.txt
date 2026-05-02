@@ -186,6 +186,7 @@ set(CLI_SOURCES
     src/cli/cli_comm.cpp
     src/cli/cli_tasks.cpp
     src/cli/cli_nav.cpp
+    src/cli/cli_f99.cpp
     src/cli/cli_registry.cpp
     src/cli/cli_sys.cpp
 )

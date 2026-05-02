@@ -31,7 +31,8 @@ std::map<std::string, int> MigrationEngine::targetVersionMap() {
         {"f77",  SchemaVersions::f77},
         {"akt",  SchemaVersions::akt},
         {"f18",       SchemaVersions::f18},
-    };
+        {"f99",       1},  // f99 notes
+    }; // note: f99 is registered via Database.cpp pool
 }
 
 

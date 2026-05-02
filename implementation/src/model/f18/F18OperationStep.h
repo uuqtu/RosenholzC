@@ -75,7 +75,9 @@ public:
     // in_work: explicitly marked as being worked on
     // archived:step completed/rejected/skipped
     std::string trackingStatus  { "planned" };
-    std::string focusDate;    ///< Must be before dueDate
+    std::string startDatePlanned; ///< planned start (for tracking)
+    std::string endDatePlanned;   ///< planned end (= planned due)
+    std::string focusDate;        ///< auto-computed midpoint
     std::string inWorkSince;  ///< Set when marked in_work
     std::string priority        { "medium" };  // low|medium|high|critical
     std::string assignedToGroup;
@@ -107,7 +109,8 @@ public:
 
     // ── CRUD ──────────────────────────────────────────────────
     bool save()   const;
-    bool complete();  ///< Sets status=done and completedDate=now
+    bool update() const;  ///< save with updatedAt=now
+    bool complete();      ///< Sets status=done and completedDate=now
     bool remove() const;
 
     // ── Factory ───────────────────────────────────────────────

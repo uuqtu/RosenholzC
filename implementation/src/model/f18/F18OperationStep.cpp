@@ -47,6 +47,8 @@ void F18OperationStep::fromRow(const Row& r) {
     decisionDate      = g("decision_date");
     comment           = g("comment");
     trackingStatus    = rowGetOr(r,"tracking_status","planned");
+    startDatePlanned  = g("start_date_planned");
+    endDatePlanned    = g("end_date_planned");
     focusDate         = g("focus_date");
     priority          = rowGetOr(r,"priority","medium");
     assignedToGroup   = g("assigned_to_group");
@@ -60,37 +62,78 @@ void F18OperationStep::fromRow(const Row& r) {
 // ── save ─────────────────────────────────────────────────────
 bool F18OperationStep::save() const {
     auto* d = db(); if (!d) return false;
-
     return d->exec(R"SQL(
-        INSERT OR REPLACE INTO f18_operation_steps
-        (step_id, operation_id, tpl_step_id, title, description, step_type,
-         sequence_order, predecessor_step_ids,
-         is_initialize, is_final, is_free,
-         assigned_to, required_role, due_date, started_date, completed_date,
-         sla_hours, sla_breached,
-         status, auto_approve, requires_comment, requires_document,
-         decision, decision_by, decision_date, comment,
-         tracking_status, focus_date, in_work_since,
-         priority, assigned_to_group, progress_note, percent_complete,
-         notes, created_at, updated_at)
-        VALUES(?,?,?,?,?,?, ?,?, ?,?,?, ?,?,?,?,?, ?,?,
-               ?,?,?,?, ?,?,?,?,
-               ?,?,?, ?,?,?,?,
-               ?,?,?)
+        INSERT OR REPLACE INTO f18_operation_steps (
+            step_id, operation_id, tpl_step_id, title, description, step_type,
+            sequence_order, predecessor_step_ids,
+            is_initialize, is_final, is_free,
+            assigned_to, required_role, due_date, started_date, completed_date,
+            sla_hours, sla_breached,
+            status, auto_approve, requires_comment, requires_document,
+            decision, decision_by, decision_date, comment,
+            tracking_status,
+            start_date_planned, end_date_planned,
+            focus_date,
+            priority, assigned_to_group, progress_note, percent_complete,
+            in_work_since,
+            notes, created_at, updated_at
+        ) VALUES (
+            ?,?,?,?,?,?,
+            ?,?,
+            ?,?,?,
+            ?,?,?,?,?,
+            ?,?,
+            ?,?,?,?,
+            ?,?,?,?,
+            ?,
+            ?,?,
+            ?,
+            ?,?,?,?,
+            ?,
+            ?,?,?
+        )
     )SQL", {
-        BindParam::text(stepId), BindParam::text(operationId), BindParam::nullOrText(tplStepId), BindParam::text(title), BindParam::nullOrText(description), BindParam::text(stepType),
-        BindParam::int64(sequenceOrder), BindParam::nullOrText(predecessorStepIds),
-        BindParam::int64(isInitialize?1:0), BindParam::int64(isFinal?1:0), BindParam::int64(isFree?1:0),
-        BindParam::nullOrText(assignedTo), BindParam::nullOrText(requiredRole), BindParam::nullOrText(dueDate), BindParam::nullOrText(startedDate), BindParam::nullOrText(completedDate),
-        BindParam::int64(slaHours), BindParam::int64(slaBreached?1:0),
-        BindParam::text(f18StepStatusToString(status)), BindParam::int64(autoApprove?1:0), BindParam::int64(requiresComment?1:0), BindParam::int64(requiresDocument?1:0),
-        BindParam::nullOrText(decision), BindParam::nullOrText(decisionBy), BindParam::nullOrText(decisionDate), BindParam::nullOrText(comment),
-        BindParam::text(trackingStatus), BindParam::nullOrText(focusDate), BindParam::nullOrText(inWorkSince),
-        BindParam::text(priority.empty()?"medium":priority), BindParam::nullOrText(assignedToGroup), BindParam::nullOrText(progressNote),
+        BindParam::text(stepId),
+        BindParam::text(operationId),
+        BindParam::nullOrText(tplStepId),
+        BindParam::text(title),
+        BindParam::nullOrText(description),
+        BindParam::text(stepType),
+        BindParam::int64(sequenceOrder),
+        BindParam::nullOrText(predecessorStepIds),
+        BindParam::int64(isInitialize?1:0),
+        BindParam::int64(isFinal?1:0),
+        BindParam::int64(isFree?1:0),
+        BindParam::nullOrText(assignedTo),
+        BindParam::nullOrText(requiredRole),
+        BindParam::nullOrText(dueDate),
+        BindParam::nullOrText(startedDate),
+        BindParam::nullOrText(completedDate),
+        BindParam::int64(slaHours),
+        BindParam::int64(slaBreached?1:0),
+        BindParam::text(f18StepStatusToString(status)),
+        BindParam::int64(autoApprove?1:0),
+        BindParam::int64(requiresComment?1:0),
+        BindParam::int64(requiresDocument?1:0),
+        BindParam::nullOrText(decision),
+        BindParam::nullOrText(decisionBy),
+        BindParam::nullOrText(decisionDate),
+        BindParam::nullOrText(comment),
+        BindParam::text(trackingStatus.empty()?"planned":trackingStatus),
+        BindParam::nullOrText(startDatePlanned),
+        BindParam::nullOrText(endDatePlanned),
+        BindParam::nullOrText(focusDate),
+        BindParam::text(priority.empty()?"medium":priority),
+        BindParam::nullOrText(assignedToGroup),
+        BindParam::nullOrText(progressNote),
         BindParam::int64(percentComplete),
-        BindParam::text(notes.empty()?"{}":notes), BindParam::text(createdAt), BindParam::text(updatedAt)
+        BindParam::nullOrText(inWorkSince),
+        BindParam::text(notes.empty()?"{}":notes),
+        BindParam::text(createdAt),
+        BindParam::text(nowIso())
     });
 }
+
 
 bool F18OperationStep::remove() const {
     auto* d = db(); if (!d) return false;
@@ -188,6 +231,14 @@ bool F18OperationStep::complete() {
     status        = F18StepStatus::DONE;
     completedDate = nowIso();
     updatedAt     = nowIso();
+    return save();
+}
+
+
+bool F18OperationStep::update() const {
+    auto* d = db(); if (!d) return false;
+    // Refresh updatedAt via const_cast for save:  
+    const_cast<F18OperationStep*>(this)->updatedAt = nowIso();
     return save();
 }
 

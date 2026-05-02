@@ -232,9 +232,11 @@ public:
 
     std::shared_ptr<F18OperationStep> addStep(
         const std::string& title,
-        const std::string& stepType   = "task",
-        const std::string& assigneeId = "",
-        bool               isFree     = false);
+        const std::string& stepType        = "task",
+        const std::string& assigneeId      = "",
+        bool               isFree          = false,
+        const std::string& startDatePlanned = "",
+        const std::string& endDatePlanned   = "");
 
     /// Custom: inserts between predecessorStepId and its successor.
     /// The old successor then points to the new step.

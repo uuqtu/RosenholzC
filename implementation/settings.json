@@ -1,6 +1,6 @@
 {
-    "_comment": "Rosenholz PM — Konfigurationsdatei (settings.json)",
-    "_version": "7.0",
+    "_comment": "Rosenholz PM \u2014 Konfigurationsdatei (settings.json)",
+    "_version": "8.0",
     "basePath": "",
     "projectName": "Rosenholz PM",
     "logLevel": "INFO",

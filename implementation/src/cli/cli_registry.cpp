@@ -1,8 +1,12 @@
 // ============================================================
-// cli_registry.cpp  —  Command Registry
+// cli_registry.cpp  —  Command Registry (single source of truth)
 //
-// ONE PLACE to add/remove/rename commands.
-// All dispatch, lo(), and tab-completion read from here.
+// ADD A COMMAND: append one CliCommand entry to kCommands[].
+// dispatch(), lo(), Tab-completion all read from here.
+// No other files need editing.
+//
+// RULE:  dash form  ("-f22 -n") → globalHandler   (no nav context used)
+//        plain form ("f22 -n")  → contextHandler  (nav context used)
 // ============================================================
 #include "cli_registry.h"
 #include "cli_common.h"
@@ -13,205 +17,212 @@ namespace CLI {
 
 using ET = Rosenholz::EntityType;
 
-// ── Forward declarations of all handlers ─────────────────────────────────────
-// These are implemented in cli_nav.cpp and the other cli_*.cpp files.
+// ── Forward declarations ─────────────────────────────────────────────────────
+// All implementations live in cli_nav.cpp or the specific cli_*.cpp files.
 
-void cmdContextual(const std::string& cmd, const std::vector<std::string>& args);
-void cmdF16(const std::vector<std::string>& a);
-void cmdF22(const std::vector<std::string>& a);
-void cmdF18(const std::vector<std::string>& a);
-void cmdAkt(const std::vector<std::string>& a);
-void cmdF77(const std::vector<std::string>& a);
-void cmdPer(const std::vector<std::string>& a);
-void cmdDe(const std::vector<std::string>& a);
-void cmdTasks(const std::vector<std::string>& a);
-void cmdSearch(const std::string& q);
+void cmdCd(const std::vector<std::string>&);
+void cmdLs(const std::vector<std::string>&);
+void cmdContextual(const std::string& name, const std::vector<std::string>&);
+void cmdF16(const std::vector<std::string>&);
+void cmdF22(const std::vector<std::string>&);
+void cmdF18(const std::vector<std::string>&);
+void cmdAkt(const std::vector<std::string>&);
+void cmdF77(const std::vector<std::string>&);
+void cmdPer(const std::vector<std::string>&);
+void cmdDe(const std::vector<std::string>&);
+void cmdTasks(const std::vector<std::string>&);
+void cmdSearch(const std::string&);
 void cmdStatus();
 void cmdBackup();
-void cmdMfs(const std::vector<std::string>& a);
-void cmdCd(const std::vector<std::string>& a);
-void cmdLs(const std::vector<std::string>& a);
-void cmdLo(const std::vector<std::string>& a);
-void cmdGo(const std::vector<std::string>& a);
+void cmdMfs(const std::vector<std::string>&);
+void cmdGo(const std::vector<std::string>&);
 void cmdHist();
-void cmdCal();
+void cmdKom(const std::vector<std::string>&);
+void cmdF99(const std::vector<std::string>&);
 
-// ── Thin wrappers that call cmdContextual ────────────────────────────────────
-// Contextual commands route through cmdContextual so the navigation context
-// is always used. Global dash-commands call the model directly via cmdF22 etc.
+// ── Handler factories ────────────────────────────────────────────────────────
 
-static auto ctx(const std::string& name) {
+// ctx: context-aware handler — calls cmdContextual(name, args)
+static Handler ctx(const std::string& name) {
     return [name](const std::vector<std::string>& a) {
         cmdContextual(name, a);
     };
 }
-static auto global(void(*fn)(const std::vector<std::string>&)) {
+
+// global: calls a plain global function (no context)
+static Handler global(void(*fn)(const std::vector<std::string>&)) {
     return [fn](const std::vector<std::string>& a) { fn(a); };
 }
 
-// ── The registry ──────────────────────────────────────────────────────────────
+// ── Registry table ───────────────────────────────────────────────────────────
 //
-// Format:
-//   { name, dashName, requiredContext, loHint, {subHints...}, handler }
+// Columns: name | dashName | context | loHint | subHints | contextHandler | globalHandler
 //
-// requiredContext = ET::NONE  →  available everywhere
-// requiredContext = ET::F16   →  only shown in lo() when in F16 context
-//                               (but still callable from anywhere)
-//
-// ADD A NEW COMMAND: append one struct here. Done.
+// contextHandler: called for "f22 -n"  (plain form, uses nav context)
+// globalHandler:  called for "-f22 -n" (dash form, no context)
+//                 nullptr → contextHandler used for both
 //
 const std::vector<CliCommand>& registry() {
     using namespace Rosenholz;
     static const std::vector<CliCommand> kCommands = {
 
-    // ── Navigation ──────────────────────────────────────────────────────────
-    { "cd",    nullptr,  ET::NONE, "cd <ID>   In Entitaet navigieren", {}, ctx("cd") },
-    { "ls",    nullptr,  ET::NONE, "ls        Inhalt der aktuellen Ebene", {"-rev"}, ctx("ls") },
-    { "lo",    nullptr,  ET::NONE, "lo        Kontext-Optionen anzeigen", {}, ctx("lo") },
-    { "..",    nullptr,  ET::NONE, "..        Eine Ebene zurueck", {}, ctx("..") },
+    // ── Navigation (plain only, no dash form, no context filter) ────────────
+    { "cd",  nullptr, ET::NONE, "cd <ID>    In Entitaet navigieren",
+      {},     global(cmdCd),     nullptr },
 
-    // ── F16 ─────────────────────────────────────────────────────────────────
-    { "f16",   "-f16",   ET::NONE, "f16       F16-Aktionen",
-      {"-n","-e","-v","-o","-so","-s","-arc","-note"},   ctx("f16") },
+    { "ls",  nullptr, ET::NONE, "ls         Inhalt listen  ls -rev  alle Revisionen",
+      {"-rev"}, global(cmdLs),   nullptr },
 
-    // ── F22 ─────────────────────────────────────────────────────────────────
-    { "f22",   "-f22",   ET::NONE, "f22 -o/-so  F22 listen/suchen+navigieren  f22 -n  neu",
-      {"-n","-e","-v","-o","-so","-s","-ind","-note"},   ctx("f22") },
+    { "lo",  nullptr, ET::NONE, "lo         Kontext-Optionen anzeigen",
+      {},     [](const std::vector<std::string>&) { printContextHelp(); }, nullptr },
 
-    // ── F18 ─────────────────────────────────────────────────────────────────
-    { "f18",   "-f18",   ET::NONE, "f18 -o/-so  F18 listen/suchen+navigieren  f18 -n  neu",
-      {"-n","-e","-v","-o","-so","-s","-stp","-note"},  ctx("f18") },
+    // ── Entity commands — contextHandler=contextual, globalHandler=global ───
+    { "f16", "-f16",  ET::NONE,
+      "f16 -o/-so  listen/suchen  f16 -n  neu  f16 -e  bearbeiten",
+      {"-n","-e","-v","-o","-so","-s","-arc","-note"},
+      ctx("f16"),   global(cmdF16) },
 
-    // ── AKT ─────────────────────────────────────────────────────────────────
-    { "akt",   "-akt",   ET::NONE, "akt -o/-so  Akten  akt -oo/-soo  Objekte (im Kontext) akt -n  neu",
-      {"-n","-v","-o","-so","-oo","-soo","-obj","-url","-co","-ci","-rv","-note"}, ctx("akt") },
+    { "f22", "-f22",  ET::NONE,
+      "f22 -n  neue F22 (im Kontext direkt verknüpft)  f22 -o/-so  listen/suchen",
+      {"-n","-e","-v","-o","-so","-s","-ind","-note"},
+      ctx("f22"),   global(cmdF22) },
 
-    // ── F77 ─────────────────────────────────────────────────────────────────
-    { "f77",   "-f77",   ET::NONE, "f77 -o/-so  Workflows listen/suchen  f77 -s  starten  f77 -d  anzeigen",
-      {"-s","-d","-o","-so","-tpl"},                ctx("f77") },
+    { "f18", "-f18",  ET::NONE,
+      "f18 -n  neuer F18 (im Kontext)  f18 -o/-so  listen/suchen  f18 -stp  Schritte",
+      {"-n","-e","-v","-o","-so","-s","-stp","-note"},
+      ctx("f18"),   global(cmdF18) },
 
-    // ── Revision (AKT only) ──────────────────────────────────────────────────
-    { "rev",   nullptr,  ET::AKT,  "rev       Neue Revision anlegen",
-      {},                                           ctx("rev") },
+    { "akt", "-akt",  ET::NONE,
+      "akt -o/-so  Akten  akt -oo/-soo  Objekte (kontextuell)  akt -n  neu",
+      {"-n","-v","-o","-so","-oo","-soo","-obj","-url","-co","-ci","-rv","-note"},
+      ctx("akt"),   global(cmdAkt) },
 
-    // ── Kommunikation ────────────────────────────────────────────────────────
-    { "kom",   "-kom",   ET::NONE, "kom -o/-so  KOM listen/suchen (im Kontext: nur zugehörige)",
+    { "f77", "-f77",  ET::NONE,
+      "f77 -s  Workflow starten  f77 -d  anzeigen  f77 -o/-so  listen/suchen",
+      {"-s","-d","-o","-so","-tpl"},
+      ctx("f77"),   global(cmdF77) },
+
+    // ── AKT-only ─────────────────────────────────────────────────────────────
+    { "rev", nullptr,  ET::AKT, "rev        Neue Revision anlegen",
+      {},     ctx("rev"),   nullptr },
+
+    // ── Communications ────────────────────────────────────────────────────────
+    { "kom", "-kom",  ET::NONE,
+      "kom -o/-so  KOM listen/suchen (im Kontext: nur zugehörige)  kom -n  neu",
       {"-n","-l","-o","-so"},
-      [](const std::vector<std::string>& a) { cmdKom(a); } },
+      ctx("kom"),   global(cmdKom) },
 
-    // ── Notizen ─────────────────────────────────────────────────────────────
-    { "note",  "-note",  ET::NONE, "note <Text>   Schnellnotiz (im Kontext: auf aktuelle Entitaet)",
-      {},                                           ctx("note") },
+    // ── F99 Notizen ────────────────────────────────────────────────────────────
+    { "f99",  "-f99",  ET::NONE,
+      "f99 <Text>  F99-Notiz (im Kontext)  -s  suchen  -so  Manager  -o <id>  öffnen",
+      {"-s","-so","-o"},
+      ctx("f99"),  global(cmdF99) },
 
-    // ── Aufgaben ─────────────────────────────────────────────────────────────
-    { "tsk",   "-tasks", ET::NONE, "tsk       Offene Aufgaben  tsk -a  alle  tsk -so <q>  suchen",
+    // ── F77 Tasks ─────────────────────────────────────────────────────────────
+    { "tsk",  "-tasks", ET::NONE,
+      "tsk  offene Aufgaben  tsk -a  alle  tsk -so <q>  suchen",
       {"-a","-o","-so"},
-      [](const std::vector<std::string>& a) { cmdTasks(a); } },
+      global(cmdTasks), global(cmdTasks) },
 
-    // ── Suche ────────────────────────────────────────────────────────────────
-    { "srch",  "-search",ET::NONE, "srch <q>  Globale Suche",
+    // ── People / Org ──────────────────────────────────────────────────────────
+    { "per",  "-per",  ET::NONE,
+      "per -s <q>  Personen suchen  per -n  neu",
+      {"-n","-s"},
+      global(cmdPer), global(cmdPer) },
+
+    { "de",   "-de",   ET::NONE,
+      "de  Diensteinheiten-Browser",
+      {},     global(cmdDe),  global(cmdDe) },
+
+    // ── Search ────────────────────────────────────────────────────────────────
+    { "srch", "-search", ET::NONE,
+      "srch <q>  Globale Suche",
       {},
       [](const std::vector<std::string>& a) {
           std::string q;
           for (auto& s : a) { if (!q.empty()) q += " "; q += s; }
-          if (q.empty()) q = readLine("  Suche: ");
+          if (q.empty()) q = CLI::readLine("  Suche: ");
           cmdSearch(q);
-      } },
+      },
+      nullptr },
 
-    // ── Personen ─────────────────────────────────────────────────────────────
-    { "per",   "-per",   ET::NONE, "per -s <q>  Personen suchen  per -n  neu",
-      {"-n","-s"},
-      global(cmdPer) },
-
-    // ── Diensteinheiten ──────────────────────────────────────────────────────
-    { "de",    "-de",    ET::NONE, "de        Diensteinheiten-Browser",
-      {},
-      global(cmdDe) },
-
-    // ── MFS ─────────────────────────────────────────────────────────────────
-    { "mfs",   "-mfs",   ET::NONE, "mfs       MFS neu aufbauen  mfs -sync  aendrungen",
+    // ── MFS ──────────────────────────────────────────────────────────────────
+    { "mfs",  "-mfs",  ET::NONE,
+      "mfs  MFS neu aufbauen  mfs -sync  geänderte Dateien",
       {"-sync"},
-      global(cmdMfs) },
+      global(cmdMfs), global(cmdMfs) },
 
-    // ── System ───────────────────────────────────────────────────────────────
-    { "sts",   "-status",ET::NONE, "sts       Datenbankzaehler",
+    // ── System ────────────────────────────────────────────────────────────────
+    { "sts",  "-status",  ET::NONE, "sts  Datenbankzähler",
       {},
-      [](const std::vector<std::string>&) { cmdStatus(); } },
+      [](const std::vector<std::string>&) { cmdStatus(); },
+      nullptr },
 
-    { "bak",   "-backup",ET::NONE, "bak       Backup starten",
+    { "bak",  "-backup",  ET::NONE, "bak  Backup starten",
       {},
-      [](const std::vector<std::string>&) { cmdBackup(); } },
+      [](const std::vector<std::string>&) { cmdBackup(); },
+      nullptr },
 
-    { "wch",   "-watch", ET::NONE, "wch [N]   Watch-Polling (N=Sekunden, Standard=30)",
-      {},
-      ctx("wch") },
+    { "wch",  "-watch",   ET::NONE, "wch [N]  Watch-Polling (N=Sekunden, Standard=30)",
+      {},     ctx("wch"),   nullptr },
 
-    { "tree",  "-tree",  ET::NONE, "tree      Hierarchiebaum ab aktuellem F16",
-      {},
-      ctx("tree") },
+    { "tree", "-tree",    ET::NONE, "tree  Hierarchiebaum ab aktuellem F16",
+      {},     ctx("tree"),  nullptr },
 
-    { "cal",   "-cal",   ET::NONE, "cal       Kalenderansicht",
-      {},
-      ctx("cal") },
+    { "cal",  "-cal",     ET::NONE, "cal  Kalenderansicht",
+      {},     ctx("cal"),   nullptr },
 
-    { "his",   "-hist",  ET::NONE, "his       Verlauf zuletzt geoeffneter Entitaeten",
+    { "his",  "-hist",    ET::NONE, "his  Verlauf zuletzt geöffneter Entitäten",
       {},
-      [](const std::vector<std::string>&) { cmdHist(); } },
+      [](const std::vector<std::string>&) { cmdHist(); },
+      nullptr },
 
-    { "go",    "-go",    ET::NONE, "go <ref>  Direkt oeffnen (ID / Seq#)",
+    { "go",   "-go",      ET::NONE, "go <ref>  Direkt öffnen (ID / Seq#)",
       {},
-      global(cmdGo) },
+      global(cmdGo), global(cmdGo) },
+
+    { "log",  "-log",     ET::NONE, "log <level>  Verbosität: debug|info|warn|error",
+      {"debug","info","warn","error"},
+      [](const std::vector<std::string>& a) {
+          if (a.empty()) return;
+          auto& logger = Rosenholz::Logger::instance();
+          if      (a[0]=="debug") logger.setLevel(Rosenholz::LogLevel::DEBUG);
+          else if (a[0]=="info")  logger.setLevel(Rosenholz::LogLevel::INFO);
+          else if (a[0]=="warn")  logger.setLevel(Rosenholz::LogLevel::WARN);
+          else if (a[0]=="error") logger.setLevel(Rosenholz::LogLevel::ERR);
+          std::cout << "  >> Log-Level: " << a[0] << "\n";
+      },
+      nullptr },
 
     }; // end kCommands
     return kCommands;
 }
 
 // ── dispatch ─────────────────────────────────────────────────────────────────
+// Single, clean routing rule:
+//   dash form  ("-f22") → c.globalHandler  (or contextHandler if no global)
+//   plain form ("f22")  → c.contextHandler
 
 bool dispatch(const std::string& cmd, const std::vector<std::string>& args) {
-    // Normalise: if cmd starts with '-', try both "cmd" and without '-':
-    std::string plain  = (cmd.size() > 1 && cmd[0] == '-') ? cmd.substr(1) : cmd;
-    bool hasDash = (cmd[0] == '-');
+    if (cmd.empty()) return false;
+    bool hasDash = (!cmd.empty() && cmd[0] == '-');
 
     for (auto& c : registry()) {
-        bool matchPlain = (plain == c.name);
-        bool matchDash  = (c.dashName && cmd == c.dashName);
-
+        bool matchPlain = (!hasDash && cmd == c.name);
+        bool matchDash  = (hasDash && c.dashName && cmd == c.dashName);
         if (!matchPlain && !matchDash) continue;
 
-        // dash form → always global (use underlying cmdF22 etc. directly)
-        // plain form → always contextual (routes via cmdContextual)
-        // Both point to c.handler — which for contextual commands calls
-        // cmdContextual(name, args), and for global commands calls cmdFxx directly.
-        // The distinction is handled inside cmdContextual itself.
-        if (hasDash && matchDash) {
-            // Global invocation: bypass context routing
-            // For entity-type commands, call the underlying global function:
-            static const struct { const char* name; void(*fn)(const std::vector<std::string>&); }
-            kGlobals[] = {
-                {"-f16", cmdF16}, {"-f22", cmdF22}, {"-f18", cmdF18},
-                {"-akt", cmdAkt}, {"-f77", cmdF77}, {"-per", cmdPer},
-                {"-de", cmdDe},   {"-mfs", cmdMfs}, {"-tasks", cmdTasks},
-                {"-search", nullptr}, {"-status", nullptr}, {"-backup", nullptr},
-                {"-watch", nullptr},  {"-hist", nullptr},   {"-tree", nullptr},
-                {"-cal", nullptr},    {"-go", cmdGo},
-                {nullptr, nullptr}
-            };
-            for (int i = 0; kGlobals[i].name; ++i) {
-                if (cmd == kGlobals[i].name && kGlobals[i].fn) {
-                    kGlobals[i].fn(args);
-                    return true;
-                }
-            }
+        if (hasDash && c.globalHandler) {
+            c.globalHandler(args);
+        } else {
+            c.contextHandler(args);
         }
-        // Fall through to the registered handler for all other cases:
-        c.handler(args);
         return true;
     }
-    return false; // unknown
+    return false;
 }
 
-// ── printContextHelp (lo) ────────────────────────────────────────────────────
+// ── printContextHelp (lo) ─────────────────────────────────────────────────────
 
 void printContextHelp() {
     auto& nav = Rosenholz::NavigationStack::instance();
@@ -229,45 +240,47 @@ void printContextHelp() {
     }
 
     std::cout << "  Navigation:\n"
-              << "    cd <ID>     In Entitaet navigieren\n"
-              << "    ls          Inhalt listen\n"
-              << "    ls -rev     (AKT) Alle Revisionen\n"
-              << "    ..          Eine Ebene zurueck\n"
-              << "  Befehle:\n";
+              << "    cd <ID>    In Entität navigieren\n"
+              << "    ls         Inhalt listen  (ls -rev: Revisionen)\n"
+              << "    ..         Zurück\n"
+              << "  Befehle (plain=kontextuell, -dash=global):\n";
 
     for (auto& c : registry()) {
         if (!c.loHint || c.loHint[0] == '\0') continue;
-        // Skip navigation (already shown above):
-        if (std::string(c.name) == "cd" || std::string(c.name) == "ls" ||
-            std::string(c.name) == "lo" || std::string(c.name) == "..") continue;
-        // Context filter: only show if context matches or command is universal:
+        // Hide nav commands (already shown above):
+        if (!std::strcmp(c.name, "cd") || !std::strcmp(c.name, "ls") ||
+            !std::strcmp(c.name, "lo")) continue;
+        // Context filter: show if NONE or matches current context
         if (c.context != ET::NONE && c.context != ctx) continue;
-        std::cout << "    " << c.loHint << "\n";
+        // Format: "    name  hint"
+        std::string nameCol = std::string(c.name);
+        if (c.dashName) nameCol += std::string(" / ") + c.dashName;
+        std::cout << "    " << std::left << std::setw(14) << nameCol
+                  << "  " << c.loHint << "\n";
     }
-    std::cout << "  System:\n"
-              << "    sts  bak  wch [N]  tree  cal  his  go <ref>\n"
-              << "  Dash-Form = global (kein Kontext): -f22 -n\n\n";
+    std::cout << "\n  exit  Beenden  |  -h  Globale Hilfe\n\n";
 }
 
-// ── completions ──────────────────────────────────────────────────────────────
+// ── completions ───────────────────────────────────────────────────────────────
 
 std::vector<std::string> completions(const std::string& prefix,
                                      const std::string& prev) {
     std::vector<std::string> result;
 
-    // If previous token was "cd": complete with context children
+    // After 'cd': complete with context children
     if (prev == "cd") {
         try {
-            auto children = getContextChildren();
-            for (auto& [id, title] : children)
+            for (auto& [id, title] : getContextChildren())
                 result.push_back(id);
         } catch (...) {}
         return result;
     }
 
-    // Sub-command completion: if prev is a known command, offer its subHints
+    // Sub-command completion: if prev matches a command name, offer its subHints
     for (auto& c : registry()) {
-        if (prev == c.name || (c.dashName && prev == c.dashName)) {
+        bool matchName = (prev == c.name);
+        bool matchDash = (c.dashName && prev == c.dashName);
+        if (matchName || matchDash) {
             for (auto* s : c.subHints)
                 if (prefix.empty() || std::string(s).find(prefix) == 0)
                     result.push_back(s);
@@ -277,15 +290,13 @@ std::vector<std::string> completions(const std::string& prefix,
 
     // Top-level command completion:
     for (auto& c : registry()) {
-        // Plain name:
         if (std::string(c.name).find(prefix) == 0)
             result.push_back(c.name);
-        // Dash form:
         if (c.dashName && std::string(c.dashName).find(prefix) == 0)
             result.push_back(c.dashName);
     }
-    // Always offer exit/help:
-    for (auto* s : {"exit", "quit", "-h", "--help"})
+    // Fixed keywords:
+    for (auto* s : {"exit", "quit", "-h", "--help", ".."})
         if (std::string(s).find(prefix) == 0)
             result.push_back(s);
 

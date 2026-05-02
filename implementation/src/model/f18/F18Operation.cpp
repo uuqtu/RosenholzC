@@ -380,7 +380,9 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     const std::string& title,
     const std::string& stepType,
     const std::string& assigneeId,
-    bool               isFree)
+    bool               isFree,
+    const std::string& startDatePlanned,
+    const std::string& endDatePlanned)
 {
     // Find End step index and max sequence order
     int endIdx = -1, maxSeq = 0;
@@ -407,6 +409,9 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     newStep.sequenceOrder      = maxSeq + 1;
     newStep.isFree             = isFree;
     newStep.assignedTo         = assigneeId;
+    newStep.startDatePlanned   = startDatePlanned;
+    newStep.endDatePlanned     = endDatePlanned;
+    if (!endDatePlanned.empty()) newStep.dueDate = endDatePlanned;
     newStep.status             = F18StepStatus::PENDING;
     newStep.createdAt          = nowIso();
     newStep.updatedAt          = nowIso();

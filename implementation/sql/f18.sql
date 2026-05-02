@@ -171,7 +171,9 @@ CREATE TABLE IF NOT EXISTS f18_operation_steps (
     -- tracking_status: planned|focused|due|in_work|archived (computed, stored for query)
     tracking_status     TEXT DEFAULT 'planned'
                              CHECK(tracking_status IN ('planned','focused','due','in_work','archived')),
-    focus_date          TEXT,    -- must be before due_date; when passed → focused
+    start_date_planned  TEXT,    -- planned start date (for tracking)
+    end_date_planned    TEXT,    -- planned end date (= planned due date)
+    focus_date          TEXT,    -- auto-computed: midpoint of planned range
     -- due_date already exists above
     priority            TEXT DEFAULT 'medium',
     assigned_to_group   TEXT,

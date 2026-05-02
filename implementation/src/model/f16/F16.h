@@ -46,7 +46,6 @@ public:
     std::string title;
     std::string codename;
     std::string projectType;       ///< FK -> project_types.type_code
-    std::string sizeClass;         ///< large|medium|small
 
     // ── Organisational links ───────────────────────────────
     std::string ownerTeamId;       ///< FK -> teams
@@ -58,10 +57,7 @@ public:
     // Use the archived flag to soft-delete.
     bool archived { false };          ///< soft-delete; archived projects are hidden by default
     std::string phase;
-    std::string methodology;       ///< agile|waterfall|kanban
     std::string classification;
-    std::string priority;
-    std::string complexity;
     std::string strategicAlignment;
 
     // ── Time (QTCS) ───────────────────────────────────────
@@ -141,7 +137,6 @@ public:
     static std::shared_ptr<F16> create(
         const std::string& title,
         const std::string& projectType = "OV",
-        const std::string& sizeClass   = "medium",
         const std::string& createdBy   = "");
 
     static std::vector<std::shared_ptr<F16>> loadRecent(int n = 20);

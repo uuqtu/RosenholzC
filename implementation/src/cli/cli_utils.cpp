@@ -288,7 +288,8 @@ bool yesno(const std::string& prompt) {
 void printProject(const F16& p) {
     hdr("F16 " + p.regNumber.toString() + "  " + p.title.substr(0,38));
     std::cout << "  ID:" << p.projectId
-              << "  Status:" << (p.archived ? "archiviert" : "aktiv") << "/" << p.sizeClass << "\n";
+              << "  Typ:" << p.projectType
+              << "  " << (p.archived ? Color::dim("archiviert") : Color::green("aktiv")) << "\n";
     if (!p.leadId.empty() || p.budgetPlanned > 0)
         std::cout << "  Lead:" << (p.leadId.empty()?"—":p.leadId.substr(0,26))
                   << "  Budget:" << (int)p.budgetPlanned << " " << p.currency << "\n";
@@ -361,7 +362,6 @@ void listProjects() {
     for (auto& p : all) {
         std::string title = p->title.size() > 30 ? p->title.substr(0, 29) + "~" : p->title;
         std::string phase = p->phase.empty()    ? "-" : p->phase;
-        std::string prio  = p->priority.empty() ? "-" : p->priority;
         char cpibuf[10];
         snprintf(cpibuf, sizeof(cpibuf), "%.2f", p->costPerformanceIndex);
         std::cout << "  " << std::left
@@ -369,7 +369,6 @@ void listProjects() {
                   << std::setw(32) << title
                   << std::setw(14) << Color::statusColor(p->archived ? "archiviert" : "aktiv")
                   << std::setw(12) << phase
-                  << std::setw(8)  << prio
                   << cpibuf << "\n";
     }
     std::cout << "  " << all.size() << " F16-Karte(n)\n";
@@ -384,7 +383,7 @@ void listTasks(const std::string& projectId) {
               << std::setw(30) << "TITEL"
               << std::setw(14) << "STATUS"
               << std::setw(6)  << "%"
-              << std::setw(10) << "PRIO"
+              
               << "ASSIGNEE\n"
               << "  " << std::string(86, '-') << "\n";
     std::cout << "  (ID für rh -f22 <id> verwenden)\n";
