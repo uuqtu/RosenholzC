@@ -68,17 +68,35 @@ bool MFSWriter::ownerOnlyWrite(const std::string& path, const std::string& conte
 
 
 // ── Entity folder helpers ─────────────────────────────────────
+
+// Extract 2-digit year from a registration number string like "XV/F22/0001/26"
+static std::string yearFromRegNr(const std::string& regNr) {
+    auto pos = regNr.rfind('/');
+    return (pos != std::string::npos) ? regNr.substr(pos+1) : "26";
+}
+
+// mfs/<TYPE>/<YY>/        — type folder with year subfolder
+static std::string typeYearDir(const std::string& mfsRoot,
+                                const std::string& typeName,
+                                const std::string& regNr) {
+    return FileOps::joinPath(
+               FileOps::joinPath(
+                   FileOps::joinPath(mfsRoot, typeName),
+                   yearFromRegNr(regNr)),
+               sanitiseRegNr(regNr));
+}
+
 static std::string f22Dir(const std::string& mfsRoot, const std::string& regNr) {
-    return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F22"), sanitiseRegNr(regNr));
+    return typeYearDir(mfsRoot, "F22", regNr);
 }
 static std::string f18Dir(const std::string& mfsRoot, const std::string& operationId) {
-    return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F18"), sanitiseRegNr(operationId));
+    return typeYearDir(mfsRoot, "F18", operationId);
 }
 static std::string f77Dir(const std::string& mfsRoot, const std::string& wfiId) {
     return FileOps::joinPath(FileOps::joinPath(mfsRoot,"F77"), sanitiseRegNr(wfiId));
 }
-static std::string docEntityDir(const std::string& entityDir, const std::string& docId) {
-    return FileOps::joinPath(FileOps::joinPath(entityDir,"AKT"), sanitiseRegNr(docId));
+static std::string docEntityDir(const std::string& mfsRoot, const std::string& docId) {
+    return typeYearDir(mfsRoot, "AKT", docId);
 }
 
 
@@ -91,11 +109,14 @@ bool MFSWriter::writeProject(const F16& p, const std::string& mfsRoot) {
     // No subdirectory is created — the F16 folder contains one file per project.
     // The file is named: XV_F16_0001_26.txt (sanitised registration number)
 
-    std::string f16FolderPath = FileOps::joinPath(mfsRoot, "F16");
-    FileOps::makeDirs(f16FolderPath);
+    // mfs/F16/<YY>/<sane-id>.txt
+    std::string year = yearFromRegNr(p.regNumber.toString());
+    std::string f16YearPath = FileOps::joinPath(
+                                  FileOps::joinPath(mfsRoot, "F16"), year);
+    FileOps::makeDirs(f16YearPath);
 
     std::string sanitisedId = sanitiseRegNr(p.regNumber.toString());
-    std::string schluesselPath = FileOps::joinPath(f16FolderPath, sanitisedId + ".txt");
+    std::string schluesselPath = FileOps::joinPath(f16YearPath, sanitisedId + ".txt");
 
     std::ostringstream schluessel;
     schluessel
@@ -270,7 +291,11 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
     std::string f18sRoot = FileOps::joinPath(mfsRoot, "F18S");
     FileOps::makeDirs(f18sRoot);
     for (auto& s : steps) {
-        std::string stepDir = FileOps::joinPath(f18sRoot, sanitiseRegNr(s.stepId));
+        // mfs/F18S/<YY>/<sane-stepId>/
+        std::string stepYear = yearFromRegNr(s.stepId);
+        std::string stepDir  = FileOps::joinPath(
+                                   FileOps::joinPath(f18sRoot, stepYear),
+                                   sanitiseRegNr(s.stepId));
         FileOps::makeDirs(stepDir);
         std::string stepCard = FileOps::joinPath(stepDir,
                                    sanitiseRegNr(s.stepId) + ".txt");
@@ -335,8 +360,8 @@ bool MFSWriter::writeDocument(const Folder& d, const std::string& mfsRoot) {
         return false;
     }
 
-    // Each document gets its own subfolder: DOK/<docId>/
-    std::string docDir = docEntityDir(parentDir, d.folderId);
+    // Each AKT gets its own subfolder: mfs/AKT/<YY>/<sane-id>/
+    std::string docDir = docEntityDir(mfsRoot, d.folderId);
     FileOps::makeDirs(docDir);
 
     std::string sane     = sanitiseRegNr(d.folderId);

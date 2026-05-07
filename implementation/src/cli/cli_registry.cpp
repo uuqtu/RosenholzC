@@ -244,39 +244,150 @@ bool dispatch(const std::string& cmd, const std::vector<std::string>& args) {
 void printContextHelp() {
     auto& nav = Rosenholz::NavigationStack::instance();
     auto  cur = nav.current();
-    ET    ctx = cur.valid() ? cur.type : ET::NONE;
 
     std::cout << "\n";
-    if (cur.valid()) {
-        std::cout << Color::bold("  " + std::string(Rosenholz::entityTypeLabel(cur.type))
-                                 + " " + cur.id + " — " + cur.displayName) << "\n"
-                  << "  " << std::string(54, '-') << "\n";
-    } else {
-        std::cout << Color::bold("  Rosenholz PM v7 — Befehle") << "\n"
-                  << "  " << std::string(54, '-') << "\n";
+    if (!cur.valid()) {
+        // ── Global (top level): show concise command reference ──────────────
+        std::cout << Color::bold("  Rosenholz PM v9  |  rh <BEFEHL> [ARGS]") << "\n\n"
+                  << "  Navigation (Linux-Stil):\n"
+                  << "    cd <ID>    In Entität navigieren (F16/F22/F18/AKT)\n"
+                  << "    ls         Inhalt der aktuellen Ebene auflisten\n"
+                  << "    lo / -h    Kontextabhängige Optionen anzeigen\n"
+                  << "    ..         Eine Ebene zurück\n\n"
+                  << "  F16: -f16           F16-Karten   -f16 -n  Neu   -f16 -o  Auswahl\n"
+                  << "  F22: -f22           F22-Vorgänge  -f22 -n  Neu   -f22 -o  Auswahl\n"
+                  << "  F18: -f18           Vorgänge      -f18 -n  Neu   -f18 -o  Auswahl\n"
+                  << "  AKT: -akt           Akten          -akt -n  Neu   -akt -o  Auswahl\n"
+                  << "  F77: -f77 -o/-so    Workflows     -tasks  Meine Aufgaben\n"
+                  << "  F18S:-f18s -o/-so   F18-Schritte\n"
+                  << "  F99: -f99 -s/-so    Notizen suchen/Manager\n"
+                  << "  PER: -per -s <q>    Personen      -de  Diensteinheiten\n\n"
+                  << "  SYS: -search <q>  Globale Suche   -status  Zählungen\n"
+                  << "       -backup       Backup          -mfs  MFS aufbauen\n"
+                  << "       -log <level>  debug|info|warn|error\n"
+                  << "       -go <ref>     Direkt öffnen   -hist  Verlauf\n"
+                  << "       -tree [f16]   Hierarchiebaum  -watch [N]  Polling\n"
+                  << "       -cal          Kalenderansicht\n\n"
+                  << "  exit  Beenden\n\n";
+        return;
     }
 
-    std::cout << "  Navigation:\n"
-              << "    cd <ID>    In Entität navigieren\n"
-              << "    ls         Inhalt listen  (ls -rev: Revisionen)\n"
-              << "    ..         Zurück\n"
-              << "  Befehle (plain=kontextuell, -dash=global):\n";
+    // ── In context: header ───────────────────────────────────────────────────
+    std::string typeName = Rosenholz::entityTypeLabel(cur.type);
+    std::cout << Color::bold("  " + typeName + " " + cur.id + " — " + cur.displayName)
+              << "\n  " << std::string(54, '-') << "\n"
+              << "  Navigation:\n"
+              << "    cd <ID>    In Unterobjekt navigieren\n"
+              << "    ls         Inhalt listen\n"
+              << "    ..         Zurück\n\n";
 
-    for (auto& c : registry()) {
-        if (!c.loHint || c.loHint[0] == '\0') continue;
-        // Hide nav commands (already shown above):
-        if (!std::strcmp(c.name, "cd") || !std::strcmp(c.name, "ls") ||
-            !std::strcmp(c.name, "lo")) continue;
-        // Context filter: show if NONE or matches current context
-        if (c.context != ET::NONE && c.context != ctx) continue;
-        // Format: "    name  hint"
-        std::string nameCol = std::string(c.name);
-        if (c.dashName) nameCol += std::string(" / ") + c.dashName;
-        std::cout << "    " << std::left << std::setw(14) << nameCol
-                  << "  " << c.loHint << "\n";
+    switch (cur.type) {
+
+    // ── F16 ────────────────────────────────────────────────────────────────
+    case ET::F16:
+        std::cout
+          << "  Dieses F16:\n"
+          << "    f16 -e        F16 bearbeiten\n"
+          << "    f16 -arc      F16 archivieren\n"
+          << "    f16 -v        F16 Detailansicht\n\n"
+          << "  F22 Vorgänge:\n"
+          << "    f22 -n        Neue F22 in diesem Projekt anlegen\n"
+          << "    f22 -o/-so    F22 auswählen / suchen\n\n"
+          << "  Workflow:\n"
+          << "    f16 -f77 -n   Freigabe-Workflow für dieses F16 starten\n"
+          << "    f16 -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "  Suche & Notizen:\n"
+          << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
+          << "    f99 <Text>    Notiz auf dieses F16\n"
+          << "    f99 -s/-so    Notizen suchen / Manager\n"
+          << "    srch <q>      Globale Suche\n"
+          << "    mfs           MFS neu aufbauen\n";
+        break;
+
+    // ── F22 ─────────────────────────────────────────────────────────────────
+    case ET::F22:
+        std::cout
+          << "  Dieses F22:\n"
+          << "    f22 -e        F22 bearbeiten\n"
+          << "    f22 -v        F22 Detailansicht\n"
+          << "    f22 -ind      Nacherfassung (Aufgabe einbuchen)\n\n"
+          << "  F18 Vorgänge:\n"
+          << "    f18 -n        Neuen F18 anlegen\n"
+          << "    f18 -o/-so    F18 auswählen / suchen\n\n"
+          << "  Akten:\n"
+          << "    akt -n        Neue Akte in diesem F22 anlegen\n"
+          << "    akt -o/-so    Akten auswählen / suchen\n"
+          << "    akt -oo       Alle Objekte im Kontext listen\n\n"
+          << "  Workflow:\n"
+          << "    f22 -f77 -n   Freigabe-Workflow für dieses F22 starten\n"
+          << "    f22 -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "  Suche & Notizen:\n"
+          << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
+          << "    f99 <Text>    Notiz auf dieses F22\n"
+          << "    f99 -s/-so    Notizen suchen / Manager\n"
+          << "    srch <q>      Globale Suche\n"
+          << "    mfs           MFS neu aufbauen\n";
+        break;
+
+    // ── F18 ─────────────────────────────────────────────────────────────────
+    case ET::F18:
+        std::cout
+          << "  Dieses F18:\n"
+          << "    f18 -e        F18 bearbeiten\n"
+          << "    f18 -v        F18 Detailansicht\n\n"
+          << "  Schritte (F18S):\n"
+          << "    f18s          Schritte listen → öffnen\n"
+          << "    f18s -n       Neuen Schritt anlegen\n"
+          << "    f18s -e <n>   Schritt bearbeiten\n"
+          << "    f18s -o/-so   Schritte auswählen / suchen\n\n"
+          << "  Akten:\n"
+          << "    akt -n        Neue Akte anlegen\n"
+          << "    akt -o/-so    Akten suchen\n"
+          << "    akt -oo       Alle Objekte im Kontext\n\n"
+          << "  Workflow:\n"
+          << "    f18 -f77 -n   Freigabe-Workflow für dieses F18 starten\n"
+          << "    f18 -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "  Suche & Notizen:\n"
+          << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
+          << "    f99 <Text>    Notiz auf dieses F18\n"
+          << "    f99 -s/-so    Notizen suchen / Manager\n";
+        break;
+
+    // ── AKT ─────────────────────────────────────────────────────────────────
+    case ET::AKT:
+        std::cout
+          << "  Diese Akte:\n"
+          << "    akt -e        Akte bearbeiten\n"
+          << "    akt -r        Neue Revision anlegen\n"
+          << "    rev           Neue Revision anlegen\n"
+          << "    akt -hist     Revisionsverlauf anzeigen\n\n"
+          << "  Objekte dieser Akte:\n"
+          << "    ls            Alle Objekte der aktuellen Revision\n"
+          << "    ls -rev       Alle Revisionen\n"
+          << "    obj -n        Neues Objekt hinzufügen\n"
+          << "    akt -obj      Neues Objekt hinzufügen (alternativ)\n"
+          << "    akt -co <n>   Objekt auschecken\n"
+          << "    akt -ci       Objekt einchecken\n"
+          << "    akt -rv <n>   Revision wechseln\n"
+          << "    akt -url      URL-Objekte aktualisieren\n"
+          << "    akt -oo/-soo  Objekte im Kontext auflisten / suchen\n\n"
+          << "  Workflow:\n"
+          << "    akt -f77 -n   Freigabe-Workflow für diese Akte starten\n"
+          << "    akt -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "  Notizen:\n"
+          << "    f99 <Text>    Notiz auf diese Akte\n"
+          << "    f99 -s/-so    Notizen suchen / Manager\n";
+        break;
+
+    default:
+        // Fallback for any other entity type:
+        std::cout << "  Keine Kontextoptionen definiert für: " << typeName << "\n";
+        break;
     }
-    std::cout << "\n  exit  Beenden  |  -h  Globale Hilfe\n\n";
+
+    std::cout << "\n  exit  Beenden\n\n";
 }
+
 
 // ── completions ───────────────────────────────────────────────────────────────
 

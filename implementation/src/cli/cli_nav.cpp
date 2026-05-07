@@ -528,6 +528,39 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
 
     // ── f16 ──────────────────────────────────────────────────────────────────
     if (cmd == "f16") {
+        // -f77 -n / -f77 -d: workflow for current entity
+        if (!args.empty() && args[0] == "-f77") {
+            std::string sub = (args.size() > 1) ? args[1] : "";
+            if (sub == "-n") {
+                // Start default workflow for this entity:
+                std::string etype;
+                if (cmd == "f16")  etype = "f16";
+                else if (cmd == "f22")  etype = "f22";
+                else if (cmd == "f18")  etype = "f18";
+                else if (cmd == "akt")  etype = "akt";
+                if (!etype.empty() && cur.valid()) {
+                    auto wf = F77Engine::startDefault(etype, cur.id);
+                    if (wf) printOk("Workflow gestartet: " + wf->workflowId);
+                    else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
+                return;
+            }
+            if (sub == "-d") {
+                // Show workflows for current entity:
+                std::string et2 = (cmd=="f16")?"f16":(cmd=="f22")?"f22":(cmd=="f18")?"f18":"akt";
+                auto wfs = F77W::loadForEntity(et2, cur.id);
+                if (wfs.empty()) { std::cout << "  (keine Workflows fuer " << cur.id << ")\n"; return; }
+                std::cout << "\n  " << std::left << std::setw(28) << "WORKFLOW-ID"
+                          << std::setw(20) << "VORLAGE"
+                          << "STATUS\n  " << std::string(60,'-') << "\n";
+                for (auto& w : wfs)
+                    std::cout << "  " << std::setw(28) << w->workflowId
+                              << std::setw(20) << w->templateName.substr(0,18)
+                              << std::string(toString(w->status)) << "\n";
+                std::cout << "\n";
+                return;
+            }
+        }
         std::vector<std::string> fullArgs;
         // No args and in F16 context → show F16 details/menu
         if (args.empty() && cur.type == EntityType::F16) {
@@ -578,6 +611,39 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
 
     // ── f22 ──────────────────────────────────────────────────────────────────
     if (cmd == "f22") {
+        // -f77 -n / -f77 -d: workflow for current entity
+        if (!args.empty() && args[0] == "-f77") {
+            std::string sub = (args.size() > 1) ? args[1] : "";
+            if (sub == "-n") {
+                // Start default workflow for this entity:
+                std::string etype;
+                if (cmd == "f16")  etype = "f16";
+                else if (cmd == "f22")  etype = "f22";
+                else if (cmd == "f18")  etype = "f18";
+                else if (cmd == "akt")  etype = "akt";
+                if (!etype.empty() && cur.valid()) {
+                    auto wf = F77Engine::startDefault(etype, cur.id);
+                    if (wf) printOk("Workflow gestartet: " + wf->workflowId);
+                    else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
+                return;
+            }
+            if (sub == "-d") {
+                // Show workflows for current entity:
+                std::string et2 = (cmd=="f16")?"f16":(cmd=="f22")?"f22":(cmd=="f18")?"f18":"akt";
+                auto wfs = F77W::loadForEntity(et2, cur.id);
+                if (wfs.empty()) { std::cout << "  (keine Workflows fuer " << cur.id << ")\n"; return; }
+                std::cout << "\n  " << std::left << std::setw(28) << "WORKFLOW-ID"
+                          << std::setw(20) << "VORLAGE"
+                          << "STATUS\n  " << std::string(60,'-') << "\n";
+                for (auto& w : wfs)
+                    std::cout << "  " << std::setw(28) << w->workflowId
+                              << std::setw(20) << w->templateName.substr(0,18)
+                              << std::string(toString(w->status)) << "\n";
+                std::cout << "\n";
+                return;
+            }
+        }
         // -n: create under current F16 (if in F16 context)
         if (!args.empty() && args[0] == "-n") {
             if (cur.type == EntityType::F16) {
@@ -634,6 +700,39 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
 
     // ── f18 ──────────────────────────────────────────────────────────────────
     if (cmd == "f18") {
+        // -f77 -n / -f77 -d: workflow for current entity
+        if (!args.empty() && args[0] == "-f77") {
+            std::string sub = (args.size() > 1) ? args[1] : "";
+            if (sub == "-n") {
+                // Start default workflow for this entity:
+                std::string etype;
+                if (cmd == "f16")  etype = "f16";
+                else if (cmd == "f22")  etype = "f22";
+                else if (cmd == "f18")  etype = "f18";
+                else if (cmd == "akt")  etype = "akt";
+                if (!etype.empty() && cur.valid()) {
+                    auto wf = F77Engine::startDefault(etype, cur.id);
+                    if (wf) printOk("Workflow gestartet: " + wf->workflowId);
+                    else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
+                return;
+            }
+            if (sub == "-d") {
+                // Show workflows for current entity:
+                std::string et2 = (cmd=="f16")?"f16":(cmd=="f22")?"f22":(cmd=="f18")?"f18":"akt";
+                auto wfs = F77W::loadForEntity(et2, cur.id);
+                if (wfs.empty()) { std::cout << "  (keine Workflows fuer " << cur.id << ")\n"; return; }
+                std::cout << "\n  " << std::left << std::setw(28) << "WORKFLOW-ID"
+                          << std::setw(20) << "VORLAGE"
+                          << "STATUS\n  " << std::string(60,'-') << "\n";
+                for (auto& w : wfs)
+                    std::cout << "  " << std::setw(28) << w->workflowId
+                              << std::setw(20) << w->templateName.substr(0,18)
+                              << std::string(toString(w->status)) << "\n";
+                std::cout << "\n";
+                return;
+            }
+        }
         // -n: create under current F22
         if (!args.empty() && args[0] == "-n") {
             std::string taskId;
@@ -712,6 +811,39 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
 
     // ── akt ──────────────────────────────────────────────────────────────────
     if (cmd == "akt") {
+        // -f77 -n / -f77 -d: workflow for current entity
+        if (!args.empty() && args[0] == "-f77") {
+            std::string sub = (args.size() > 1) ? args[1] : "";
+            if (sub == "-n") {
+                // Start default workflow for this entity:
+                std::string etype;
+                if (cmd == "f16")  etype = "f16";
+                else if (cmd == "f22")  etype = "f22";
+                else if (cmd == "f18")  etype = "f18";
+                else if (cmd == "akt")  etype = "akt";
+                if (!etype.empty() && cur.valid()) {
+                    auto wf = F77Engine::startDefault(etype, cur.id);
+                    if (wf) printOk("Workflow gestartet: " + wf->workflowId);
+                    else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
+                return;
+            }
+            if (sub == "-d") {
+                // Show workflows for current entity:
+                std::string et2 = (cmd=="f16")?"f16":(cmd=="f22")?"f22":(cmd=="f18")?"f18":"akt";
+                auto wfs = F77W::loadForEntity(et2, cur.id);
+                if (wfs.empty()) { std::cout << "  (keine Workflows fuer " << cur.id << ")\n"; return; }
+                std::cout << "\n  " << std::left << std::setw(28) << "WORKFLOW-ID"
+                          << std::setw(20) << "VORLAGE"
+                          << "STATUS\n  " << std::string(60,'-') << "\n";
+                for (auto& w : wfs)
+                    std::cout << "  " << std::setw(28) << w->workflowId
+                              << std::setw(20) << w->templateName.substr(0,18)
+                              << std::string(toString(w->status)) << "\n";
+                std::cout << "\n";
+                return;
+            }
+        }
         // -n: create new AKT under current entity
         if (!args.empty() && args[0] == "-n") {
             std::string projId, taskId;
@@ -728,7 +860,9 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 }
             }
             if (!projId.empty() || !taskId.empty()) {
-                auto doc = createDocumentWizard(projId, taskId);
+                // createDocumentWizard takes (taskId, f18OpId):
+                // taskId is set from context; projId is not needed by the wizard
+                auto doc = createDocumentWizard(taskId, "");
                 if (doc) {
                     printOk("AKT angelegt: " + doc->folderId + "  " + doc->title);
                     if (yesno("  Jetzt navigieren?"))
