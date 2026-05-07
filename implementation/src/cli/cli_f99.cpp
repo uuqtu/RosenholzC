@@ -105,25 +105,8 @@ void cmdF99(const std::vector<std::string>& args) {
         auto hits = q.empty() ? Note::search("") : Note::search(q);
         // If query empty and search returns empty (LIKE '%' won't work), load differently:
         if (q.empty() && hits.empty()) {
-            // Load all recent notes:
-            auto* d = DatabasePool::instance().get("f99");
-            if (d) {
-                auto rows = d->query(
-                    "SELECT * FROM f99_entries ORDER BY created_at DESC LIMIT 50;", {});
-                for (auto& r : rows) {
-                    auto n = std::make_shared<Note>(); n->fromRow(r);
-                    Note::SearchResult sr;
-                    sr.note = n;
-                    // Resolve path via search with empty entity filter:
-                    hits.push_back({n,
-                        [&]() -> std::string {
-                            if (n->entityType == "f16") { auto p = F16::loadById(n->entityId); return p ? p->title : n->entityId; }
-                            if (n->entityType == "f22") { auto t = F22::loadById(n->entityId); return t ? t->title : n->entityId; }
-                            return n->entityId;
-                        }(),
-                        n->entityType + ":" + n->entityId});
-                }
-            }
+            // No wildcard result — load recent via model (no SQL in CLI):
+            hits = Note::loadRecent(50);
         }
         f99Manager(hits);
         return;
@@ -145,19 +128,8 @@ void cmdF99(const std::vector<std::string>& args) {
 
     // No flag: list all recent F99 notes (global overview)
     if (args.empty()) {
-        auto* d = DatabasePool::instance().get("f99");
-        if (!d) { printErr("F99-Datenbank nicht verfügbar"); return; }
-        auto rows = d->query(
-            "SELECT * FROM f99_entries ORDER BY created_at DESC LIMIT 30;", {});
-        if (rows.empty()) { std::cout << "  (keine F99-Notizen)\n"; return; }
-        std::vector<Note::SearchResult> all;
-        for (auto& r : rows) {
-            auto n = std::make_shared<Note>(); n->fromRow(r);
-            std::string title;
-            if (n->entityType == "f16") { auto p = F16::loadById(n->entityId); if(p) title=p->title; }
-            else if (n->entityType == "f22") { auto t = F22::loadById(n->entityId); if(t) title=t->title; }
-            all.push_back({n, title, n->entityType + ":" + n->entityId});
-        }
+        auto all = Note::loadRecent(30);
+        if (all.empty()) { std::cout << "  (keine F99-Notizen)\n"; return; }
         printF99Results(all);
         return;
     }

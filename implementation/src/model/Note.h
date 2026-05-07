@@ -54,6 +54,9 @@ struct Note {
         const std::string& query,
         const std::string& entityType = "");
 
+    /// Load N most recent notes globally (no entity filter).
+    static std::vector<SearchResult> loadRecent(int limit = 30);
+
     // ── MFS export ────────────────────────────────────────────
     static void writeNotesFile(
         const std::string& entityType,

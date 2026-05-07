@@ -44,68 +44,83 @@ void cmdF99(const std::vector<std::string>&);
 
 // ── Handler factories ────────────────────────────────────────────────────────
 
-// ctx: context-aware handler — calls cmdContextual(name, args)
+// ctx: context-aware handler — routes to cmdContextual(name, args)
 static Handler ctx(const std::string& name) {
     return [name](const std::vector<std::string>& a) {
         cmdContextual(name, a);
     };
 }
 
-// global: calls a plain global function (no context)
+// global: wraps a global function (no context used)
 static Handler global(void(*fn)(const std::vector<std::string>&)) {
     return [fn](const std::vector<std::string>& a) { fn(a); };
 }
 
+// ── currentCtxMask ────────────────────────────────────────────────────────────
+CtxMask currentCtxMask() {
+    auto cur = Rosenholz::NavigationStack::instance().current();
+    if (!cur.valid()) return CTX_NONE;
+    switch (cur.type) {
+        case Rosenholz::EntityType::F16: return CTX_F16;
+        case Rosenholz::EntityType::F22: return CTX_F22;
+        case Rosenholz::EntityType::F18: return CTX_F18;
+        case Rosenholz::EntityType::AKT: return CTX_AKT;
+        default: return CTX_NONE;
+    }
+}
+
 // ── Registry table ───────────────────────────────────────────────────────────
 //
-// Columns: name | dashName | context | loHint | subHints | contextHandler | globalHandler
+// Columns: name | dashName | validIn | loHint | subHints | contextHandler | globalHandler
 //
-// contextHandler: called for "f22 -n"  (plain form, uses nav context)
-// globalHandler:  called for "-f22 -n" (dash form, no context)
-//                 nullptr → contextHandler used for both
+// validIn:         CTX bitmask — plain form only works in these contexts
+//                  CTX_NONE = works everywhere (global or nav commands)
+// contextHandler:  called for plain "f22 -n" (context-aware, checked against validIn)
+// globalHandler:   called for dash "-f22 -n" (always global, no context check)
+//                  nullptr → contextHandler used for both
 //
 const std::vector<CliCommand>& registry() {
     using namespace Rosenholz;
     static const std::vector<CliCommand> kCommands = {
 
     // ── Navigation (plain only, no dash form, no context filter) ────────────
-    { "cd",  nullptr, ET::NONE, "cd <ID>    In Entitaet navigieren",
+    { "cd",  nullptr, CTX_NONE, "cd <ID>    In Entitaet navigieren",
       {},     global(cmdCd),     nullptr },
 
-    { "ls",  nullptr, ET::NONE, "ls         Inhalt listen  ls -rev  alle Revisionen",
+    { "ls",  nullptr, CTX_NONE, "ls         Inhalt listen  ls -rev  alle Revisionen",
       {"-rev"}, global(cmdLs),   nullptr },
 
-    { "lo",  nullptr, ET::NONE, "lo         Kontext-Optionen anzeigen",
+    { "lo",  nullptr, CTX_NONE, "lo         Kontext-Optionen anzeigen",
       {},     [](const std::vector<std::string>&) { printContextHelp(); }, nullptr },
 
     // ── Entity commands — contextHandler=contextual, globalHandler=global ───
-    { "f16", "-f16",  ET::NONE,
+    { "f16", "-f16",  CTX_NONE,
       "f16 -o/-so  listen/suchen  f16 -n  neu  f16 -e  bearbeiten",
       {"-n","-e","-v","-o","-so","-s","-arc","-note"},
       ctx("f16"),   global(cmdF16) },
 
-    { "f22", "-f22",  ET::NONE,
+    { "f22", "-f22",  CTX_NONE,
       "f22 -n  neue F22 (im Kontext direkt verknüpft)  f22 -o/-so  listen/suchen",
       {"-n","-e","-v","-o","-so","-s","-ind","-note"},
       ctx("f22"),   global(cmdF22) },
 
-    { "f18", "-f18",  ET::NONE,
+    { "f18", "-f18",  CTX_NONE,
       "f18 -n  neuer F18 (im Kontext)  f18 -o/-so  listen/suchen  f18 -stp  Schritte",
       {"-n","-e","-v","-o","-so","-s","-stp","-note"},
       ctx("f18"),   global(cmdF18) },
 
-    { "akt", "-akt",  ET::NONE,
+    { "akt", "-akt",  CTX_NONE,
       "akt -o/-so  Akten  akt -oo/-soo  Objekte (kontextuell)  akt -n  neu",
       {"-n","-v","-o","-so","-oo","-soo","-obj","-url","-co","-ci","-rv","-note"},
       ctx("akt"),   global(cmdAkt) },
 
-    { "f77", "-f77",  ET::NONE,
+    { "f77", "-f77",  CTX_NONE,
       "f77 -s  Workflow starten  f77 -d  anzeigen  f77 -o/-so  listen/suchen",
       {"-s","-d","-o","-so","-tpl"},
       ctx("f77"),   global(cmdF77) },
 
     // ── F18S: F18-Schritte ────────────────────────────────────────────────────
-    { "f18s", "-f18s", ET::NONE,
+    { "f18s", "-f18s", CTX_F18,
       "f18s -n  Neuer Schritt  f18s -o/-so  listen/suchen  f18s -e <n>  bearbeiten",
       {"-n","-e","-o","-so","-s"},
       [](const std::vector<std::string>& a) {
@@ -120,39 +135,39 @@ const std::vector<CliCommand>& registry() {
     },
 
     // ── AKT-only ─────────────────────────────────────────────────────────────
-    { "rev", nullptr,  ET::AKT, "rev        Neue Revision anlegen",
+    { "rev", nullptr,  CTX_AKT, "rev        Neue Revision anlegen",
       {},     ctx("rev"),   nullptr },
 
     // ── Communications ────────────────────────────────────────────────────────
-    { "kom", "-kom",  ET::NONE,
+    { "kom", "-kom",  CTX_NONE,
       "kom -o/-so  KOM listen/suchen (im Kontext: nur zugehörige)  kom -n  neu",
       {"-n","-l","-o","-so"},
       ctx("kom"),   global(cmdKom) },
 
     // ── F99 Notizen ────────────────────────────────────────────────────────────
-    { "f99",  "-f99",  ET::NONE,
+    { "f99",  "-f99",  CTX_NONE,
       "f99 <Text>  F99-Notiz (im Kontext)  -s  suchen  -so  Manager  -o <id>  öffnen",
       {"-s","-so","-o"},
       ctx("f99"),  global(cmdF99) },
 
     // ── F77 Tasks ─────────────────────────────────────────────────────────────
-    { "tsk",  "-tasks", ET::NONE,
+    { "tsk",  "-tasks", CTX_NONE,
       "tsk  offene Aufgaben  tsk -a  alle  tsk -so <q>  suchen",
       {"-a","-o","-so"},
       global(cmdTasks), global(cmdTasks) },
 
     // ── People / Org ──────────────────────────────────────────────────────────
-    { "per",  "-per",  ET::NONE,
+    { "per",  "-per",  CTX_NONE,
       "per -s <q>  Personen suchen  per -n  neu",
       {"-n","-s"},
       global(cmdPer), global(cmdPer) },
 
-    { "de",   "-de",   ET::NONE,
+    { "de",   "-de",   CTX_NONE,
       "de  Diensteinheiten-Browser",
       {},     global(cmdDe),  global(cmdDe) },
 
     // ── Search ────────────────────────────────────────────────────────────────
-    { "srch", "-search", ET::NONE,
+    { "srch", "-search", CTX_NONE,
       "srch <q>  Globale Suche",
       {},
       [](const std::vector<std::string>& a) {
@@ -164,41 +179,74 @@ const std::vector<CliCommand>& registry() {
       nullptr },
 
     // ── MFS ──────────────────────────────────────────────────────────────────
-    { "mfs",  "-mfs",  ET::NONE,
-      "mfs  MFS neu aufbauen  mfs -sync  geänderte Dateien",
+    { "mfs",  "-mfs",  CTX_NONE,
+      "mfs  MFS aktuell neu / -mfs  vollständiger Rebuild",
       {"-sync"},
-      global(cmdMfs), global(cmdMfs) },
+      ctx("mfs"), global(cmdMfs) },
 
     // ── System ────────────────────────────────────────────────────────────────
-    { "sts",  "-status",  ET::NONE, "sts  Datenbankzähler",
+    { "sts",  "-status",  CTX_NONE, "sts  Datenbankzähler",
       {},
       [](const std::vector<std::string>&) { cmdStatus(); },
       nullptr },
 
-    { "bak",  "-backup",  ET::NONE, "bak  Backup starten",
+    { "bak",  "-backup",  CTX_NONE, "bak  Backup starten",
       {},
       [](const std::vector<std::string>&) { cmdBackup(); },
       nullptr },
 
-    { "wch",  "-watch",   ET::NONE, "wch [N]  Watch-Polling (N=Sekunden, Standard=30)",
-      {},     ctx("wch"),   nullptr },
+    { "wch",  "-watch",   CTX_NONE, "wch [N]  Watch-Polling (N=Sekunden, Standard=30)",
+      {},
+      [](const std::vector<std::string>& a) {
+          int secs = 30;
+          if (!a.empty()) { try { secs = std::stoi(a[0]); } catch (...) {} }
+          WatchPoller::run([](const std::string& m) {
+              std::cout << "  " << nowIso().substr(11,8) << "  " << m << "\n";
+              std::cout.flush();
+          }, secs);
+      }, nullptr },
 
-    { "tree", "-tree",    ET::NONE, "tree  Hierarchiebaum ab aktuellem F16",
-      {},     ctx("tree"),  nullptr },
+    { "tree", "-tree",    CTX_NONE, "tree  Hierarchiebaum ab aktuellem F16",
+      {},
+      [](const std::vector<std::string>& a) {
+          auto& nav = Rosenholz::NavigationStack::instance();
+          auto  cur = nav.current();
+          std::string rootId;
+          if (!a.empty()) rootId = a[0];
+          else if (cur.valid() && cur.type == Rosenholz::EntityType::F16) rootId = cur.id;
+          if (!rootId.empty()) {
+              auto t = TreeBuilder::buildF16Tree(rootId);
+              std::cout << "\n" << TreeBuilder::format(t) << "\n";
+          } else {
+              auto all = TreeBuilder::buildAllF16();
+              for (auto& t2 : all) std::cout << TreeBuilder::format(t2);
+          }
+      }, nullptr },
 
-    { "cal",  "-cal",     ET::NONE, "cal  Kalenderansicht",
-      {},     ctx("cal"),   nullptr },
+    { "cal",  "-cal",     CTX_NONE, "cal  Kalenderansicht",
+      {},
+      [](const std::vector<std::string>&) {
+          std::cout << "\n  -- KALENDER --\n";
+          auto projs = Rosenholz::F16::loadWithDates();
+          if (projs.empty()) { std::cout << "  (keine Eintraege)\n"; return; }
+          for (auto& p : projs)
+              std::cout << "  F16 " << std::left << std::setw(26)
+                        << p->regNumber.toString().substr(0,24)
+                        << "  " << std::setw(28) << p->title.substr(0,26)
+                        << "  Start:" << (p->startDatePlanned.empty() ? "-" : p->startDatePlanned.substr(0,10))
+                        << "  Ende:"  << (p->endDatePlanned.empty() ? "-" : p->endDatePlanned.substr(0,10)) << "\n";
+      }, nullptr },
 
-    { "his",  "-hist",    ET::NONE, "his  Verlauf zuletzt geöffneter Entitäten",
+    { "his",  "-hist",    CTX_NONE, "his  Verlauf zuletzt geöffneter Entitäten",
       {},
       [](const std::vector<std::string>&) { cmdHist(); },
       nullptr },
 
-    { "go",   "-go",      ET::NONE, "go <ref>  Direkt öffnen (ID / Seq#)",
+    { "go",   "-go",      CTX_NONE, "go <ref>  Direkt öffnen (ID / Seq#)",
       {},
       global(cmdGo), global(cmdGo) },
 
-    { "log",  "-log",     ET::NONE, "log <level>  Verbosität: debug|info|warn|error",
+    { "log",  "-log",     CTX_NONE, "log <level>  Verbosität: debug|info|warn|error",
       {"debug","info","warn","error"},
       [](const std::vector<std::string>& a) {
           if (a.empty()) return;
@@ -222,16 +270,26 @@ const std::vector<CliCommand>& registry() {
 
 bool dispatch(const std::string& cmd, const std::vector<std::string>& args) {
     if (cmd.empty()) return false;
-    bool hasDash = (!cmd.empty() && cmd[0] == '-');
+    bool hasDash = (cmd[0] == '-');
 
     for (auto& c : registry()) {
         bool matchPlain = (!hasDash && cmd == c.name);
         bool matchDash  = (hasDash && c.dashName && cmd == c.dashName);
         if (!matchPlain && !matchDash) continue;
 
-        if (hasDash && c.globalHandler) {
-            c.globalHandler(args);
+        if (hasDash) {
+            // Dash form: always global, no context check
+            if (c.globalHandler) c.globalHandler(args);
+            else                 c.contextHandler(args);
         } else {
+            // Plain form: check validIn mask
+            if (c.validIn != CTX_NONE) {
+                CtxMask cur = currentCtxMask();
+                if (!(cur & c.validIn)) {
+                    // Command is known but not valid in current context:
+                    return false;  // caller prints "unbekannter Befehl"
+                }
+            }
             c.contextHandler(args);
         }
         return true;
@@ -258,7 +316,8 @@ void printContextHelp() {
                   << "  F22: -f22           F22-Vorgänge  -f22 -n  Neu   -f22 -o  Auswahl\n"
                   << "  F18: -f18           Vorgänge      -f18 -n  Neu   -f18 -o  Auswahl\n"
                   << "  AKT: -akt           Akten          -akt -n  Neu   -akt -o  Auswahl\n"
-                  << "  F77: -f77 -o/-so    Workflows     -tasks  Meine Aufgaben\n"
+                  << "  F77: -f77 -o/-so    Workflows listen/suchen\n"
+                  << "  TSK: tsk / -tasks   Offene F77-Aufgaben  tsk -a  alle  tsk -so <q>  suchen\n"
                   << "  F18S:-f18s -o/-so   F18-Schritte\n"
                   << "  F99: -f99 -s/-so    Notizen suchen/Manager\n"
                   << "  PER: -per -s <q>    Personen      -de  Diensteinheiten\n\n"
@@ -287,15 +346,15 @@ void printContextHelp() {
     case ET::F16:
         std::cout
           << "  Dieses F16:\n"
-          << "    f16 -e        F16 bearbeiten\n"
-          << "    f16 -arc      F16 archivieren\n"
-          << "    f16 -v        F16 Detailansicht\n\n"
+          << "    . -e          F16 bearbeiten\n"
+          << "    . -arc        F16 archivieren\n"
+          << "    . -v          F16 Detailansicht\n\n"
           << "  F22 Vorgänge:\n"
           << "    f22 -n        Neue F22 in diesem Projekt anlegen\n"
           << "    f22 -o/-so    F22 auswählen / suchen\n\n"
           << "  Workflow:\n"
-          << "    f16 -f77 -n   Freigabe-Workflow für dieses F16 starten\n"
-          << "    f16 -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "    . -f77 -n     Freigabe-Workflow für dieses F16 starten\n"
+          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
           << "  Suche & Notizen:\n"
           << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
           << "    f99 <Text>    Notiz auf dieses F16\n"
@@ -308,9 +367,9 @@ void printContextHelp() {
     case ET::F22:
         std::cout
           << "  Dieses F22:\n"
-          << "    f22 -e        F22 bearbeiten\n"
-          << "    f22 -v        F22 Detailansicht\n"
-          << "    f22 -ind      Nacherfassung (Aufgabe einbuchen)\n\n"
+          << "    . -e          F22 bearbeiten\n"
+          << "    . -v          F22 Detailansicht\n"
+          << "    . -ind        Nacherfassung (Aufgabe einbuchen)\n\n"
           << "  F18 Vorgänge:\n"
           << "    f18 -n        Neuen F18 anlegen\n"
           << "    f18 -o/-so    F18 auswählen / suchen\n\n"
@@ -319,8 +378,8 @@ void printContextHelp() {
           << "    akt -o/-so    Akten auswählen / suchen\n"
           << "    akt -oo       Alle Objekte im Kontext listen\n\n"
           << "  Workflow:\n"
-          << "    f22 -f77 -n   Freigabe-Workflow für dieses F22 starten\n"
-          << "    f22 -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "    . -f77 -n     Freigabe-Workflow für dieses F22 starten\n"
+          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
           << "  Suche & Notizen:\n"
           << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
           << "    f99 <Text>    Notiz auf dieses F22\n"
@@ -333,8 +392,8 @@ void printContextHelp() {
     case ET::F18:
         std::cout
           << "  Dieses F18:\n"
-          << "    f18 -e        F18 bearbeiten\n"
-          << "    f18 -v        F18 Detailansicht\n\n"
+          << "    . -e          F18 bearbeiten\n"
+          << "    . -v          F18 Detailansicht\n\n"
           << "  Schritte (F18S):\n"
           << "    f18s          Schritte listen → öffnen\n"
           << "    f18s -n       Neuen Schritt anlegen\n"
@@ -345,8 +404,8 @@ void printContextHelp() {
           << "    akt -o/-so    Akten suchen\n"
           << "    akt -oo       Alle Objekte im Kontext\n\n"
           << "  Workflow:\n"
-          << "    f18 -f77 -n   Freigabe-Workflow für dieses F18 starten\n"
-          << "    f18 -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "    . -f77 -n     Freigabe-Workflow für dieses F18 starten\n"
+          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
           << "  Suche & Notizen:\n"
           << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
           << "    f99 <Text>    Notiz auf dieses F18\n"
@@ -357,23 +416,21 @@ void printContextHelp() {
     case ET::AKT:
         std::cout
           << "  Diese Akte:\n"
-          << "    akt -e        Akte bearbeiten\n"
-          << "    akt -r        Neue Revision anlegen\n"
-          << "    rev           Neue Revision anlegen\n"
-          << "    akt -hist     Revisionsverlauf anzeigen\n\n"
+          << "    . -e          Akte bearbeiten\n"
+          << "    . -r          Neue Revision anlegen (= rev)\n"
+          << "    . -hist       Revisionsverlauf anzeigen\n\n"
           << "  Objekte dieser Akte:\n"
           << "    ls            Alle Objekte der aktuellen Revision\n"
           << "    ls -rev       Alle Revisionen\n"
-          << "    obj -n        Neues Objekt hinzufügen\n"
-          << "    akt -obj      Neues Objekt hinzufügen (alternativ)\n"
-          << "    akt -co <n>   Objekt auschecken\n"
-          << "    akt -ci       Objekt einchecken\n"
-          << "    akt -rv <n>   Revision wechseln\n"
-          << "    akt -url      URL-Objekte aktualisieren\n"
-          << "    akt -oo/-soo  Objekte im Kontext auflisten / suchen\n\n"
+          << "    . -obj        Neues Objekt hinzufügen\n"
+          << "    . -co <n>     Objekt auschecken\n"
+          << "    . -ci         Objekt einchecken\n"
+          << "    . -rv <n>     Revision wechseln\n"
+          << "    . -url        URL-Objekte aktualisieren\n"
+          << "    . -oo/-soo    Objekte auflisten / suchen\n\n"
           << "  Workflow:\n"
-          << "    akt -f77 -n   Freigabe-Workflow für diese Akte starten\n"
-          << "    akt -f77 -d   Laufende Workflows anzeigen\n\n"
+          << "    . -f77 -n     Freigabe-Workflow für diese Akte starten\n"
+          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
           << "  Notizen:\n"
           << "    f99 <Text>    Notiz auf diese Akte\n"
           << "    f99 -s/-so    Notizen suchen / Manager\n";
@@ -401,6 +458,30 @@ std::vector<std::string> completions(const std::string& prefix,
             for (auto& [id, title] : getContextChildren())
                 result.push_back(id);
         } catch (...) {}
+        return result;
+    }
+
+    // "." expands to the current entity command — complete its subHints
+    if (prev == ".") {
+        auto cur = Rosenholz::NavigationStack::instance().current();
+        if (cur.valid()) {
+            std::string entCmd;
+            switch (cur.type) {
+                case Rosenholz::EntityType::F16: entCmd = "f16"; break;
+                case Rosenholz::EntityType::F22: entCmd = "f22"; break;
+                case Rosenholz::EntityType::F18: entCmd = "f18"; break;
+                case Rosenholz::EntityType::AKT: entCmd = "akt"; break;
+                default: break;
+            }
+            for (auto& c : registry()) {
+                if (c.name == entCmd) {
+                    for (auto* s : c.subHints)
+                        if (prefix.empty() || std::string(s).find(prefix) == 0)
+                            result.push_back(s);
+                    return result;
+                }
+            }
+        }
         return result;
     }
 

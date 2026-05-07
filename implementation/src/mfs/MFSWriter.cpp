@@ -191,7 +191,7 @@ bool MFSWriter::writeTask(const F22& t, const std::string& mfsRoot) {
     auto proj = F16::loadById(t.projectId);
     std::string projRef = proj ? proj->regNumber.toString() : t.projectId;
 
-    std::string cardPath = FileOps::joinPath(dir, "00_KARTE.txt");
+    std::string cardPath = FileOps::joinPath(dir, sanitiseRegNr(t.regNumber.toString()) + ".txt");
     std::ostringstream oss;
     oss << "AUFGABENKARTE (F22)\n"
         << "=======================================================\n"
@@ -467,7 +467,7 @@ bool MFSWriter::writeF77(const std::string& wfiId,
                           const std::string& mfsRoot) {
     std::string dir = f77Dir(mfsRoot, wfiId);
     FileOps::makeDirs(dir);
-    std::string cardPath = FileOps::joinPath(dir, "00_KARTE.txt");
+    std::string cardPath = FileOps::joinPath(dir, sanitiseRegNr(wfiId) + ".txt");
     std::ostringstream oss;
     oss << "F77 FREIGABE-WORKFLOW\n"
         << "=======================================================\n"

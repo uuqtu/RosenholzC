@@ -226,6 +226,7 @@ void cmdDe(const std::vector<std::string>& args);
 void cmdTasks(const std::vector<std::string>& args);
 
 // ── Navigation commands (cli_nav.cpp) ─────────────────────────────────────
+void autoMFS();  ///< Write MFS card for current nav entity after mutations
 void cmdCd(const std::vector<std::string>& args);        ///< cd — navigate into entity
 void cmdLs(const std::vector<std::string>& args);        ///< ls — list children
 void cmdLo(const std::vector<std::string>& args);        ///< lo — context-sensitive help

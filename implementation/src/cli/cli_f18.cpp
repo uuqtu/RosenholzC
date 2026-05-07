@@ -10,9 +10,11 @@
 //   createF18WizardGuided()     — guided: select F22 task first
 
 #include "cli_common.h"
+#include <sstream>
 #include "../model/f18/F18Operation.h"
 #include "../model/f18/F18OperationStep.h"
 #include "../model/f22/F22.h"
+#include "../model/Note.h"
 #include "../model/akt/Folder.h"
 #include "../core/Config.h"
 #include "../core/FileOps.h"
@@ -202,73 +204,164 @@ static void drawF18Chain(const std::vector<Rosenholz::F18OperationStep>& steps) 
 
 void stepMenu(Rosenholz::F18OperationStep& step,
               std::vector<Rosenholz::F18OperationStep>& allSteps) {
+    // F18S context: command-line driven, no number menu.
+    // Available commands: . -done/-reject/-skip, . -track, f99, akt, kom, lo
     using namespace Rosenholz;
-    while (true) {
-        hdr("F18S — " + step.stepId.substr(0, 22));
-        std::cout << "  Titel   : " << step.title << "\n"
-                  << "  Typ     : " << step.stepType << "\n"
-                  << "  Status  : " << Rosenholz::f18StepStatusToString(step.status) << "\n";
-        if (step.percentComplete > 0)
-            std::cout << "  Fortsch.: " << step.percentComplete << "%\n";
+
+    auto printStepHeader = [&]() {
+        std::string startPlan = step.startDatePlanned.empty() ? "-" : step.startDatePlanned.substr(0,10);
+        std::string endPlan   = step.endDatePlanned.empty()   ? "-" : step.endDatePlanned.substr(0,10);
+        std::cout << "\n  " << Color::bold("F18S " + step.stepId) << "\n"
+                  << "  " << std::string(50, '-') << "\n"
+                  << "  Titel     : " << step.title << "\n"
+                  << "  Typ       : " << step.stepType << "\n"
+                  << "  Status    : " << f18StepStatusToString(step.status) << "\n"
+                  << "  Tracking  : " << step.trackingStatus << "\n"
+                  << "  Fortsch.  : " << step.percentComplete << "%\n"
+                  << "  Start-Plan: " << startPlan << "\n"
+                  << "  Ende-Plan : " << endPlan << "\n";
         if (!step.assignedTo.empty())
-            std::cout << "  Assigned: " << step.assignedTo << "\n";
-
-        // Numbered KOM and DOK sub-lists
+            std::cout << "  Zugewiesen: " << step.assignedTo << "\n";
+        auto docs = Folder::loadForEntity("f18s", step.stepId);
         auto koms = Communication::loadForOwner(step.stepId, "f18step");
-        auto docs  = Folder::loadForEntity("f18s", step.stepId);
+        std::cout << "  Akten: " << docs.size() << "  |  KOM: " << koms.size() << "\n"
+                  << "  " << std::string(50, '-') << "\n"
+                  << "  Befehle:  . -done  . -reject  . -skip  . -track\n"
+                  << "            akt -n  akt -o  kom -n  kom -o  f99 <Text>\n"
+                  << "            lo   ..\n\n";
+    };
 
-        std::cout << "  1.Ausführen | 2.Tracking | 3.Notiz\n"
-                  << "  KOM: 4.listen(" << koms.size() << ") | 5.<#> | 6.neu\n"
-                  << "  AKT: 7.listen(" << docs.size() << ") | 8.<#> | 9.neu\n"
-                  << "  0.Zurück\n";
-        int ch = readInt("Wahl", 0, 9);
-        if (ch == 0) return;
+    while (true) {
+        printStepHeader();
+        std::string line = readLine("> ");
+        if (line.empty() || line == ".." || line == "0") return;
 
-        if (ch == 1) {
-            std::cout << "  1.Abschliessen  2.Ablehnen  3.Überspringen\n";
-            int sc = readInt("Status",1,3);
-            if (sc==1) step.status = Rosenholz::F18StepStatus::DONE;
-            else if (sc==2) step.status = Rosenholz::F18StepStatus::REJECTED;
-            else step.status = Rosenholz::F18StepStatus::SKIPPED;
-            step.complete();
-            std::cout << "  >> Status: " << Rosenholz::f18StepStatusToString(step.status) << "\n";
-        } else if (ch == 2) {
-            std::string ts = readOpt("Tracking-Status: ");
-            std::string pct = readOpt("Fortschritt % (0-100): ");
-            if (!ts.empty()) step.trackingStatus = ts;
-            if (!pct.empty()) try { step.percentComplete = std::stoi(pct); } catch(...) {}
-            step.save(); std::cout << "  >> Aktualisiert.\n";
-        } else if (ch == 3) {
-            std::string n = readLine("Notiz: ");
-            if (!n.empty()) { step.notes = n; step.save(); }
-        } else if (ch == 4) {
-            listComms(step.stepId, "f18step");
-        } else if (ch == 5) {
-            if (koms.empty()) { std::cout << "  (keine)\n"; continue; }
-            int pick = readInt("KOM #", 1, (int)koms.size());
-            commDetailMenu(koms[pick-1]);
-        } else if (ch == 6) {
-            communicationMenu(step.stepId, "f18step");
-        } else if (ch == 7) {
-            if (docs.empty()) { std::cout << "  (keine Akten)\n"; continue; }
-            int n=1;
-            for (auto& d : docs)
-                std::cout << "  " << std::setw(3) << n++ << ". "
-                          << d->folderId.substr(0,24) << "  " << d->title.substr(0,30) << "\n";
-        } else if (ch == 8) {
-            if (docs.empty()) { std::cout << "  (keine Akten)\n"; continue; }
-            int n=1;
-            for (auto& d : docs)
-                std::cout << "  " << std::setw(3) << n++ << ". "
-                          << d->folderId.substr(0,24) << "  " << d->title.substr(0,30) << "\n";
-            int pick = readInt("AKT #", 1, (int)docs.size());
-            documentMenu(docs[pick-1]);
-        } else if (ch == 9) {
-            auto doc = createDocumentWizard("", step.stepId);
-            if (doc) documentMenu(doc);
+        // Parse: first token is cmd, rest is args
+        std::istringstream iss(line);
+        std::string cmd;
+        iss >> cmd;
+        std::vector<std::string> args;
+        std::string tok;
+        while (iss >> tok) args.push_back(tok);
+
+        // ── Self-commands (. or f18s) ─────────────────────────────────────
+        if (cmd == "." || cmd == "f18s") {
+            std::string sub = args.empty() ? "" : args[0];
+            if (sub == "-done" || sub == "-abschliessen") {
+                step.status = F18StepStatus::DONE;
+                step.complete();
+                // Tick parent operation: auto-completes End if all mid-steps done
+                if (!step.operationId.empty()) {
+                    auto op = F18Operation::loadById(step.operationId);
+                    if (op) {
+                        bool changed = op->tick();
+                        if (changed) printOk("F18-Vorgang: End-Schritt automatisch abgeschlossen.");
+                    }
+                }
+                printOk("Schritt abgeschlossen.");
+                autoMFS();
+            } else if (sub == "-reject" || sub == "-ablehnen") {
+                step.status = F18StepStatus::REJECTED;
+                step.complete();
+                if (!step.operationId.empty()) {
+                    auto op = F18Operation::loadById(step.operationId);
+                    if (op) op->tick();
+                }
+                printOk("Schritt abgelehnt.");
+                autoMFS();
+            } else if (sub == "-skip" || sub == "-ueberspringen") {
+                step.status = F18StepStatus::SKIPPED;
+                step.complete();
+                if (!step.operationId.empty()) {
+                    auto op = F18Operation::loadById(step.operationId);
+                    if (op) op->tick();
+                }
+                printOk("Schritt übersprungen.");
+                autoMFS();
+            } else if (sub == "-track") {
+                std::string ts  = readOpt("  Tracking-Status: ");
+                std::string pct = readOpt("  Fortschritt % (0-100): ");
+                if (!ts.empty())  step.trackingStatus = ts;
+                if (!pct.empty()) try { step.percentComplete = std::stoi(pct); } catch(...) {}
+                step.computeTrackingStatus();
+                step.save();
+                printOk("Tracking aktualisiert.");
+                autoMFS();
+            } else if (sub == "-e") {
+                // Edit fields:
+                std::string newTitle = readOpt("  Titel (leer=behalten): ");
+                if (!newTitle.empty()) step.title = newTitle;
+                std::string newAss = readOpt("  Zugewiesen an (leer=behalten): ");
+                if (!newAss.empty()) step.assignedTo = newAss;
+                std::string newStart = promptDate("  Geplanter Start (leer=behalten): ");
+                if (!newStart.empty()) step.startDatePlanned = newStart;
+                std::string newEnd = promptDate("  Geplantes Ende  (leer=behalten): ");
+                if (!newEnd.empty()) { step.endDatePlanned = newEnd; step.dueDate = newEnd; }
+                step.computeTrackingStatus();
+                if (step.update()) { printOk("Schritt aktualisiert."); autoMFS(); }
+                else printErr("Fehler beim Speichern.");
+            } else {
+                std::cout << "  Befehle: . -done  . -reject  . -skip  . -track  . -e\n";
+            }
+        }
+        // ── f99 Note ──────────────────────────────────────────────────────
+        else if (cmd == "f99") {
+            std::string text;
+            for (auto& a : args) { if (!text.empty()) text += " "; text += a; }
+            if (text.empty()) text = readLine("  Notiz: ");
+            if (!text.empty()) {
+                auto n = Note::create("f18s", step.stepId, text);
+                if (n) { std::cout << "  >> F99 gespeichert: " << n->noteId << "\n"; autoMFS(); }
+            }
+        }
+        // ── AKT ───────────────────────────────────────────────────────────
+        else if (cmd == "akt") {
+            std::string sub = args.empty() ? "-o" : args[0];
+            auto docs = Folder::loadForEntity("f18s", step.stepId);
+            if (sub == "-n") {
+                auto doc = createDocumentWizard("", step.stepId);
+                if (doc) { documentMenu(doc); autoMFS(); }
+            } else if (sub == "-o") {
+                if (docs.empty()) { std::cout << "  (keine Akten)\n"; continue; }
+                int n = 1;
+                for (auto& d : docs)
+                    std::cout << "  " << std::setw(3) << n++ << ". "
+                              << d->folderId.substr(0,24) << "  " << d->title.substr(0,30) << "\n";
+                int pick = readInt("  Akte öffnen [0=Abbrechen]", 0, (int)docs.size());
+                if (pick >= 1) { documentMenu(docs[pick-1]); autoMFS(); }
+            }
+        }
+        // ── KOM ───────────────────────────────────────────────────────────
+        else if (cmd == "kom") {
+            std::string sub = args.empty() ? "-o" : args[0];
+            if (sub == "-n") {
+                communicationMenu(step.stepId, "f18step");
+            } else if (sub == "-o") {
+                listComms(step.stepId, "f18step");
+                auto koms = Communication::loadForOwner(step.stepId, "f18step");
+                if (!koms.empty()) {
+                    int pick = readInt("  KOM öffnen [0=Abbrechen]", 0, (int)koms.size());
+                    if (pick >= 1) commDetailMenu(koms[pick-1]);
+                }
+            }
+        }
+        // ── lo / help ─────────────────────────────────────────────────────
+        else if (cmd == "lo" || cmd == "-h") {
+            std::cout << "\n  F18S " << step.stepId << " — Befehle:\n"
+                      << "    . -done/-reject/-skip   Status setzen\n"
+                      << "    . -track                Tracking aktualisieren\n"
+                      << "    . -e                    Felder bearbeiten\n"
+                      << "    akt -n/-o               Akte anlegen/öffnen\n"
+                      << "    kom -n/-o               Kommunikation anlegen/öffnen\n"
+                      << "    f99 <Text>              Notiz auf diesen F18S\n"
+                      << "    ..                      Zurück\n\n";
+        }
+        else {
+            printErr("Unbekannter Befehl: " + cmd + "  (lo = Hilfe)");
         }
     }
 }
+
 
 // ── printF18Operation ─────────────────────────────────────────
 //

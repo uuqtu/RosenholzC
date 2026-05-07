@@ -231,4 +231,33 @@ void Note::writeNotesFile(
     LOG_DEBUG("[F99] _F99_Notizen.txt written: " + path);
 }
 
+
+std::vector<Note::SearchResult> Note::loadRecent(int limit) {
+    auto* db = DatabasePool::instance().get("f99");
+    if (!db) return {};
+    auto rows = db->query(
+        "SELECT * FROM f99_entries ORDER BY created_at DESC LIMIT ?;",
+        {BindParam::int64(limit)});
+    std::vector<SearchResult> results;
+    for (auto& row : rows) {
+        auto n = std::make_shared<Note>();
+        n->fromRow(row);
+        SearchResult sr;
+        sr.note = n;
+        // Resolve entity title from registered entity:
+        if (!n->entityId.empty()) {
+            if (n->entityType == "f22") {
+                auto t = F22::loadById(n->entityId);
+                if (t) { sr.entityTitle = t->title; sr.entityPath = t->regNumber.toString(); }
+            } else if (n->entityType == "f16") {
+                auto p = F16::loadById(n->entityId);
+                if (p) { sr.entityTitle = p->title; sr.entityPath = p->regNumber.toString(); }
+            }
+        }
+        if (sr.entityTitle.empty()) sr.entityTitle = n->entityId;
+        results.push_back(sr);
+    }
+    return results;
+}
+
 } // namespace Rosenholz

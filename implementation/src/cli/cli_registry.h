@@ -1,25 +1,47 @@
 #pragma once
 // ============================================================
-// cli_registry.h  —  Command Registry (Dispatcher)
+// cli_registry.h  —  Command Registry (single source of truth)
 //
-// EXTENSIBILITY: To add a command, add ONE entry to kCommands[]
-// in cli_registry.cpp. Dispatch, lo(), and Tab-completion all
-// read from this single table automatically.
+// ARCHITECTURE
+// ════════════
+// Every CLI command is ONE entry in kCommands[] in cli_registry.cpp.
+// Dispatch, lo(), and Tab-completion all read from this table.
 //
-// Entry semantics:
-//   name           short form (no dash): "f22", "tsk"
-//   dashName       with dash or nullptr: "-f22", nullptr
-//   context        EntityType filter for lo() display (NONE = always shown)
-//   loHint         one-line help string in lo()
-//   subHints       tab-completable sub-arguments
-//   contextHandler called for plain form: "f22 -n"  (context-aware)
-//   globalHandler  called for dash form:  "-f22 -n" (global, no context)
+// CONTEXT VALIDITY
+// ════════════════
+// Each command defines which entity contexts accept it via validIn bitmask.
+// CTX_NONE   = works anywhere (global commands and nav commands)
+// CTX_F16    = only inside F16 entity context
+// CTX_F22    = only inside F22 entity context
+// CTX_F18    = only inside F18 entity context
+// CTX_AKT    = only inside AKT entity context
+// CTX_ANY    = any entity context (but NOT top level)
+// Combine with |: CTX_F22|CTX_F18 = valid in F22 and F18 contexts.
+//
+// When a plain command is called outside its validIn contexts,
+// dispatch() prints "unbekannter Befehl" and returns false.
+// Dash commands (-form) bypass context validation (always global).
+//
+// CliCommand FIELDS
+// ═════════════════
+//   name           plain form: "f22"
+//   dashName       dash form or nullptr: "-f22"
+//   validIn        context bitmask (see above)
+//   loHint         one-line help string shown by lo() in matching context
+//   subHints       tab-completable sub-arguments (for "." and the command)
+//   contextHandler called for plain "f22 -n"  — context-aware
+//   globalHandler  called for dash "-f22 -n"  — always global, no context
 //                  nullptr → falls back to contextHandler
 //
-// RULE: dash = global (no context used), no-dash = contextual.
-// dispatch() enforces this automatically from the handlers.
+// ADDING A COMMAND
+// ════════════════
+// 1. Add one CliCommand entry to kCommands[] in cli_registry.cpp
+// 2. Set validIn to the contexts that make sense
+// 3. Write contextHandler (no business logic — just call model layer)
+// 4. lo() and tab-completion work automatically
 // ============================================================
 #include "../model/NavigationContext.h"
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -28,27 +50,41 @@ namespace CLI {
 
 using Handler = std::function<void(const std::vector<std::string>&)>;
 
+// Context validity bitmask — combine with |
+using CtxMask = uint8_t;
+constexpr CtxMask CTX_NONE   = 0x00;  ///< No context required (global)
+constexpr CtxMask CTX_F16    = 0x01;  ///< Valid in F16 context
+constexpr CtxMask CTX_F22    = 0x02;  ///< Valid in F22 context
+constexpr CtxMask CTX_F18    = 0x04;  ///< Valid in F18 context
+constexpr CtxMask CTX_AKT    = 0x08;  ///< Valid in AKT context
+constexpr CtxMask CTX_ANY    = 0xFF;  ///< Valid in any context
+
+/// Returns the CTX bitmask for the current nav entity type.
+CtxMask currentCtxMask();
+
 struct CliCommand {
     const char*  name;           ///< plain form: "f22"
     const char*  dashName;       ///< dash form or nullptr: "-f22"
-    Rosenholz::EntityType context; ///< ET::NONE = show in lo() everywhere
-    const char*  loHint;         ///< one-line help for lo()
+    CtxMask      validIn;        ///< context bitmask for plain form dispatch
+    const char*  loHint;         ///< one-line help for lo() (nullptr = hidden)
     std::vector<const char*> subHints; ///< tab-completable sub-commands
-    Handler contextHandler;      ///< called for plain "f22 ..." (context-aware)
-    Handler globalHandler;       ///< called for dash "-f22 ..." (global); nullptr→contextHandler
+    Handler contextHandler;      ///< called for plain "f22 -n" (context-aware)
+    Handler globalHandler;       ///< called for dash "-f22 -n" (global)
+                                 ///< nullptr → contextHandler used for both
 };
 
-/// Returns the full command registry (single source of truth).
+/// Returns the full command registry.
 const std::vector<CliCommand>& registry();
 
-/// Dispatch a command. Returns false if unknown.
-/// Automatically routes: dash→globalHandler, plain→contextHandler.
+/// Dispatch a command. Returns false when unknown or wrong context.
+/// Plain form → contextHandler (checked against validIn).
+/// Dash form  → globalHandler  (no context check).
 bool dispatch(const std::string& cmd, const std::vector<std::string>& args);
 
-/// Print context-sensitive help (lo / -h in context).
+/// Print context-sensitive help (lo / -h).
 void printContextHelp();
 
-/// Tab-completion candidates for a given prefix and previous token.
+/// Tab-completion candidates.
 std::vector<std::string> completions(const std::string& prefix,
                                      const std::string& prev);
 

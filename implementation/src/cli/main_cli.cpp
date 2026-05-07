@@ -79,6 +79,28 @@ static void dispatch(const std::string& cmd,
         return;
     }
 
+    // ── "." = operate on current entity (expands to f16/f22/f18/akt) ─────
+    if (cmd == ".") {
+        auto& nav = Rosenholz::NavigationStack::instance();
+        auto  cur = nav.current();
+        if (!cur.valid()) {
+            std::cout << "  >> Kein Kontext aktiv. cd <ID> zuerst.\n";
+            return;
+        }
+        // Map entity type to its command name:
+        std::string entCmd;
+        switch (cur.type) {
+            case Rosenholz::EntityType::F16: entCmd = "f16"; break;
+            case Rosenholz::EntityType::F22: entCmd = "f22"; break;
+            case Rosenholz::EntityType::F18: entCmd = "f18"; break;
+            case Rosenholz::EntityType::AKT: entCmd = "akt"; break;
+            default: break;
+        }
+        if (!entCmd.empty() && CLI::dispatch(entCmd, rest)) return;
+        std::cout << "  >> Kein Kontext für \".\"-Befehl.\n";
+        return;
+    }
+
     // ── Registry dispatch (handles all other commands) ────────────────────
     if (CLI::dispatch(cmd, rest)) return;
 

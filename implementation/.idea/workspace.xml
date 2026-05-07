@@ -62,9 +62,17 @@
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_dok.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_dok.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f18.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f99.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f99.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_nav.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_nav.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_registry.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_registry.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/main_cli.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Note.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Note.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/Note.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Note.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -389,7 +397,9 @@
       <workItem from="1777713855165" duration="3217000" />
       <workItem from="1777755624173" duration="1761000" />
       <workItem from="1777758878253" duration="2242000" />
-      <workItem from="1778186284357" duration="1372000" />
+      <workItem from="1778186284357" duration="1720000" />
+      <workItem from="1778188037397" duration="735000" />
+      <workItem from="1778189814494" duration="22000" />
     </task>
     <servers />
   </component>

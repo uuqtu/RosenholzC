@@ -1002,191 +1002,227 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
 }
 
 void documentMenu(std::shared_ptr<Folder> doc) {
+    // Push AKT context onto navigation stack.
+    // This makes ". -e", ". -r" etc. work for the document.
     Rosenholz::NavigationStack::instance().push({
         Rosenholz::EntityType::AKT, doc->folderId, doc->title, doc->folderId});
 
-    while (true) {
-        if (auto fresh = Folder::loadById(doc->folderId)) *doc = *fresh;
+    auto printHeader = [&]() {
+        if (auto fresh = Rosenholz::Folder::loadById(doc->folderId)) *doc = *fresh;
 
-        auto cur       = FolderRevision::currentRevision(doc->folderId);
+        auto cur       = Rosenholz::FolderRevision::currentRevision(doc->folderId);
         bool inWork    = doc->isEditable();
-        bool immutable = !doc->isEditable();
-        uint32_t curRevNum = cur ? cur->rev : 0;
-        auto curObjs   = curRevNum > 0
-            ? FolderObject::loadForRevision(doc->folderId, curRevNum)
-            : std::vector<std::shared_ptr<FolderObject>>{};
+        uint32_t rev   = cur ? cur->rev : 0;
+        auto curObjs   = rev > 0
+            ? Rosenholz::FolderObject::loadForRevision(doc->folderId, rev)
+            : std::vector<std::shared_ptr<Rosenholz::FolderObject>>{};
 
         printDocument(*doc);
         if (cur)
-            std::cout << "  Rev " << curRevNum << "  [" << cur->revState << "]"
-                      << (immutable ? "  ⚠ unveraenderlich" : "  ✏ bearbeitbar")
+            std::cout << "  Rev " << rev << "  [" << cur->revState << "]"
+                      << (inWork ? "  ✏ bearbeitbar" : "  ⚠ unveraenderlich")
                       << "  |  " << curObjs.size() << " Objekt(e)\n";
 
-        // ── Menü ────────────────────────────────────────────────────────────
-        std::cout << "  AKT: 1.Bearbeiten | 2.Revisionieren | 15.Verlauf | 16.MFS | 18.Drucken | 19.RevWechsel\n"
-                  << "  F77: 3.F77\n"
-                  << "  OBJ: 4.listen(" << curObjs.size() << ") | 5.<#>→Untermenü (öffnen/checkout/URL)\n";
+        std::cout << "\n"
+                  << "  . -e       Akte bearbeiten\n"
+                  << "  . -r       Neue Revision anlegen\n"
+                  << "  . -hist    Revisionsverlauf\n"
+                  << "  . -rv      Revision wechseln\n";
         if (inWork) {
-            std::cout << "  OBJ: 6.OBJ+ | 13.URL-Update <#> | 14.alle URL\n";
+            std::cout << "  . -obj     Neues Objekt hinzufügen\n"
+                      << "  . -url     URL-Objekte aktualisieren\n";
         }
-        std::cout << "  [Admin] 17.Löschen\n"
-                  << "  0.Zurück\n";
+        std::cout << "  . -f77 -n  Workflow starten\n"
+                  << "  . -f77 -d  Workflows anzeigen\n"
+                  << "  ls         Objekte auflisten\n"
+                  << "  ls -rev    Alle Revisionen\n"
+                  << "  f99 <Text> Notiz\n"
+                  << "  ..         Zurück\n\n";
+    };
 
-        int ch = readInt("Wahl", 0, 19);
-        if (ch == 0) break;
+    while (true) {
+        printHeader();
+        std::string line = readLine("> ");
+        if (line.empty() || line == ".." || line == "0") break;
 
-        DocMenuCtx ctx{doc, cur, inWork, immutable, curRevNum, curObjs};
+        std::istringstream iss(line);
+        std::string cmd; iss >> cmd;
+        std::vector<std::string> args;
+        std::string tok;
+        while (iss >> tok) args.push_back(tok);
 
-        // Route to handlers
-        switch (ch) {
-        case 1:  dokHandleEditFields(ctx);            break;
-        case 2:  dokHandleNewRevision(ctx);     break;
-        case 3:  dokHandleWorkflow(ctx);        break;
-        case 4:  // OBJ listen
-            if (curObjs.empty()) { std::cout << "  (keine Objekte)\n"; break; }
-            for (size_t i=0; i<curObjs.size(); ++i) {
-                auto& o = curObjs[i];
-                std::cout << "  " << std::setw(3) << (i+1) << ". "
-                          << std::left << std::setw(40) << o->displayName().substr(0,38)
-                          << "  " << (o->committed ? "[LMDB]" : "[MFS] ")
-                          << "  " << (o->contentSize/1024) << "KB";
-                if (!o->sourceUrl.empty()) std::cout << "  [URL]";
-                std::cout << "\n";
-            }
-            break;
-        case 5: { // OBJ <#> — per-object sub-menu
-            if (curObjs.empty()) { std::cout << "  (keine Objekte)\n"; break; }
-            // List objects and pick one:
-            for (size_t i=0; i<curObjs.size(); ++i) {
-                auto& o = curObjs[i];
-                std::string flags;
-                if (!o->checkoutPath.empty()) flags += " [CO]";
-                if (!o->sourceUrl.empty())    flags += " [URL]";
-                if (o->committed)             flags += " [LMDB]";
-                std::cout << "  " << std::setw(3) << (i+1) << ". "
-                          << std::left << std::setw(38) << o->displayName().substr(0,36)
-                          << flags << "\n";
-            }
-            int pick = readInt("OBJ #", 1, (int)curObjs.size());
-            auto& sel = curObjs[pick-1];
-            // Per-object sub-menu:
-            while (true) {
-                std::cout << "  -- " << sel->displayName().substr(0,40) << " --\n";
-                std::cout << "  1.Öffnen (lesen)";
-                if (inWork) {
-                    std::cout << " | 2.checkout | 3.checkin | 4.revert";
-                    if (!sel->sourceUrl.empty()) std::cout << " | 5.URL aktualisieren";
-                    std::cout << " | 6.entfernen";
+        // "." expands to "akt" in AKT context:
+        if (cmd == ".") cmd = "akt";
+
+        // Reload fresh state for each command:
+        if (auto fresh = Rosenholz::Folder::loadById(doc->folderId)) *doc = *fresh;
+        auto cur      = Rosenholz::FolderRevision::currentRevision(doc->folderId);
+        bool inWork   = doc->isEditable();
+        uint32_t rev  = cur ? cur->rev : 0;
+        auto curObjs  = rev > 0
+            ? Rosenholz::FolderObject::loadForRevision(doc->folderId, rev)
+            : std::vector<std::shared_ptr<Rosenholz::FolderObject>>{};
+        DocMenuCtx ctx{doc, cur, inWork, !inWork, rev, curObjs};
+
+        // ── akt self-commands ────────────────────────────────────────────────
+        if (cmd == "akt") {
+            std::string sub = args.empty() ? "" : args[0];
+
+            if (sub == "-e") {
+                dokHandleEditFields(ctx); autoMFS();
+
+            } else if (sub == "-r" || sub == "-rev") {
+                dokHandleNewRevision(ctx); autoMFS();
+
+            } else if (sub == "-hist") {
+                dokHandleVersionHistory(ctx);
+
+            } else if (sub == "-rv") {
+                dokHandleRevisionSwitch(ctx);
+
+            } else if (sub == "-obj" && inWork) {
+                dokHandleAddObject(ctx); autoMFS();
+
+            } else if (sub == "-url" && inWork) {
+                // Update all URL-based objects:
+                int updated = 0;
+                for (auto& o : curObjs)
+                    if (!o->sourceUrl.empty()) {
+                        std::cout << "  Aktualisiere: " << o->displayName() << "\n";
+                        o->updateFromUrl("");
+                        ++updated;
+                    }
+                std::cout << "  >> " << updated << " Objekt(e) aktualisiert.\n";
+                autoMFS();
+
+            } else if (sub == "-f77") {
+                std::string sub2 = (args.size() > 1) ? args[1] : "";
+                if (sub2 == "-n") {
+                    auto wf = Rosenholz::F77Engine::startDefault("akt", doc->folderId);
+                    if (wf) { printOk("Workflow gestartet: " + wf->workflowId); autoMFS(); }
+                    else    printErr("Workflow konnte nicht gestartet werden.");
+                } else if (sub2 == "-d") {
+                    auto wfs = Rosenholz::F77W::loadForEntity("akt", doc->folderId);
+                    if (wfs.empty()) { std::cout << "  (keine Workflows)\n"; continue; }
+                    for (auto& w : wfs)
+                        std::cout << "  " << std::left << std::setw(28) << w->workflowId
+                                  << std::setw(20) << w->templateName.substr(0,18)
+                                  << std::string(Rosenholz::toString(w->status)) << "\n";
                 }
-                std::cout << "  | 0.Zurück\n";
-                int oc = readInt("Wahl", 0, 6);
-                if (oc == 0) break;
-                if (oc == 1) {
-                    doc->openFile("read", sel->filePath);
-                } else if (oc == 2 && inWork) {
-                    std::string path = sel->checkoutPath.empty() ? sel->filePath : sel->checkoutPath;
-                    if (!path.empty()) { doc->openFile("edit", path); std::cout << "  >> Geöffnet zum Bearbeiten: " << path << "\n"; }
-                    else std::cout << "  >> Kein Pfad vorhanden.\n";
-                } else if (oc == 3 && inWork) {
-                    auto res = sel->checkinObject();
-                    std::cout << "  >> " << opResultMessage(res) << "\n";
-                    break;
-                } else if (oc == 4 && inWork) {
-                    auto res = sel->revertObject(curRevNum > 1 ? curRevNum-1 : 1);
-                    std::cout << "  >> " << opResultMessage(res) << "\n";
-                    break;
-                } else if (oc == 5 && inWork && !sel->sourceUrl.empty()) {
-                    std::cout << "  URL: " << sel->sourceUrl << "\n";
-                    std::string nu = readOpt("Neue URL (leer = behalten): ");
-                    auto res = sel->updateFromUrl(nu.empty() ? "" : nu);
-                    std::cout << "  >> " << opResultMessage(res) << "\n";
-                    break;
-                } else if (oc == 6 && inWork) {
-                    if (yesno("  Objekt wirklich entfernen?")) {
-                        sel->remove();
-                        std::cout << "  >> Entfernt.\n";
-                        break;
+
+            } else if (sub == "-del" && Rosenholz::Config::instance().admin().enabled) {
+                dokHandleDelete(ctx);
+                if (doc->folderId.empty()) break;  // was deleted
+
+            } else if (sub.empty()) {
+                continue;  // just refresh header
+
+            } else {
+                printErr("Unbekannter Befehl: akt " + sub + "  (lo = Hilfe)");
+            }
+
+        // ── ls — list objects ────────────────────────────────────────────────
+        } else if (cmd == "ls") {
+            bool showRev = !args.empty() && args[0] == "-rev";
+            if (showRev) {
+                dokHandleVersionHistory(ctx);
+            } else {
+                // List current revision objects:
+                if (curObjs.empty()) { std::cout << "  (keine Objekte in Rev " << rev << ")\n"; continue; }
+                for (size_t i = 0; i < curObjs.size(); ++i) {
+                    auto& o = curObjs[i];
+                    std::string flags;
+                    if (!o->checkoutPath.empty()) flags += " [CO]";
+                    if (!o->sourceUrl.empty())    flags += " [URL]";
+                    if (o->committed)             flags += " [LMDB]";
+                    std::cout << "  " << std::setw(3) << (i+1) << ". "
+                              << std::left << std::setw(38) << o->displayName().substr(0,36)
+                              << "  " << (o->contentSize/1024) << "KB" << flags << "\n";
+                }
+                if (!curObjs.empty()) {
+                    int pick = readInt("  Objekt öffnen [0=Abbrechen]", 0, (int)curObjs.size());
+                    if (pick >= 1) {
+                        auto& sel = curObjs[pick-1];
+                        // Per-object sub-commands:
+                        while (true) {
+                            std::cout << "  -- " << sel->displayName().substr(0,40) << " --\n"
+                                      << "  . -open   öffnen (lesen)\n";
+                            if (inWork) {
+                                std::cout << "  . -co     checkout\n"
+                                          << "  . -ci     checkin\n"
+                                          << "  . -rv     revert\n"
+                                          << "  . -url    URL aktualisieren\n"
+                                          << "  . -del    entfernen\n";
+                            }
+                            std::cout << "  ..        zurück\n";
+                            std::string oLine = readLine("  > ");
+                            if (oLine.empty() || oLine == "..") break;
+
+                            std::istringstream ois(oLine);
+                            std::string ocmd; ois >> ocmd;
+                            if (ocmd == ".") ois >> ocmd; else /* already have cmd */ {};
+                            if (oLine == "." || oLine.substr(0,2) == ". ") {
+                                // strip leading ". "
+                                if (oLine.size() > 2) ocmd = oLine.substr(2);
+                            }
+
+                            if (ocmd == "-open" || ocmd == "open") {
+                                doc->openFile("read", sel->filePath);
+                            } else if (ocmd == "-co" && inWork) {
+                                std::string p = sel->checkoutObject();
+                                if (!p.empty()) std::cout << "  >> Ausgecheckt: " << p << "\n";
+                                else            std::cout << "  >> Checkout fehlgeschlagen.\n";
+                            } else if (ocmd == "-ci" && inWork) {
+                                std::cout << "  >> " << opResultMessage(sel->checkinObject()) << "\n"; break;
+                            } else if (ocmd == "-rv" && inWork) {
+                                std::cout << "  >> " << opResultMessage(
+                                    sel->revertObject(rev > 1 ? rev-1 : 1)) << "\n"; break;
+                            } else if (ocmd == "-url" && inWork && !sel->sourceUrl.empty()) {
+                                std::string nu = readOpt("  Neue URL (leer=behalten): ");
+                                std::cout << "  >> " << opResultMessage(sel->updateFromUrl(nu)) << "\n"; break;
+                            } else if (ocmd == "-del" && inWork) {
+                                if (yesno("  Wirklich entfernen?")) { sel->remove(); std::cout << "  >> Entfernt.\n"; break; }
+                            }
+                        }
                     }
                 }
             }
-            break; }
-        case 6:  if (inWork) dokHandleAddObject(ctx); break;
-        case 7:  // OBJ- <#>
-            if (!inWork || curObjs.empty()) break;
-            { int pick = readInt("OBJ- #", 1, (int)curObjs.size());
-              curObjs[pick-1]->remove();
-              std::cout << "  >> Objekt entfernt.\n"; }
-            break;
-        case 8:  // checkout <#>
-            if (!inWork || curObjs.empty()) break;
-            { int pick = readInt("Checkout #", 1, (int)curObjs.size());
-              std::string path = curObjs[pick-1]->checkoutObject();
-              if (!path.empty()) std::cout << "  >> Ausgecheckt: " << path << "\n";
-              else std::cout << "  >> Checkout fehlgeschlagen.\n"; }
-            break;
-        case 9:  // checkin <#>
-            if (!inWork || curObjs.empty()) break;
-            { int pick = readInt("Checkin #", 1, (int)curObjs.size());
-              auto res = curObjs[pick-1]->checkinObject();
-              std::cout << "  >> " << opResultMessage(res) << "\n"; }
-            break;
-        case 10: // checking — list checked-out objects
-            if (!inWork) break;
-            { bool any = false;
-              for (auto& o : curObjs)
-                if (!o->checkoutPath.empty()) {
-                    std::cout << "  [CO] " << o->displayName() << "  → " << o->checkoutPath << "\n";
-                    any = true;
-                }
-              if (!any) std::cout << "  (keine ausgecheckt)\n"; }
-            break;
-        case 11: // revert <#>
-            if (!inWork || curObjs.empty()) break;
-            { int pick = readInt("Revert #", 1, (int)curObjs.size());
-              auto res = curObjs[pick-1]->revertObject(curRevNum > 1 ? curRevNum-1 : 1);
-              std::cout << "  >> " << opResultMessage(res) << "\n"; }
-            break;
-        case 12: // checkout-liste
-            if (!inWork) break;
-            dokHandleCheckout(ctx);
-            break;
-        case 13: // aktualisieren <#> — refresh one URL-based object
-            if (!inWork || curObjs.empty()) break;
-            { // Show only URL objects:
-              std::vector<int> urlIdx;
-              for (int i=0; i<(int)curObjs.size(); ++i)
-                if (!curObjs[i]->sourceUrl.empty()) urlIdx.push_back(i);
-              if (urlIdx.empty()) { std::cout << "  (kein URL-Objekt vorhanden)\n"; break; }
-              int n=1;
-              for (int i : urlIdx)
-                std::cout << "  " << std::setw(3) << n++ << ". "
-                          << curObjs[i]->displayName().substr(0,40)
-                          << "  " << curObjs[i]->sourceUrl.substr(0,40) << "\n";
-              int pick = readInt("OBJ #", 1, (int)urlIdx.size());
-              auto& obj = curObjs[urlIdx[pick-1]];
-              std::cout << "  Neue URL (leer = behalten: " << obj->sourceUrl << "): ";
-              std::string nu; std::getline(std::cin, nu);
-              auto res = obj->updateFromUrl(nu.empty() ? "" : nu);
-              std::cout << "  >> " << opResultMessage(res) << "\n"; }
-            break;
-        case 14: // alle URL-Objekte aktualisieren
-            if (!inWork) break;
-            { int updated = 0;
-              for (auto& o : curObjs)
-                if (!o->sourceUrl.empty()) {
-                    std::cout << "  Aktualisiere: " << o->displayName() << "\n";
-                    o->updateFromUrl("");
-                    ++updated;
-                }
-              std::cout << "  >> " << updated << " Objekt(e) aktualisiert.\n"; }
-            break;
-        case 15: dokHandleVersionHistory(ctx);         break;
-        case 16: dokHandleMfsWrite(ctx);        break;
-        case 17: if (Config::instance().admin().enabled) dokHandleDelete(ctx); break;
-        case 18: dokHandlePrint(ctx);           break;
-        case 19: dokHandleRevisionSwitch(ctx);       break;
+
+        // ── f99 — note ───────────────────────────────────────────────────────
+        } else if (cmd == "f99") {
+            std::string text;
+            for (auto& a : args) { if (!text.empty()) text += " "; text += a; }
+            if (text.empty()) text = readLine("  Notiz: ");
+            if (!text.empty()) {
+                auto n = Rosenholz::Note::create("akt", doc->folderId, text);
+                if (n) { std::cout << "  >> F99: " << n->noteId << "\n"; autoMFS(); }
+            }
+
+        // ── lo / help ────────────────────────────────────────────────────────
+        } else if (cmd == "lo" || cmd == "-h") {
+            std::cout << "\n  AKT " << doc->folderId << " — Befehle:\n"
+                      << "    . -e         Felder bearbeiten\n"
+                      << "    . -r         Neue Revision\n"
+                      << "    . -hist      Revisionsverlauf\n"
+                      << "    . -rv        Revision wechseln\n"
+                      << "    . -f77 -n/-d Workflow starten/anzeigen\n"
+                      << (inWork ? "    . -obj       Neues Objekt\n"
+                                   "    . -url       URL-Objekte aktualisieren\n" : "")
+                      << "    ls           Objekte der aktuellen Revision\n"
+                      << "    ls -rev      Alle Revisionen\n"
+                      << "    f99 <Text>   Notiz\n"
+                      << "    ..           Zurück\n\n";
+
+        } else {
+            printErr("Unbekannter Befehl: " + cmd + "  (lo = Hilfe)");
         }
     }
+
+    // Pop AKT context when leaving documentMenu:
+    Rosenholz::NavigationStack::instance().pop();
 }
+
+
+
 
 } // namespace CLI
