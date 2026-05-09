@@ -38,6 +38,7 @@ void F18Operation::fromRow(const Row& r) {
     taskId             = g("task_id");
     parentVorgangId    = g("parent_operation_id");
     releaseWorkflowId     = g("release_workflow_id");
+    wfLocked = (g("wf_locked") == "1");
     title              = g("title");
     description        = g("description");
     status             = entityStatusFrom(g("status"));
@@ -225,6 +226,10 @@ OperationResult F18Operation::update() {
         LOG_WARN("[F18] update() refused: operation is released — " + operationId);
         return OperationResult::ENTITY_RELEASED;
     }
+    if (wfLocked) {
+        LOG_WARN("[F18] update() refused: wf_locked — F77W active for " + operationId);
+        return OperationResult::ENTITY_LOCKED;
+    }
     if (isLocked()) {
         LOG_WARN("[F18] update() refused: operation is locked — " + operationId);
         return OperationResult::ENTITY_LOCKED;
@@ -272,6 +277,16 @@ std::shared_ptr<F18Operation> F18Operation::create(
     const std::string& title,
     const std::string& type)
 {
+    // Guard: parent F22 must be in_work:
+    {
+        auto parentTask = F22::loadById(taskId);
+        if (parentTask && parentTask->status != EntityStatus::IN_WORK) {
+            LOG_WARN("[F18] create() refused: parent F22 is not in_work — "
+                     + taskId + " status=" + std::string(entityStatusToString(parentTask->status)));
+            return nullptr;
+        }
+    }
+
     auto v = std::make_shared<F18Operation>();
     v->operationId   = genId("F18");
     v->operationType = type.empty() ? F18OperationType::GENERIC : type;
@@ -384,6 +399,11 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     const std::string& startDatePlanned,
     const std::string& endDatePlanned)
 {
+    if (wfLocked) {
+        LOG_WARN("[F18] addStep() refused: wf_locked — F77W active for " + operationId);
+        return nullptr;
+    }
+
     // Find End step index and max sequence order
     int endIdx = -1, maxSeq = 0;
     for (int i = 0; i < (int)steps.size(); ++i) {

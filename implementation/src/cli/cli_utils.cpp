@@ -305,9 +305,12 @@ bool yesno(const std::string& prompt) {
         if (g_interrupted) return false;
         std::string s = readOpt(prompt + " (ja/nein): ");
         if (g_interrupted) return false;
+        // Trim leading/trailing whitespace:
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") + 1);
         if (s == "ja" || s == "j" || s == "y" || s == "yes") return true;
         if (s == "nein" || s == "n" || s == "no")             return false;
-        std::cout << "  (bitte 'ja' oder 'nein')\n";
+        std::cout << "  (bitte \'ja\' oder \'nein\')\n";
     }
 }
 

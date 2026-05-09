@@ -87,7 +87,10 @@ void cmdF16(const std::vector<std::string>& args) {
     // -n  —  guided creation
     if (args[0] == "-n" || args[0] == "--neu") {
         auto p = createProjectWizard();
-        if (p) printOk("  >> F16 angelegt: " + p->regNumber.toString() + "  " + p->title);
+        if (p) {
+            printOk("  >> F16 angelegt: " + p->regNumber.toString() + "  " + p->title);
+            cmdCd({p->projectId});  // auto-navigate
+        }
         return;
     }
 
@@ -119,9 +122,18 @@ void cmdF16(const std::vector<std::string>& args) {
         return;
     }
 
-    // Anything else → direct creation wizard
+    // Unknown subcommand → error
+    if (!args.empty()) {
+        std::cout << "  >> Unbekannter F16-Befehl: " << args[0] << "\n"
+                  << "  Gültige Optionen: -n  -e  -o  -so  -s  -arc  -v\n";
+        return;
+    }
+    // No args and no context → create wizard
     auto p = createProjectWizard();
-    if (p) printOk("  >> F16 angelegt: " + p->regNumber.toString() + "  " + p->title);
+    if (p) {
+        printOk("  >> F16 angelegt: " + p->regNumber.toString() + "  " + p->title);
+        cmdCd({p->projectId});  // auto-navigate into new F16
+    }
 }
 
 

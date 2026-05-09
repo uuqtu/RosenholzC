@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS projects (
     project_id                  TEXT PRIMARY KEY,
     -- release_workflow_id removed in v5: F16 has no lifecycle workflow
     archived                    INTEGER DEFAULT 0,   -- 0=active 1=soft-deleted
+    wf_locked                   INTEGER DEFAULT 0,   -- 1 while F77W is active
+    release_workflow_id         TEXT,                -- FK → f77_workflows
     reg_number                  TEXT,
     reg_dept                    TEXT,
     reg_sequence                INTEGER DEFAULT 0,

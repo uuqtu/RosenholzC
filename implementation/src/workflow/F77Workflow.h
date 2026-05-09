@@ -381,4 +381,5 @@ inline std::ostream& operator<<(std::ostream& os, StepStatus s) {
 inline std::ostream& operator<<(std::ostream& os, WorkflowSymbol s) {
     return os << static_cast<int>(s);
 }
+
 } // namespace Rosenholz

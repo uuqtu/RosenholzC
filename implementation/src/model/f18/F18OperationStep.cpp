@@ -234,6 +234,23 @@ bool F18OperationStep::complete() {
     return save();
 }
 
+bool F18OperationStep::reject() {
+    if (isComplete()) return true;
+    status        = F18StepStatus::REJECTED;
+    completedDate = nowIso();
+    updatedAt     = nowIso();
+    return save();
+}
+
+bool F18OperationStep::skip() {
+    if (isComplete()) return true;
+    status        = F18StepStatus::SKIPPED;
+    completedDate = nowIso();
+    updatedAt     = nowIso();
+    return save();
+}
+
+
 
 bool F18OperationStep::update() const {
     auto* d = db(); if (!d) return false;

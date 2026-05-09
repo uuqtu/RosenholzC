@@ -24,7 +24,7 @@ std::string RegNumber::toString() const {
     const std::string& de = Config::instance().registratur().diensteinheitKuerzel;
     std::ostringstream oss;
     oss << de << "/" << dept << "/"
-        << std::setw(4) << std::setfill('0') << sequence
+        << std::setw(6) << std::setfill('0') << sequence
         << "/" << (year % 100);
     return oss.str();
 }
@@ -132,7 +132,7 @@ std::string RegNumberGenerator::format(const std::string& dept, int64_t seq, int
     const std::string& de = Config::instance().registratur().diensteinheitKuerzel;
     std::ostringstream oss;
     oss << de << "/" << dept << "/"
-        << std::setw(4) << std::setfill('0') << seq
+        << std::setw(6) << std::setfill('0') << seq
         << "/" << (year % 100);
     return oss.str();
 }

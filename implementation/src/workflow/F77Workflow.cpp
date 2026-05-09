@@ -501,6 +501,8 @@ struct EntityCtx {
 
 static EntityCtx entityContext(const std::string& entityType) {
     auto& pool = DatabasePool::instance();
+    if (entityType == "f16")
+        return { pool.get("f16"), "projects",       "project_id",   "release_workflow_id" };
     if (entityType == "f22")
         return { pool.get("f22"), "tasks",          "task_id",      "release_workflow_id" };
     if (entityType == "f18")
@@ -518,7 +520,7 @@ static void storeWorkflowId(const std::string& entityType,
     auto ctx = entityContext(entityType);
     if (!ctx.valid()) { LOG_WARN("[F77] storeWorkflowId: unknown entityType: " + entityType); return; }
     std::string sql = std::string("UPDATE ") + ctx.table +
-                      " SET " + ctx.wfIdCol + "=?, updated_at=? WHERE " + ctx.idCol + "=?;";
+                      " SET " + ctx.wfIdCol + "=?, wf_locked=1, updated_at=? WHERE " + ctx.idCol + "=?;";
     ctx.db->exec(sql, { BindParam::text(workflowId), BindParam::text(nowIso()), BindParam::text(entityId) });
 }
 
@@ -543,7 +545,7 @@ void F77Engine::detachWorkflow(const std::string& entityType,
     auto ctx = entityContext(entityType);
     if (!ctx.valid()) return;
     std::string sql = std::string("UPDATE ") + ctx.table +
-                      " SET " + ctx.wfIdCol + "=NULL, updated_at=? WHERE " + ctx.idCol + "=?;";
+                      " SET " + ctx.wfIdCol + "=NULL, wf_locked=0, updated_at=? WHERE " + ctx.idCol + "=?;";
     ctx.db->exec(sql, { BindParam::text(nowIso()), BindParam::text(entityId) });
 }
 
@@ -782,10 +784,11 @@ std::shared_ptr<F77W> F77Engine::startDefault(
     end.createdAt=nowIso(); end.updatedAt=nowIso();
     end.save(); wf->steps.push_back(end);
 
-    // NOTE: tick() is NOT called here.
-    // The caller (startWfInstanceWizard or test) calls tick() after any manual
-    // operations are added. This prevents premature auto-completion.
     storeWorkflowId(entityType, entityId, wf->workflowId);
+
+    // Auto-tick: if there are no pending mid-steps,
+    // the End step fires immediately.
+    tick(*wf);
 
     return wf;
 }
@@ -1195,6 +1198,7 @@ bool F77Engine::fireStep(F77W& wf, const std::string& stepId,
     tick(wf);
     return true;
 }
+
 
 bool F77Engine::checkAndComplete(F77W& wf) {
     // All steps done (including End)?

@@ -71,6 +71,7 @@ public:
     std::string description;
     EntityStatus status         { EntityStatus::IN_WORK }; ///< lifecycle via F77 onlyWFI End step)
     std::string releaseWorkflowId;               // WFI ID of the controlling Main Workflow
+    bool        wfLocked { false };               // true while F77W is ACTIVE — mutations blocked
     std::string ownerId;                      // → Person
     std::string priority        { "medium" }; // low|medium|high|critical
     std::string createdAt;

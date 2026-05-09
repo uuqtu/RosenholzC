@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 CREATE TABLE IF NOT EXISTS tasks (
     task_id                 TEXT PRIMARY KEY,
     release_workflow_id     TEXT,
+    wf_locked          INTEGER DEFAULT 0,
     reg_number              TEXT,
     project_id              TEXT NOT NULL,
     parent_task_id          TEXT,

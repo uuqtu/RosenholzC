@@ -211,7 +211,12 @@ void stepMenu(Rosenholz::F18OperationStep& step,
     auto printStepHeader = [&]() {
         std::string startPlan = step.startDatePlanned.empty() ? "-" : step.startDatePlanned.substr(0,10);
         std::string endPlan   = step.endDatePlanned.empty()   ? "-" : step.endDatePlanned.substr(0,10);
-        std::cout << "\n  " << Color::bold("F18S " + step.stepId) << "\n"
+        // Show full breadcrumb:
+        auto& nav = Rosenholz::NavigationStack::instance();
+        std::string crumb;
+        auto cur = nav.current();
+        if (cur.valid()) crumb = cur.displayName + " > ";
+        std::cout << "\n  " << Color::bold(crumb + "F18S " + step.stepId) << "\n"
                   << "  " << std::string(50, '-') << "\n"
                   << "  Titel     : " << step.title << "\n"
                   << "  Typ       : " << step.stepType << "\n"
@@ -248,36 +253,26 @@ void stepMenu(Rosenholz::F18OperationStep& step,
         if (cmd == "." || cmd == "f18s") {
             std::string sub = args.empty() ? "" : args[0];
             if (sub == "-done" || sub == "-abschliessen") {
-                step.status = F18StepStatus::DONE;
-                step.complete();
-                // Tick parent operation: auto-completes End if all mid-steps done
+                bool ok = step.complete();  // sets DONE, saves
                 if (!step.operationId.empty()) {
                     auto op = F18Operation::loadById(step.operationId);
-                    if (op) {
-                        bool changed = op->tick();
-                        if (changed) printOk("F18-Vorgang: End-Schritt automatisch abgeschlossen.");
-                    }
+                    if (op && op->tick()) printOk("F18-Vorgang: End-Schritt automatisch abgeschlossen.");
                 }
-                printOk("Schritt abgeschlossen.");
-                autoMFS();
+                if (ok) { printOk("Schritt abgeschlossen."); autoMFS(); }
             } else if (sub == "-reject" || sub == "-ablehnen") {
-                step.status = F18StepStatus::REJECTED;
-                step.complete();
+                bool ok = step.reject();  // sets REJECTED, saves
                 if (!step.operationId.empty()) {
                     auto op = F18Operation::loadById(step.operationId);
                     if (op) op->tick();
                 }
-                printOk("Schritt abgelehnt.");
-                autoMFS();
+                if (ok) { printOk("Schritt abgelehnt."); autoMFS(); }
             } else if (sub == "-skip" || sub == "-ueberspringen") {
-                step.status = F18StepStatus::SKIPPED;
-                step.complete();
+                bool ok = step.skip();  // sets SKIPPED, saves
                 if (!step.operationId.empty()) {
                     auto op = F18Operation::loadById(step.operationId);
                     if (op) op->tick();
                 }
-                printOk("Schritt übersprungen.");
-                autoMFS();
+                if (ok) { printOk("Schritt übersprungen."); autoMFS(); }
             } else if (sub == "-track") {
                 std::string ts  = readOpt("  Tracking-Status: ");
                 std::string pct = readOpt("  Fortschritt % (0-100): ");
@@ -662,8 +657,10 @@ void cmdF18s(const std::vector<std::string>& args,
         std::string start = promptDate("  Geplanter Start (.  +Nd  YYYY-MM-DD, leer): ");
         std::string end   = promptDate("  Geplantes Ende  (.  +Nd  YYYY-MM-DD, leer): ");
         bool freeStep = yesno("  Freier Schritt (kein Vorgaenger)?");
-        v->addStep(title, sts[st-1], ass, freeStep, start, end);
+        auto step = v->addStep(title, sts[st-1], ass, freeStep, start, end);
         printOk("F18S hinzugefuegt.");
+        // Auto-navigate into new F18S step:
+        if (step) cmdCd({step->stepId});
         return;
     }
 

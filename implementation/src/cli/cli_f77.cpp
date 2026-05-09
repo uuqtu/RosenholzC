@@ -359,11 +359,34 @@ std::string startWfInstanceWizard(const std::string& entityType,
     F77Engine::attachWorkflow(effType, effId, wf->workflowId);
     std::cout << "  >> F77 gestartet: " << wf->workflowId << "\n";
 
+    // ── Auto-spawn F77Tasks for pending F18S steps (if F18 entity) ─────────────
+    if (effType == "f18") {
+        auto f18op = F18Operation::loadById(effId);
+        if (f18op) {
+            f18op->loadSteps();
+            int spawned = 0;
+            for (auto& s : f18op->steps) {
+                if (!s.isInitialize && !s.isFinal && !s.isComplete()) {
+                    auto opId = F77Engine::addManualOperation(
+                        *wf, "F18S: " + s.title, s.stepId, s.assignedTo);
+                    if (!opId.empty()) {
+                        std::cout << "  >> F77-Task angelegt für F18S: "
+                                  << s.title << "\n";
+                        ++spawned;
+                    }
+                }
+            }
+            if (spawned > 0)
+                std::cout << "  >> " << spawned
+                          << " F77-Task(s) für offene F18S-Schritte angelegt.\n";
+        }
+    }
+
     // ── Optional: manuelle Schritte vor dem ersten Tick hinzufügen ────────────
     // IMPORTANT: steps must be added BEFORE tick() so End is not yet auto-approved.
-    std::cout << "\n  Optional: Manuelle Operationen hinzufuegen?\n"
-              << "  (Jede Operation erzeugt einen F77-Task in \'Meine Aufgaben\'.\n"
-              << "   Die F77-Engine wartet, bis alle Tasks abgeschlossen sind.)\n";
+    std::cout << "\n  Manuelle Operationen hinzufuegen?\n"
+              << "  Jede Operation erzeugt einen F77-Task in Meine Aufgaben.\n"
+              << "  Die F77-Engine wartet auf Abschluss aller Tasks.\n";
     while (yesno("  Operation hinzufuegen?")) {
         std::string title = readLine("  Titel: ");
         if (title.empty()) break;

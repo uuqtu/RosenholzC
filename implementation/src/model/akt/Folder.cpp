@@ -112,6 +112,7 @@ void Folder::fromRow(const Row& r) {
     auto g=[&](const std::string& k){ auto it=r.find(k); return it!=r.end()?it->second:""; };
     folderId=g("folder_id");
     workflowId=g("workflow_id");
+    wfLocked = (g("wf_locked") == "1");
     taskId=g("task_id");
     f18OperationId=g("f18_operation_id"); f18StepId=g("f18_step_id");
     authorId=g("author_id"); approvedBy=g("approved_by");
@@ -144,6 +145,10 @@ OperationResult Folder::remove() {
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
 OperationResult Folder::update() {
+    if (wfLocked) {
+        LOG_WARN("[AKT] update() verweigert: Freigabe-Workflow aktiv — " + folderId);
+        return OperationResult::ENTITY_LOCKED;
+    }
     if (!isEditable()) {
         LOG_WARN("[AKT] update() verweigert: Revision ist eingefroren — " + folderId);
         return OperationResult::DOC_REV_NOT_IN_WORK;

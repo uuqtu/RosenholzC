@@ -30,6 +30,7 @@ void cmdF18(const std::vector<std::string>&);
 void cmdF18s(const std::vector<std::string>&, std::shared_ptr<Rosenholz::F18Operation>);
 void cmdAkt(const std::vector<std::string>&);
 void cmdF77(const std::vector<std::string>&);
+void cmdWorkflows(const std::vector<std::string>&);
 void cmdPer(const std::vector<std::string>&);
 void cmdDe(const std::vector<std::string>&);
 void cmdTasks(const std::vector<std::string>&);
@@ -96,22 +97,22 @@ const std::vector<CliCommand>& registry() {
     // ── Entity commands — contextHandler=contextual, globalHandler=global ───
     { "f16", "-f16",  CTX_NONE,
       "f16 -o/-so  listen/suchen  f16 -n  neu  f16 -e  bearbeiten",
-      {"-n","-e","-v","-o","-so","-s","-arc","-note"},
+      {"-n","-e","-v","-arc","-note","-f77","-o","-so","-s"},
       ctx("f16"),   global(cmdF16) },
 
     { "f22", "-f22",  CTX_NONE,
       "f22 -n  neue F22 (im Kontext direkt verknüpft)  f22 -o/-so  listen/suchen",
-      {"-n","-e","-v","-o","-so","-s","-ind","-note"},
+      {"-n","-e","-v","-ind","-note","-f77","-o","-so","-s"},
       ctx("f22"),   global(cmdF22) },
 
     { "f18", "-f18",  CTX_NONE,
       "f18 -n  neuer F18 (im Kontext)  f18 -o/-so  listen/suchen  f18 -stp  Schritte",
-      {"-n","-e","-v","-o","-so","-s","-stp","-note"},
+      {"-n","-e","-v","-note","-f77","-o","-so","-s"},
       ctx("f18"),   global(cmdF18) },
 
     { "akt", "-akt",  CTX_NONE,
       "akt -o/-so  Akten  akt -oo/-soo  Objekte (kontextuell)  akt -n  neu",
-      {"-n","-v","-o","-so","-oo","-soo","-obj","-url","-co","-ci","-rv","-note"},
+      {"-n","-e","-v","-r","-hist","-rv","-obj","-url","-co","-ci","-oo","-soo","-note","-f77","-o","-so"},
       ctx("akt"),   global(cmdAkt) },
 
     { "f77", "-f77",  CTX_NONE,
@@ -120,7 +121,7 @@ const std::vector<CliCommand>& registry() {
       ctx("f77"),   global(cmdF77) },
 
     // ── F18S: F18-Schritte ────────────────────────────────────────────────────
-    { "f18s", "-f18s", CTX_F18,
+    { "f18s", nullptr, CTX_F18,
       "f18s -n  Neuer Schritt  f18s -o/-so  listen/suchen  f18s -e <n>  bearbeiten",
       {"-n","-e","-o","-so","-s"},
       [](const std::vector<std::string>& a) {
@@ -312,12 +313,10 @@ void printContextHelp() {
                   << "    ls         Inhalt der aktuellen Ebene auflisten\n"
                   << "    lo / -h    Kontextabhängige Optionen anzeigen\n"
                   << "    ..         Eine Ebene zurück\n\n"
-                  << "  F16: -f16           F16-Karten   -f16 -n  Neu   -f16 -o  Auswahl\n"
-                  << "  F22: -f22           F22-Vorgänge  -f22 -n  Neu   -f22 -o  Auswahl\n"
-                  << "  F18: -f18           Vorgänge      -f18 -n  Neu   -f18 -o  Auswahl\n"
-                  << "  AKT: -akt           Akten          -akt -n  Neu   -akt -o  Auswahl\n"
+                  << "  F16: f16 -n  Neu   f16 -so  Suchen/Auswahl   f16 -arc  Archivieren\n"
                   << "  F77: -f77 -o/-so    Workflows listen/suchen\n"
-                  << "  TSK: tsk / -tasks   Offene F77-Aufgaben  tsk -a  alle  tsk -so <q>  suchen\n"
+                  << "  TSK: tsk / -tasks     Offene F77-Aufgaben  tsk -a  alle\n"
+                  << "  WFL: wfl / -workflows  Alle Workflows und Status  -a aktive  -d abgeschlossene\n"
                   << "  F18S:-f18s -o/-so   F18-Schritte\n"
                   << "  F99: -f99 -s/-so    Notizen suchen/Manager\n"
                   << "  PER: -per -s <q>    Personen      -de  Diensteinheiten\n\n"
@@ -342,98 +341,38 @@ void printContextHelp() {
 
     switch (cur.type) {
 
-    // ── F16 ────────────────────────────────────────────────────────────────
     case ET::F16:
         std::cout
-          << "  Dieses F16:\n"
-          << "    . -e          F16 bearbeiten\n"
-          << "    . -arc        F16 archivieren\n"
-          << "    . -v          F16 Detailansicht\n\n"
-          << "  F22 Vorgänge:\n"
-          << "    f22 -n        Neue F22 in diesem Projekt anlegen\n"
-          << "    f22 -o/-so    F22 auswählen / suchen\n\n"
-          << "  Workflow:\n"
-          << "    . -f77 -n     Freigabe-Workflow für dieses F16 starten\n"
-          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
-          << "  Suche & Notizen:\n"
-          << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
-          << "    f99 <Text>    Notiz auf dieses F16\n"
-          << "    f99 -s/-so    Notizen suchen / Manager\n"
-          << "    srch <q>      Globale Suche\n"
-          << "    mfs           MFS neu aufbauen\n";
+          << "  F22: f22 -n Neu  |  f22 -o/-so Auswahl\n"
+          << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
+          << "  AKT: f16 -e Bearbeiten  |  . -arc Archivieren  |  . -v Detail\n"
+          << "  KOM: kom -n/-o  |  F99: f99 <Text>  |  srch <q>  |  mfs\n";
         break;
 
-    // ── F22 ─────────────────────────────────────────────────────────────────
     case ET::F22:
         std::cout
-          << "  Dieses F22:\n"
-          << "    . -e          F22 bearbeiten\n"
-          << "    . -v          F22 Detailansicht\n"
-          << "    . -ind        Nacherfassung (Aufgabe einbuchen)\n\n"
-          << "  F18 Vorgänge:\n"
-          << "    f18 -n        Neuen F18 anlegen\n"
-          << "    f18 -o/-so    F18 auswählen / suchen\n\n"
-          << "  Akten:\n"
-          << "    akt -n        Neue Akte in diesem F22 anlegen\n"
-          << "    akt -o/-so    Akten auswählen / suchen\n"
-          << "    akt -oo       Alle Objekte im Kontext listen\n\n"
-          << "  Workflow:\n"
-          << "    . -f77 -n     Freigabe-Workflow für dieses F22 starten\n"
-          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
-          << "  Suche & Notizen:\n"
-          << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
-          << "    f99 <Text>    Notiz auf dieses F22\n"
-          << "    f99 -s/-so    Notizen suchen / Manager\n"
-          << "    srch <q>      Globale Suche\n"
-          << "    mfs           MFS neu aufbauen\n";
+          << "  F18: f18 -n Neu  |  f18 -o/-so Auswahl\n"
+          << "  AKT: akt -n Neu  |  akt -o/-so Auswahl  |  akt -oo Objekte\n"
+          << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
+          << "  KOM: kom -n/-o  |  F99: f99 <Text>  |  srch <q>  |  mfs\n"
+          << "  ACT: . -e Bearbeiten  |  . -v Detail  |  . -ind Nacherfassung\n";
         break;
 
-    // ── F18 ─────────────────────────────────────────────────────────────────
     case ET::F18:
         std::cout
-          << "  Dieses F18:\n"
-          << "    . -e          F18 bearbeiten\n"
-          << "    . -v          F18 Detailansicht\n\n"
-          << "  Schritte (F18S):\n"
-          << "    f18s          Schritte listen → öffnen\n"
-          << "    f18s -n       Neuen Schritt anlegen\n"
-          << "    f18s -e <n>   Schritt bearbeiten\n"
-          << "    f18s -o/-so   Schritte auswählen / suchen\n\n"
-          << "  Akten:\n"
-          << "    akt -n        Neue Akte anlegen\n"
-          << "    akt -o/-so    Akten suchen\n"
-          << "    akt -oo       Alle Objekte im Kontext\n\n"
-          << "  Workflow:\n"
-          << "    . -f77 -n     Freigabe-Workflow für dieses F18 starten\n"
-          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
-          << "  Suche & Notizen:\n"
-          << "    kom -n/-o     Kommunikation anlegen / öffnen\n"
-          << "    f99 <Text>    Notiz auf dieses F18\n"
-          << "    f99 -s/-so    Notizen suchen / Manager\n";
+          << "  F18S: f18s -n Neu  |  f18s -o/-so Auswahl  |  f18s -e <n> Edit\n"
+          << "  AKT:  akt -n Neu  |  akt -o/-so Auswahl  |  akt -oo Objekte\n"
+          << "  WF:   . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
+          << "  KOM:  kom -n/-o  |  F99: f99 <Text>\n"
+          << "  ACT:  . -e Bearbeiten  |  . -v Detail\n";
         break;
 
-    // ── AKT ─────────────────────────────────────────────────────────────────
     case ET::AKT:
         std::cout
-          << "  Diese Akte:\n"
-          << "    . -e          Akte bearbeiten\n"
-          << "    . -r          Neue Revision anlegen (= rev)\n"
-          << "    . -hist       Revisionsverlauf anzeigen\n\n"
-          << "  Objekte dieser Akte:\n"
-          << "    ls            Alle Objekte der aktuellen Revision\n"
-          << "    ls -rev       Alle Revisionen\n"
-          << "    . -obj        Neues Objekt hinzufügen\n"
-          << "    . -co <n>     Objekt auschecken\n"
-          << "    . -ci         Objekt einchecken\n"
-          << "    . -rv <n>     Revision wechseln\n"
-          << "    . -url        URL-Objekte aktualisieren\n"
-          << "    . -oo/-soo    Objekte auflisten / suchen\n\n"
-          << "  Workflow:\n"
-          << "    . -f77 -n     Freigabe-Workflow für diese Akte starten\n"
-          << "    . -f77 -d     Laufende Workflows anzeigen\n\n"
-          << "  Notizen:\n"
-          << "    f99 <Text>    Notiz auf diese Akte\n"
-          << "    f99 -s/-so    Notizen suchen / Manager\n";
+          << "  AKT: . -e Edit  |  . -r Rev+  |  . -hist Verlauf  |  . -rv RevWechsel\n"
+          << "  OBJ: ls Auflisten  |  . -obj Neu  |  . -co Checkout  |  . -ci Checkin\n"
+          << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
+          << "  F99: f99 <Text>\n";
         break;
 
     default:

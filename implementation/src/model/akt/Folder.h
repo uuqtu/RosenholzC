@@ -35,6 +35,7 @@ class Folder {
 public:
     std::string folderId;
     std::string workflowId;           ///< F77W controlling this folder lifecycle
+    bool        wfLocked { false };   ///< true while F77W is ACTIVE — mutations blocked
     std::string taskId;          ///< Filing parent — F22 (or empty for F18-scoped)
     std::string f18OperationId;  ///< F18 Operation (vorgang) reference
     std::string f18StepId;       ///< F18 Operation Step reference

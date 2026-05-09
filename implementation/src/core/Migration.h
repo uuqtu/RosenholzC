@@ -28,12 +28,12 @@ namespace Rosenholz {
 // Fresh databases start at v4 directly via SQL files.
 struct SchemaVersions {
     static constexpr int core      = 4;  // v4 baseline
-    static constexpr int f16       = 4;  // v4 baseline
-    static constexpr int f22       = 4;  // v4 baseline
+    static constexpr int f16       = 5;  // v5: wf_locked flag
+    static constexpr int f22       = 5;  // v5: wf_locked flag
     static constexpr int f77       = 5;  // v5: is_system + system_action added;  // v4 baseline
-    static constexpr int akt       = 7;
+    static constexpr int akt       = 8;  // v8: wf_locked flag
     static constexpr int f77task   = 1;  // v1: initial schema  // v7: file_url removed from Akte (URL belongs to objects)
-    static constexpr int f18       = 4;  // v4: no project_id, task_id required
+    static constexpr int f18       = 5;  // v5: wf_locked flag
 };
 
 /// A single migration step

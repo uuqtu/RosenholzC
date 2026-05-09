@@ -51,6 +51,7 @@ public:
     // ── Status / workflow ─────────────────────────────────
     EntityStatus status { EntityStatus::IN_WORK }; ///< lifecycle via F77 — IN_WORK|LOCKED|RELEASED|CLOSEDI End step)
     std::string releaseWorkflowId;    ///< WFI ID of the controlling Main Workflow
+    bool        wfLocked { false };      ///< true while F77W is ACTIVE — mutations blocked
     std::string priority;
 
     // ── Time (QTCS) ───────────────────────────────────────

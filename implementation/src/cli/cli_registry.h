@@ -4,6 +4,54 @@
 //
 // ARCHITECTURE
 // ════════════
+// Every CLI command is defined ONCE in kCommands[] (cli_registry.cpp).
+// Dispatch, lo(), and Tab-completion all read from that single table.
+//
+// HOW TO ADD A COMMAND
+// ════════════════════
+//  1. Add ONE entry to kCommands[] in cli_registry.cpp:
+//       { "cmd", "-cmd", ET::NONE, "hint text",
+//         {"-sub1", "-sub2"},          // Tab-completable sub-args
+//         ctx("cmd"),                  // contextHandler → cmdContextual("cmd",args)
+//         global(cmdFoo) }             // globalHandler  → called for -cmd
+//
+//  2. Add the handler in cmdContextual (cli_nav.cpp):
+//       if (cmd == "cmd") {
+//           // CONTEXT GUARD at top:
+//           if (!args.empty() && needsCtx && cur.type != EntityType::XXX) {
+//               printErr("…erfordert XXX-Kontext"); return;
+//           }
+//           // Self-commands (operate on current entity):
+//           if (sub == "-e") { /* call model */ return; }
+//           // Global pass-through: cmdFoo(args); return;
+//           // Unknown sub-arg:
+//           printErr("Unbekannter Befehl: " + sub); return;
+//       }
+//
+//  3. Add lo() hint to printContextHelp() for the relevant context.
+//
+// CONTEXT RULES
+// ═════════════
+//  plain cmd      → contextHandler → cmdContextual(cmd, args)  [context-aware]
+//  -dash cmd      → globalHandler  → cmdXxx(args)              [always global]
+//  "." cmd        → expands to current entity type's cmd       [context-aware]
+//
+//  Self sub-commands (-e, -v, -arc, -f77 etc.) require the matching context.
+//  Global sub-commands (-n, -o, -so, -s) work from any context.
+//  Unknown sub-commands → printErr()
+//
+// BUSINESS LOGIC RULE
+// ═══════════════════
+//  NO business logic in CLI. CLI only:
+//    - reads user input
+//    - calls model methods (save, update, archive, etc.)
+//    - prints results
+//  All state transitions, validation, and persistence live in model/.
+// ============================================================
+// cli_registry.h  —  Command Registry (single source of truth)
+//
+// ARCHITECTURE
+// ════════════
 // Every CLI command is ONE entry in kCommands[] in cli_registry.cpp.
 // Dispatch, lo(), and Tab-completion all read from this table.
 //

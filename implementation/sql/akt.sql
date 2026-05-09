@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS schema_version (
 CREATE TABLE IF NOT EXISTS folders (
     -- Core identity
     folder_id              TEXT PRIMARY KEY,
-    workflow_id            TEXT,               -- F77W controlling this folder lifecycle
+    workflow_id            TEXT,
+    wf_locked          INTEGER DEFAULT 0,               -- F77W controlling this folder lifecycle
     task_id                TEXT,               -- Filing parent (F22)
 
     -- Context links

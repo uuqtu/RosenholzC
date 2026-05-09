@@ -62,11 +62,15 @@ static void showF16Children(const std::string& projectId) {
                   << "STATUS\n"
                   << "  " << std::string(72,'-') << "\n";
         int n = 1;
-        for (auto& t : tasks)
+        for (auto& t : tasks) {
+            std::string statusStr = std::string(entityStatusToString(t->status));
+            if (t->status == EntityStatus::IN_WORK && t->wfLocked)
+                statusStr = "in_work [WF aktiv]";
             std::cout << "  " << std::setw(4) << n++
                       << std::setw(26) << t->regNumber.toString()
                       << std::setw(34) << t->title.substr(0,32)
-                      << Color::statusColor(entityStatusToString(t->status)) << "\n";
+                      << Color::statusColor(statusStr) << "\n";
+        }
     } else {
         std::cout << "  (keine F22-Vorgaenge)\n";
     }
@@ -101,12 +105,15 @@ static void showF22Children(const std::string& taskId) {
                   << "STATUS\n"
                   << "  " << std::string(76,'-') << "\n";
         int n = 1;
-        for (auto& v : f18s)
+        for (auto& v : f18s) {
+            std::string f18StatusStr = std::string(entityStatusToString(v->status));
+            if (v->wfLocked) f18StatusStr += " [WF]";
             std::cout << "  " << std::setw(4) << n++
                       << std::setw(26) << v->operationId
                       << std::setw(12) << v->operationType.substr(0,10)
                       << std::setw(30) << v->title.substr(0,28)
-                      << Color::statusColor(entityStatusToString(v->status)) << "\n";
+                      << Color::statusColor(f18StatusStr) << "\n";
+        }
     } else {
         std::cout << "\n  (keine F18-Vorgaenge)\n";
     }
@@ -479,6 +486,8 @@ void autoMFS() {
     if (ok) std::cout << "  >> MFS aktualisiert.\n";
 }
 
+void cmdWorkflows(const std::vector<std::string>& args);
+
 void cmdCd(const std::vector<std::string>& args) {
     auto& nav = NavigationStack::instance();
 
@@ -522,6 +531,35 @@ void cmdCd(const std::vector<std::string>& args) {
             std::cout << "  >> " << Color::yellow("AKT:" + d->folderId)
                       << "  " << Color::bold(d->title) << "\n";
             cmdLs({}); return;
+        }
+    }
+    // Try F77 workflow ID (read-only navigation — just display):
+    if (target.find("/F77W/") != std::string::npos ||
+        target.find("/F77N/") != std::string::npos ||
+        target.find("/F77S/") != std::string::npos) {
+        auto wf = F77W::loadById(target);
+        if (!wf) {
+            // Try finding by related step:
+            auto wfs = F77W::loadAll();
+            for (auto& w : wfs) {
+                if (w->workflowId == target) { wf = w; break; }
+            }
+        }
+        if (wf) {
+            std::cout << "\n  Workflow: " << wf->workflowId
+                      << "  [" << std::string(toString(wf->status)) << "]"
+                      << "  Vorlage: " << wf->templateName << "\n";
+            wf->loadSteps();
+            std::cout << "\n  " << std::left << std::setw(28) << "SCHRITT-ID"
+                      << std::setw(20) << "TITEL"
+                      << std::setw(10) << "STATUS"
+                      << "\n  " << std::string(58, '-') << "\n";
+            for (auto& s : wf->steps)
+                std::cout << "  " << std::setw(28) << s.stepId
+                          << std::setw(20) << s.title.substr(0,18)
+                          << std::string(toString(s.status)) << "\n";
+            std::cout << "\n";
+            return;
         }
     }
     printErr("Entitaet nicht gefunden: " + target);
@@ -570,9 +608,16 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             std::string sub = (args.size() > 1) ? args[1] : "";
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
-                auto wf = F77Engine::startDefault(cmd, cur.id);
-                if (wf) { printOk("Workflow gestartet: " + wf->workflowId); autoMFS(); }
-                else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
+                // then ticks — also handles F18S pending step detection
+                std::string entityTypeStr = cmd; // f16|f22|f18|akt
+                std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
+                if (!wfId.empty()) {
+                    printOk("Workflow gestartet: " + wfId);
+                    autoMFS();
+                } else {
+                    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
                 return;
             }
             if (sub == "-d") {
@@ -588,6 +633,11 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 std::cout << "\n";
                 return;
             }
+            // Unknown f77 sub-command:
+            std::cout << "  >> Unbekannter -f77 Befehl: " << sub << "\n"
+                      << "  Gültige Optionen: -f77 -n  (Workflow starten)\n"
+                      << "                   -f77 -d  (Workflows anzeigen)\n";
+            return;
         }
         std::vector<std::string> fullArgs;
         // No args and in F16 context → show F16 details/menu
@@ -655,9 +705,16 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             std::string sub = (args.size() > 1) ? args[1] : "";
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
-                auto wf = F77Engine::startDefault(cmd, cur.id);
-                if (wf) { printOk("Workflow gestartet: " + wf->workflowId); autoMFS(); }
-                else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
+                // then ticks — also handles F18S pending step detection
+                std::string entityTypeStr = cmd; // f16|f22|f18|akt
+                std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
+                if (!wfId.empty()) {
+                    printOk("Workflow gestartet: " + wfId);
+                    autoMFS();
+                } else {
+                    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
                 return;
             }
             if (sub == "-d") {
@@ -673,6 +730,11 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 std::cout << "\n";
                 return;
             }
+            // Unknown f77 sub-command:
+            std::cout << "  >> Unbekannter -f77 Befehl: " << sub << "\n"
+                      << "  Gültige Optionen: -f77 -n  (Workflow starten)\n"
+                      << "                   -f77 -d  (Workflows anzeigen)\n";
+            return;
         }
         // -n: create under current F16 (if in F16 context)
         if (!args.empty() && args[0] == "-n") {
@@ -725,6 +787,16 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (t) taskMenu(t);
             return;
         }
+        // Self sub-commands require F22 context:
+        if (!args.empty() && cur.type != EntityType::F22) {
+            // -n, -o, -s, -so always work globally:
+            if (args[0] == "-n" || args[0] == "-o" || args[0] == "-s" || args[0] == "-so") {
+                cmdF22(args); return;
+            }
+            printErr("'" + args[0] + "' erfordert F22-Kontext.\n"
+                     "  cd <F22-ID>  dann: . " + args[0]);
+            return;
+        }
         cmdF22(args); return;
     }
 
@@ -735,9 +807,16 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             std::string sub = (args.size() > 1) ? args[1] : "";
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
-                auto wf = F77Engine::startDefault(cmd, cur.id);
-                if (wf) { printOk("Workflow gestartet: " + wf->workflowId); autoMFS(); }
-                else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
+                // then ticks — also handles F18S pending step detection
+                std::string entityTypeStr = cmd; // f16|f22|f18|akt
+                std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
+                if (!wfId.empty()) {
+                    printOk("Workflow gestartet: " + wfId);
+                    autoMFS();
+                } else {
+                    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
                 return;
             }
             if (sub == "-d") {
@@ -753,6 +832,11 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 std::cout << "\n";
                 return;
             }
+            // Unknown f77 sub-command:
+            std::cout << "  >> Unbekannter -f77 Befehl: " << sub << "\n"
+                      << "  Gültige Optionen: -f77 -n  (Workflow starten)\n"
+                      << "                   -f77 -d  (Workflows anzeigen)\n";
+            return;
         }
         // -n: create under current F22
         if (!args.empty() && args[0] == "-n") {
@@ -764,11 +848,25 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 if (v) taskId = v->taskId;
             }
             if (!taskId.empty()) {
+                // Guard: F22 must be in_work AND have no active workflow:
+                auto parentF22 = F22::loadById(taskId);
+                if (parentF22 && parentF22->status != EntityStatus::IN_WORK) {
+                    printErr("F18 kann nicht angelegt werden: F22 ist '"
+                             + std::string(entityStatusToString(parentF22->status))
+                             + "' (nur in_work erlaubt).");
+                    return;
+                }
+                if (parentF22 && parentF22->wfLocked) {
+                    printErr("F18 kann nicht angelegt werden: Freigabe-Workflow aktiv.\n"
+                             "  Status: in_work [WF aktiv] — Änderungen gesperrt.\n"
+                             "  Verwende: -tasks um offene Aufgaben zu sehen.");
+                    return;
+                }
                 auto v = createF18Wizard("", taskId, "");
                 if (v) {
                     printOk("F18 angelegt: " + v->operationId + "  " + v->title);
-                    if (yesno("  Jetzt navigieren?"))
-                        cmdCd({v->operationId});
+                    autoMFS();
+                    cmdCd({v->operationId});  // auto-navigate
                 }
             } else {
                 cmdF18({"-n"});
@@ -820,18 +918,15 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (v) f18Menu(v);
             return;
         }
-        // Context guard: these args require F18 context
-        if (!args.empty()) {
-            static const std::vector<std::string> ctxRequired = {"-e","-v","-note"};
-            for (auto& a : ctxRequired) {
-                if (args[0] == a) {
-                    printErr("'" + cmd + " " + args[0] + "' erfordert F18-Kontext.\n"
-                             "  cd <F18-ID>  dann: . " + args[0]);
-                    return;
-                }
+        // Self sub-commands require F18 context:
+        if (!args.empty() && cur.type != EntityType::F18) {
+            if (args[0] == "-n" || args[0] == "-o" || args[0] == "-s" || args[0] == "-so") {
+                cmdF18(args); return;  // these work globally
             }
+            printErr("'" + args[0] + "' erfordert F18-Kontext.\n"
+                     "  cd <F18-ID>  dann: . " + args[0]);
+            return;
         }
-        // -o, -so, -s: global route through
         cmdF18(args); return;
     }
 
@@ -842,9 +937,16 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             std::string sub = (args.size() > 1) ? args[1] : "";
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
-                auto wf = F77Engine::startDefault(cmd, cur.id);
-                if (wf) { printOk("Workflow gestartet: " + wf->workflowId); autoMFS(); }
-                else    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
+                // then ticks — also handles F18S pending step detection
+                std::string entityTypeStr = cmd; // f16|f22|f18|akt
+                std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
+                if (!wfId.empty()) {
+                    printOk("Workflow gestartet: " + wfId);
+                    autoMFS();
+                } else {
+                    printErr("Workflow konnte nicht gestartet werden (läuft bereits?)");
+                }
                 return;
             }
             if (sub == "-d") {
@@ -860,6 +962,11 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 std::cout << "\n";
                 return;
             }
+            // Unknown f77 sub-command:
+            std::cout << "  >> Unbekannter -f77 Befehl: " << sub << "\n"
+                      << "  Gültige Optionen: -f77 -n  (Workflow starten)\n"
+                      << "                   -f77 -d  (Workflows anzeigen)\n";
+            return;
         }
         // -n: create new AKT under current entity
         if (!args.empty() && args[0] == "-n") {
@@ -873,7 +980,14 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 return;
             } else if (cur.type == EntityType::F22) {
                 auto t = F22::loadById(cur.id);
-                if (t) { projId = t->projectId; taskId = t->taskId; }
+                if (t) {
+                    if (t->wfLocked) {
+                        printErr("Akte kann nicht angelegt werden: Freigabe-Workflow aktiv auf F22.\n"
+                                 "  Verwende: -tasks um offene Aufgaben zu sehen.");
+                        return;
+                    }
+                    projId = t->projectId; taskId = t->taskId;
+                }
             } else if (cur.type == EntityType::F18) {
                 auto v = F18Operation::loadById(cur.id);
                 if (v) {
@@ -889,8 +1003,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 if (doc) {
                     printOk("AKT angelegt: " + doc->folderId + "  " + doc->title);
                     autoMFS();
-                    if (yesno("  Jetzt navigieren?"))
-                        cmdCd({doc->folderId});
+                    cmdCd({doc->folderId});  // auto-navigate into new AKT
                 }
             } else {
                 cmdAkt({"-n"});
@@ -998,6 +1111,51 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         if (args.empty() && cur.type == EntityType::AKT) {
             auto d = Folder::loadById(cur.id);
             if (d) documentMenu(d);
+            return;
+        }
+        // Context-filtered list/search:
+        if (!args.empty() && cur.type != EntityType::AKT) {
+            // -n: already handled above (context-specific creation)
+            if (args[0] == "-o" || args[0] == "-so" || args[0] == "-s") {
+                // List/search Akten belonging to this entity:
+                std::string etype;
+                switch (cur.type) {
+                    case EntityType::F16: etype = "f16"; break;
+                    case EntityType::F22: etype = "f22"; break;
+                    case EntityType::F18: etype = "f18"; break;
+                    default: break;
+                }
+                std::string q;
+                if (args.size() > 1) q = args[1];
+                else if (args[0] == "-so" || args[0] == "-s") {
+                    std::cout << "  Suche: "; std::getline(std::cin, q);
+                    if (q.empty()) q = "*";
+                }
+                auto docs = Folder::loadForEntity(etype, cur.id);
+                if (!q.empty() && q != "*") {
+                    docs.erase(std::remove_if(docs.begin(), docs.end(),
+                        [&](auto& d){ return !matchesPattern(d->title, q) &&
+                                             !matchesPattern(d->folderId, q); }),
+                        docs.end());
+                }
+                if (docs.empty()) { std::cout << "  (keine Akten)\n"; return; }
+                int n = 1;
+                for (auto& d : docs)
+                    std::cout << "  " << std::setw(3) << n++ << "  "
+                              << std::left << std::setw(26) << d->folderId
+                              << "  " << std::setw(30) << d->title.substr(0,28)
+                              << "  " << d->docType << "\n";
+                int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)docs.size());
+                if (pick >= 1) {
+                    cmdCd({docs[pick-1]->folderId});
+                }
+                return;
+            }
+            if (args[0] == "-oo" || args[0] == "-soo") {
+                cmdAkt(args); return;  // global object list
+            }
+            printErr("'" + args[0] + "' erfordert AKT-Kontext.\n"
+                     "  cd <AKT-ID>  dann: . " + args[0]);
             return;
         }
         cmdAkt(args); return;
@@ -1181,5 +1339,65 @@ std::vector<std::pair<std::string,std::string>> getContextChildren() {
     }
     return result;
 }
+
+// ── cmdWorkflows ──────────────────────────────────────────────────────────────
+// Lists all workflows across all entities with status, allows navigation.
+void cmdWorkflows(const std::vector<std::string>& args) {
+    using namespace Rosenholz;
+    bool filterActive = (!args.empty() && args[0] == "-a");
+    bool filterDone   = (!args.empty() && args[0] == "-d");
+
+    auto allWf = F77W::loadAll();
+    if (filterActive) {
+        allWf.erase(std::remove_if(allWf.begin(), allWf.end(),
+            [](auto& w){ return w->status != WorkflowStatus::ACTIVE; }), allWf.end());
+    } else if (filterDone) {
+        allWf.erase(std::remove_if(allWf.begin(), allWf.end(),
+            [](auto& w){ return w->status != WorkflowStatus::COMPLETED; }), allWf.end());
+    }
+
+    if (allWf.empty()) {
+        std::cout << "  (keine Workflows)\n";
+        return;
+    }
+
+    std::cout << "\n  " << std::left
+              << std::setw(28) << "WORKFLOW-ID"
+              << std::setw(26) << "ENTITÄT"
+              << std::setw(20) << "VORLAGE"
+              << "STATUS\n  " << std::string(80, '-') << "\n";
+    int n = 1;
+    for (auto& wf : allWf) {
+        std::cout << "  " << std::setw(4) << n++
+                  << std::setw(28) << wf->workflowId
+                  << std::setw(26) << (wf->entityType + ":" + wf->entityId.substr(0,20))
+                  << std::setw(20) << wf->templateName.substr(0,18)
+                  << std::string(toString(wf->status)) << "\n";
+    }
+    std::cout << "  " << allWf.size() << " Workflow(s)\n\n"
+              << "  -a   nur aktive    -d   nur abgeschlossene\n"
+              << "  Auswahl [0=Abbrechen]: ";
+    int pick = readInt("", 0, (int)allWf.size());
+    if (pick < 1) return;
+    auto& sel = allWf[pick-1];
+    // Show workflow detail + navigate to entity:
+    sel->loadSteps();
+    std::cout << "\n  Workflow: " << sel->workflowId
+              << "  [" << std::string(toString(sel->status)) << "]\n"
+              << "  Entität: " << sel->entityType << " " << sel->entityId << "\n"
+              << "  Vorlage: " << sel->templateName << "\n"
+              << "  Erstellt: " << sel->createdAt.substr(0,10) << "\n\n"
+              << "  " << std::left << std::setw(28) << "SCHRITT-ID"
+              << std::setw(20) << "TITEL"
+              << "STATUS\n  " << std::string(56, '-') << "\n";
+    for (auto& s : sel->steps)
+        std::cout << "  " << std::setw(28) << s.stepId
+                  << std::setw(20) << s.title.substr(0,18)
+                  << std::string(toString(s.status)) << "\n";
+    std::cout << "\n";
+    // Offer to navigate to entity:
+    cmdCd({sel->entityId});  // auto-navigate
+}
+
 
 } // namespace CLI

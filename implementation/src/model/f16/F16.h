@@ -55,7 +55,9 @@ public:
     // ── Phase / state ─────────────────────────────────────
     // F16 has no lifecycle — it is always editable (IN_WORK).
     // Use the archived flag to soft-delete.
-    bool archived { false };          ///< soft-delete; archived projects are hidden by default
+    bool archived { false };
+    std::string releaseWorkflowId;  ///< FK → F77W
+    bool        wfLocked { false };   ///< true while F77W is ACTIVE — mutations blocked
     std::string phase;
     std::string classification;
     std::string strategicAlignment;

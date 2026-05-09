@@ -144,6 +144,7 @@ OperationResult F22::save() const {
 void F22::fromRow(const Row& r) {
     taskId               = rowGet(r,"task_id");
     releaseWorkflowId       = rowGet(r,"release_workflow_id");
+    wfLocked                = (rowGet(r,"wf_locked") == "1");
     regNumber            = RegNumber::fromString(rowGet(r,"reg_number"));
     projectId            = rowGet(r,"project_id");
     parentTaskId         = rowGet(r,"parent_task_id");
@@ -203,6 +204,10 @@ OperationResult F22::update() {
     if (isReleased()) {
         LOG_WARN("[F22] update() verweigert: Aufgabe ist released — " + taskId);
         return OperationResult::ENTITY_RELEASED;
+    }
+    if (wfLocked) {
+        LOG_WARN("[F22] update() verweigert: Freigabe-Workflow aktiv — " + taskId);
+        return OperationResult::ENTITY_LOCKED;
     } updatedAt = nowIso(); return save(); }
 
 std::shared_ptr<F22> F22::loadById(const std::string& id) {

@@ -110,7 +110,9 @@ public:
     // ── CRUD ──────────────────────────────────────────────────
     bool save()   const;
     bool update() const;  ///< save with updatedAt=now
-    bool complete();      ///< Sets status=done and completedDate=now
+    bool complete();  ///< Sets status=DONE,      completedDate=now, saves
+    bool reject();    ///< Sets status=REJECTED, completedDate=now, saves
+    bool skip();      ///< Sets status=SKIPPED,  completedDate=now, saves
     bool remove() const;
 
     // ── Factory ───────────────────────────────────────────────

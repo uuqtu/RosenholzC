@@ -188,6 +188,10 @@ bool F16::load(const std::string& id) {
 }
 
 OperationResult F16::update() {
+    if (wfLocked) {
+        LOG_WARN("[F16] update() refused: wf_locked — F77W active for " + projectId);
+        return OperationResult::ENTITY_LOCKED;
+    }
     updatedAt = nowIso();
     return save();
 }

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS f18_operations (
     task_id             TEXT NOT NULL,  -- → F22 (required: F18 always belongs to a task)
     parent_operation_id   TEXT,           -- → F18 (CO only, → ChangeRequest)
     release_workflow_id    TEXT,           -- WFI ID of controlling Main Workflow
+    wf_locked      INTEGER DEFAULT 0, -- True while F77W is ACTIVE (mutations blocked)
     title               TEXT NOT NULL,
     description         TEXT,
     status              TEXT NOT NULL DEFAULT 'draft',

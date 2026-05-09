@@ -61,7 +61,17 @@ std::vector<Migration> MigrationEngine::registry() {
     // Add future deltas here as the schema evolves beyond v4.
     //
     // v7: fresh start — no migration from v6 possible, no deltas.
-    return {}; // end registry
+    return {
+        // ── v5: wf_locked flag ────────────────────────────────────
+        { "f16", 5,
+          "ALTER TABLE projects ADD COLUMN wf_locked INTEGER DEFAULT 0;" },
+        { "f22", 5,
+          "ALTER TABLE tasks ADD COLUMN wf_locked INTEGER DEFAULT 0;" },
+        { "f18", 5,
+          "ALTER TABLE f18_operations ADD COLUMN wf_locked INTEGER DEFAULT 0;" },
+        { "akt", 8,
+          "ALTER TABLE folders ADD COLUMN wf_locked INTEGER DEFAULT 0;" },
+    }; // end registry
 }
 
 bool MigrationEngine::ensureSchemaVersionTable(Database* db, const std::string& dbName) {
