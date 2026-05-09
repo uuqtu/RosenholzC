@@ -133,12 +133,17 @@ set(APP_SOURCES
 )
 
 # ── Shared library: core + model + workflow ───────────────────
+set(AUTH_SOURCES
+    src/auth/Auth.cpp
+)
+
 add_library(rosenholz_lib STATIC
     ${CORE_SOURCES}
     ${MODEL_SOURCES}
     ${WORKFLOW_SOURCES}
     ${MFS_SOURCES}
     ${APP_SOURCES}
+    ${AUTH_SOURCES}
 )
 add_dependencies(rosenholz_lib generate_schemas)
 
@@ -212,7 +217,9 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(Catch2)
-include(CTest)
+# Use enable_testing() instead of include(CTest) to avoid CDash dashboard targets
+# (Continuous/Nightly/Experimental) which require CTEST_UPDATE_COMMAND.
+enable_testing()
 include(Catch)
 
 file(GLOB_RECURSE UNIT_TEST_SOURCES "tests/unit/**/*.cpp" "tests/unit/*.cpp")

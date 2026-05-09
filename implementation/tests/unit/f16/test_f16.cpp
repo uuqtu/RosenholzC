@@ -166,8 +166,8 @@ TEST_CASE("F16: registration number format and SQL columns", "[f16][regnumber][s
     std::string s = p->regNumber.toString();
     CHECK(s.substr(0,3) == "XV/");
     CHECK(s.substr(3,3) == "F16");
-    CHECK(s.substr(7,4) == "0001");
-    CHECK(s.size()      == 14);  // XV/F16/0001/26
+    CHECK(s.substr(7,6) == "000001");
+    CHECK(s.size()      == 16);  // XV/F16/0001/26
 
     CHECK(colValue("f16","projects","reg_number","project_id='"+p->projectId+"'") == s);
     CHECK(colValue("f16","projects","reg_dept","project_id='"+p->projectId+"'") == "F16");

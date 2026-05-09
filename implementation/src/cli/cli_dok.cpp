@@ -12,6 +12,7 @@
 //   attachDocumentDialog(proj, task) — attach-or-create dialog
 // ============================================================
 #include "cli_common.h"
+#include "../auth/Auth.h"
 #include "../core/OperationResult.h"
 #include "../model/akt/FolderObject.h"
 #include "../core/Config.h"
@@ -244,7 +245,7 @@ void cmdAkt(const std::vector<std::string>& args) {
     // Try as document ID → open documentMenu
     auto doc = Folder::loadById(args[0]);
     if (doc) {
-        documentMenu(doc);
+        documentMenu(doc, "");
         return;
     }
 
@@ -1001,7 +1002,8 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
     return true;
 }
 
-void documentMenu(std::shared_ptr<Folder> doc) {
+void documentMenu(std::shared_ptr<Folder> doc,
+                  const std::string& initialCmd) {
     // Push AKT context onto navigation stack.
     // This makes ". -e", ". -r" etc. work for the document.
     Rosenholz::NavigationStack::instance().push({
@@ -1040,9 +1042,11 @@ void documentMenu(std::shared_ptr<Folder> doc) {
                   << "  ..         Zurück\n\n";
     };
 
+    bool firstIter = !initialCmd.empty();
     while (true) {
         printHeader();
-        std::string line = readLine("> ");
+        std::string line = firstIter ? initialCmd : readLine("> ");
+        firstIter = false;
         if (line.empty() || line == ".." || line == "0") break;
 
         std::istringstream iss(line);
@@ -1099,7 +1103,10 @@ void documentMenu(std::shared_ptr<Folder> doc) {
                 std::string sub2 = (args.size() > 1) ? args[1] : "";
                 if (sub2 == "-n") {
                     auto wf = Rosenholz::F77Engine::startDefault("akt", doc->folderId);
-                    if (wf) { printOk("Workflow gestartet: " + wf->workflowId); autoMFS(); }
+                    if (wf) {
+                        Rosenholz::F77Engine::tick(*wf);
+                        printOk("Workflow gestartet: " + wf->workflowId); autoMFS();
+                    }
                     else    printErr("Workflow konnte nicht gestartet werden.");
                 } else if (sub2 == "-d") {
                     auto wfs = Rosenholz::F77W::loadForEntity("akt", doc->folderId);
@@ -1110,7 +1117,7 @@ void documentMenu(std::shared_ptr<Folder> doc) {
                                   << std::string(Rosenholz::toString(w->status)) << "\n";
                 }
 
-            } else if (sub == "-del" && Rosenholz::Config::instance().admin().enabled) {
+            } else if (sub == "-del" && Rosenholz::AuthSession::instance().isAdmin()) {
                 dokHandleDelete(ctx);
                 if (doc->folderId.empty()) break;  // was deleted
 

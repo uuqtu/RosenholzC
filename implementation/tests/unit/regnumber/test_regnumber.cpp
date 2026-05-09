@@ -12,8 +12,8 @@ TEST_CASE("RegNumber: format XV/F16/0001/YY", "[regnumber]") {
     CHECK(s.substr(0,3) == "XV/");
     CHECK(s.substr(3,3) == "F16");
     CHECK(s[6]          == '/');
-    CHECK(s.substr(7,4) == "0001");
-    CHECK(s[11]         == '/');
+    CHECK(s.substr(7,6) == "000001");
+    CHECK(s[13]         == '/');
 }
 
 TEST_CASE("RegNumber: sequence increments per dept", "[regnumber]") {

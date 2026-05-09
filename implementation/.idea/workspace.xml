@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="BackendCodeEditorMiscSettings">
-    <option name="/Default/Environment/Hierarchy/GeneratedFilesCacheKey/Timestamp/@EntryValue" value="9" type="long" />
+    <option name="/Default/Environment/Hierarchy/GeneratedFilesCacheKey/Timestamp/@EntryValue" value="5" type="long" />
     <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
   </component>
   <component name="CMakePresetLoader">{
@@ -61,33 +61,236 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/query/cache-v2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/query/cmakeFiles-v1" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/query/codemodel-v2" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/query/toolchains-v1" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/cache-v2-fa7187a325596d45fd27.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/cmakeFiles-v1-1bb4d67a532e635a6350.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/codemodel-v2-c5dd0da83a404ed5a903.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/directory-.-Debug-0f3736804d0b35898d65.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/directory-_deps.catch2-build-Debug-57a2e38f1b2a55b00362.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/directory-_deps.catch2-build.src-Debug-43b93d255b71d7ac2efd.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/directory-_deps.nlohmann_json-build-Debug-c2199c334631578a77c0.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/index-2026-05-09T19-01-30-0276.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/target-Catch2-Debug-c6f06e08a2a4710d3d10.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/target-Catch2WithMain-Debug-a7bc7e461b98599e0653.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/target-generate_schemas-Debug-da86b89e2c5d0e85a6f6.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/target-rosenholz_cli-Debug-6bb8afa3ac4a2aadfe78.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/target-rosenholz_lib-Debug-d905005f44d42c82dc93.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/target-rosenholz_unit-Debug-9ba59b1ecbbac3e9ff0c.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.cmake/api/v1/reply/toolchains-v1-d37bae743f2a6f6c34bc.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.ninja_deps" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/.ninja_log" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeCache.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/4.1.2/CMakeCXXCompiler.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/4.1.2/CMakeDetermineCompilerABI_CXX.bin" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/4.1.2/CMakeSystem.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/4.1.2/CompilerIdCXX/CMakeCXXCompilerId.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/4.1.2/CompilerIdCXX/a.out" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/CMakeConfigureLog.yaml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/InstallScripts.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/TargetDirectories.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/clion-Debug-log.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/clion-environment.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/cmake.check_cache" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/BackupManager.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/Config.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/Database.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/FileOps.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/Logger.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/Migration.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/RegNumber.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/core/Stats.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/model/f16/F16.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rosenholz_lib.dir/src/model/person/Person.cpp.o" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/rules.ninja" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CTestTestfile.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/Testing/Temporary/LastTest.log" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-build/cmake_install.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-build/generated-includes/catch2/catch_user_config.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-build/src/cmake_install.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-src" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/.ninja_log" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeCache.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/4.1.2/CMakeSystem.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/CMakeConfigureLog.yaml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/InstallScripts.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/TargetDirectories.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/catch2-populate-complete" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/catch2-populate.dir/Labels.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/catch2-populate.dir/Labels.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/cmake.check_cache" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeFiles/rules.ninja" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/CMakeLists.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/build.ninja" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-build" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-configure" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-done" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-download" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-gitclone-lastrun.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-gitinfo.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-install" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-mkdir" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-patch" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-patch-info.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-test" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/src/catch2-populate-stamp/catch2-populate-update-info.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/tmp/catch2-populate-cfgcmd.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/tmp/catch2-populate-gitclone.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/tmp/catch2-populate-gitupdate.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/catch2-populate-prefix/tmp/catch2-populate-mkdirs.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/catch2-subbuild/cmake_install.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-build/cmake_install.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-build/nlohmann_json.pc" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-build/nlohmann_jsonConfig.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-build/nlohmann_jsonConfigVersion.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/CMakeLists.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/LICENSE.MIT" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/cmake/config.cmake.in" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/cmake/nlohmann_jsonConfigVersion.cmake.in" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/cmake/pkg-config.pc.in" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/adl_serializer.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/byte_container_with_subtype.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/abi_macros.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/conversions/from_json.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/conversions/to_chars.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/conversions/to_json.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/exceptions.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/hash.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/input/binary_reader.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/input/input_adapters.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/input/json_sax.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/input/lexer.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/input/parser.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/input/position_t.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/iterators/internal_iterator.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/iterators/iter_impl.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/iterators/iteration_proxy.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/iterators/iterator_traits.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/iterators/json_reverse_iterator.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/iterators/primitive_iterator.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/json_custom_base_class.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/json_pointer.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/json_ref.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/macro_scope.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/macro_unscope.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/call_std/begin.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/call_std/end.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/cpp_future.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/detected.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/identity_tag.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/is_sax.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/std_fs.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/type_traits.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/meta/void_t.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/output/binary_writer.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/output/output_adapters.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/output/serializer.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/string_concat.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/string_escape.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/detail/value_t.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/json.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/json_fwd.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/ordered_map.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/thirdparty/hedley/hedley.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/include/nlohmann/thirdparty/hedley/hedley_undef.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/nlohmann_json.natvis" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/single_include/nlohmann/json.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-src/single_include/nlohmann/json_fwd.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/.ninja_log" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeCache.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/4.1.2/CMakeSystem.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/CMakeConfigureLog.yaml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/InstallScripts.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/TargetDirectories.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/cmake.check_cache" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/nlohmann_json-populate-complete" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/nlohmann_json-populate.dir/Labels.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/nlohmann_json-populate.dir/Labels.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeFiles/rules.ninja" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/CMakeLists.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/build.ninja" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/cmake_install.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/json.tar.xz" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/download-nlohmann_json-populate.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/extract-nlohmann_json-populate.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-build" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-configure" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-done" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-download" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-install" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-mkdir" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-patch" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-patch-info.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-test" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-update" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-update-info.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/nlohmann_json-populate-urlinfo.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/src/nlohmann_json-populate-stamp/verify-nlohmann_json-populate.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/tmp/nlohmann_json-populate-cfgcmd.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/nlohmann_json-populate-prefix/tmp/nlohmann_json-populate-mkdirs.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/build.ninja" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/cmake_install.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/generated/SchemaFiles.h" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/rosenholz_unit-b12d07c_include.cmake" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/sql/users.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/auth/Auth.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/auth/Auth.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/akt.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/akt.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/f16.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/f16.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/f18.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/f18.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/f22.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/f22.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sql/core.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/core.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/AppController.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/AppController.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_dok.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_dok.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f16.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_f18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f18.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_f77.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f77.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f22.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_nav.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_nav.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_registry.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_registry.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_utils.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_utils.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_sys.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_sys.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_tasks.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_tasks.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/main_cli.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/main_cli.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/core/Migration.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/core/Migration.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/Migration.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/RegNumber.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/RegNumber.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/model/akt/Folder.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/akt/Folder.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/model/akt/Folder.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/akt/Folder.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/F16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/F16.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f16/F16.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f16/F16.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Operation.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18OperationStep.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18OperationStep.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18OperationStep.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18OperationStep.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/akt/FolderObject.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/akt/FolderObject.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/Document.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/Document.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/dok/DocumentObject.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f16/ProjectF16.h" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/model/f22/F22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f22/F22.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f22/F22.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f22/F22.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f22/TaskF22.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/model/f22/TaskF22.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/ArchiveStore.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/ArchiveStore.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/DocumentRevision.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/repository/DocumentRevision.h" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/TestFixtures.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/TestFramework.h" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/main_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_core.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_model.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_workflow.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/core/test_core.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/core/test_core.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/f16/test_f16.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/f16/test_f16.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/f22/test_f22.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/f22/test_f22.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/f77/test_f77.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/f77/test_f77.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/legacy/akte_old_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/legacy/core_old_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/legacy/f16_old_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/legacy/f18_old_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/legacy/f22_old_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/legacy/lifecycle_old_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/legacy/person_old_test.cpp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/regnumber/test_regnumber.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/regnumber/test_regnumber.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -121,7 +324,7 @@
   </component>
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
-    &quot;CMake Application.rosenholz_cli.executor&quot;: &quot;Debug&quot;,
+    &quot;CMake Application.rosenholz_cli.executor&quot;: &quot;Run&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.RadMigrateCodeStyle&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
@@ -146,6 +349,11 @@
   }
 }</component>
   <component name="RunManager" selected="CMake Application.rosenholz_cli">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="Catch2" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="Catch2" CONFIG_NAME="Debug">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -296,11 +504,6 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
-      </method>
-    </configuration>
     <configuration name="generate_schemas" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Rosenholz" TARGET_NAME="generate_schemas" CONFIG_NAME="Debug">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -415,7 +618,10 @@
       <workItem from="1778186284357" duration="1720000" />
       <workItem from="1778188037397" duration="735000" />
       <workItem from="1778189814494" duration="6636000" />
-      <workItem from="1778345447433" duration="56000" />
+      <workItem from="1778345447433" duration="2045000" />
+      <workItem from="1778348188026" duration="1559000" />
+      <workItem from="1778349854165" duration="2039000" />
+      <workItem from="1778351962990" duration="5255000" />
     </task>
     <servers />
   </component>

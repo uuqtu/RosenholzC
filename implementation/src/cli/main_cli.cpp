@@ -12,6 +12,7 @@
 //   cli_sys.cpp  cli_comm.cpp cli_utils.cpp
 // ============================================================
 #include "cli_common.h"
+#include "../auth/Auth.h"
 #include "cli_registry.h"
 #include "../app/AppController.h"
 #include "../core/Config.h"
@@ -122,6 +123,7 @@ static void dispatch(const std::string& cmd,
 //   cli_sys.cpp  cli_comm.cpp cli_utils.cpp
 // ============================================================
 #include "cli_common.h"
+#include "../auth/Auth.h"
 #include "cli_registry.h"
 #include "../app/AppController.h"
 #include "../core/Config.h"

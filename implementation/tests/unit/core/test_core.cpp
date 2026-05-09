@@ -90,11 +90,11 @@ TEST_CASE("Core/RegNumber: format XV/DEPT/NNNN/YY", "[core][regnumber]") {
     TempDB db("core_rn_fmt");
     auto rn = RegNumberGenerator::next("F16");
     std::string s = rn.toString();
-    CHECK(s.size()         == 14);
+    CHECK(s.size()         == 16);
     CHECK(s.substr(0, 3)   == "XV/");
     CHECK(s.substr(3, 3)   == "F16");
     CHECK(s.substr(6, 1)   == "/");
-    CHECK(s.substr(11, 1)  == "/");
+    CHECK(s.substr(13, 1)  == "/");
     CHECK(rn.isValid());
 }
 
@@ -196,7 +196,9 @@ TEST_CASE("Core/MFS: writeProject creates flat .txt file for F16", "[core][mfs][
     CHECK(ok);
 
     std::string sane  = sanitiseRegNr(proj->regNumber.toString());
-    std::string fpath = FileOps::joinPath(FileOps::joinPath(mfsRoot, "F16"), sane + ".txt");
+    std::string yearStr = proj->regNumber.toString().substr(proj->regNumber.toString().rfind('/')+1);
+    std::string fpath = FileOps::joinPath(
+        FileOps::joinPath(FileOps::joinPath(mfsRoot, "F16"), yearStr), sane + ".txt");
     CHECK(FileOps::fileExists(fpath));
 
     // File must reference the project ID:

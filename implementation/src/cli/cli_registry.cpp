@@ -10,6 +10,7 @@
 // ============================================================
 #include "cli_registry.h"
 #include "cli_common.h"
+#include "../auth/Auth.h"
 #include "../model/f18/F18Operation.h"
 #include "../model/NavigationContext.h"
 #include <algorithm>
@@ -152,12 +153,34 @@ const std::vector<CliCommand>& registry() {
       ctx("f99"),  global(cmdF99) },
 
     // ── F77 Tasks ─────────────────────────────────────────────────────────────
+    { "wfl",  "-workflows", CTX_NONE,
+      "wfl / -workflows  Alle Workflows  -a aktive  -d abgeschlossene",
+      {"-a","-d"},
+      global(cmdWorkflows), global(cmdWorkflows) },
+
     { "tsk",  "-tasks", CTX_NONE,
       "tsk  offene Aufgaben  tsk -a  alle  tsk -so <q>  suchen",
       {"-a","-o","-so"},
       global(cmdTasks), global(cmdTasks) },
 
     // ── People / Org ──────────────────────────────────────────────────────────
+    { "user", "-user", CTX_NONE,
+      "user  Benutzerverwaltung (Admin)  |  user -pw  Passwort ändern",
+      {"-pw"},
+      [](const std::vector<std::string>& a) {
+          if (a.empty() || a[0] == "-mgr") {
+              Rosenholz::cliUserManager();
+          } else if (a[0] == "-pw") {
+              auto& s = Rosenholz::AuthSession::instance();
+              if (!s.isLoggedIn()) { return; }
+              std::cout << "  Neues Passwort: ";
+              std::string p; std::getline(std::cin, p);
+              if (p.empty()) return;
+              auto u = Rosenholz::RhUser::loadById(s.userId());
+              if (u) { u->setPassword(p); std::cout << "  >> Passwort geaendert.\n"; }
+          }
+      }, nullptr },
+
     { "per",  "-per",  CTX_NONE,
       "per -s <q>  Personen suchen  per -n  neu",
       {"-n","-s"},
@@ -319,7 +342,8 @@ void printContextHelp() {
                   << "  WFL: wfl / -workflows  Alle Workflows und Status  -a aktive  -d abgeschlossene\n"
                   << "  F18S:-f18s -o/-so   F18-Schritte\n"
                   << "  F99: -f99 -s/-so    Notizen suchen/Manager\n"
-                  << "  PER: -per -s <q>    Personen      -de  Diensteinheiten\n\n"
+                  << "  PER: -per -s <q>    Personen      -de  Diensteinheiten\n"
+                  << "  USR: user        Benutzerverwaltung   user -pw  Passwort aendern\n\n"
                   << "  SYS: -search <q>  Globale Suche   -status  Zählungen\n"
                   << "       -backup       Backup          -mfs  MFS aufbauen\n"
                   << "       -log <level>  debug|info|warn|error\n"
@@ -370,7 +394,7 @@ void printContextHelp() {
     case ET::AKT:
         std::cout
           << "  AKT: . -e Edit  |  . -r Rev+  |  . -hist Verlauf  |  . -rv RevWechsel\n"
-          << "  OBJ: ls Auflisten  |  . -obj Neu  |  . -co Checkout  |  . -ci Checkin\n"
+          << "  OBJ: ls  |  obj -n Neu  |  obj -s/-so Auflisten  |  . -co Checkout  |  . -ci Checkin\n"
           << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
           << "  F99: f99 <Text>\n";
         break;

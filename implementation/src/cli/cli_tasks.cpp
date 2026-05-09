@@ -6,6 +6,7 @@
 // directly without leaving this menu.
 // ============================================================
 #include "cli_common.h"
+#include "../workflow/F77Workflow.h"
 #include "../workflow/F77Task.h"
 #include "../model/f22/F22.h"
 #include "../model/akt/Folder.h"
@@ -157,6 +158,12 @@ static void executeTask(std::shared_ptr<F77Task> task) {
             std::cout << "  >> Importiert: " << obj->displayName() << "\n";
             task->complete("Datei einer Akte zugewiesen: " + targetDoc->folderId);
             std::cout << "  >> Aufgabe abgeschlossen.\n";
+
+    // Tick the parent workflow to advance state after task closure:
+    if (!task->workflowId.empty()) {
+        auto wf = Rosenholz::F77W::loadById(task->workflowId);
+        if (wf) Rosenholz::F77Engine::tick(*wf);
+    }
         } else {
             std::cout << "  >> " << opResultMessage(res) << "\n";
         }
@@ -202,6 +209,12 @@ static void executeTask(std::shared_ptr<F77Task> task) {
         std::string wfId = startWfInstanceWizard(childType, childId);
         if (!wfId.empty()) {
             task->complete("F77 gestartet: " + wfId);
+
+    // Tick the parent workflow to advance state after task closure:
+    if (!task->workflowId.empty()) {
+        auto wf = Rosenholz::F77W::loadById(task->workflowId);
+        if (wf) Rosenholz::F77Engine::tick(*wf);
+    }
             std::cout << "  >> Aufgabe abgeschlossen — F77 " << wfId << " laeuft.\n";
         }
         return;
@@ -217,6 +230,12 @@ static void executeTask(std::shared_ptr<F77Task> task) {
     if (ch == 1)      task->complete(note);
     else              task->skip(note);
     std::cout << "  >> " << task->status << ".\n";
+
+    // Tick the parent workflow to advance state after task closure:
+    if (!task->workflowId.empty()) {
+        auto wf = Rosenholz::F77W::loadById(task->workflowId);
+        if (wf) Rosenholz::F77Engine::tick(*wf);
+    }
 }
 
 // ── cmdTasks ─────────────────────────────────────────────────────────────

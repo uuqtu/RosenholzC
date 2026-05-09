@@ -580,12 +580,49 @@ OperationResult FolderObject::updateFromUrl(const std::string& url) {
     std::string downloaded = FileOps::downloadUrl(target, tmpDir);
     if (downloaded.empty()) return OperationResult::IO_ERROR;
 
-    if (!filePath.empty() && FileOps::fileExists(filePath))
-        FileOps::deleteFile(filePath);
     if (FileOps::fileExists(downloaded)) {
-        if (!filePath.empty())
-            FileOps::copyFile(downloaded, filePath);
-        FileOps::deleteFile(downloaded);
+        // Determine destination: use documents/archived/ folder, keep original filename+ext
+        std::string docDir = FileOps::joinPath(Config::instance().basePath(),
+                                               "documents");
+        FileOps::makeDirs(docDir);
+        std::string newName  = FileOps::baseName(downloaded);
+        std::string destPath = FileOps::joinPath(docDir, newName);
+
+        // If same path, nothing to move; otherwise copy to documents/:
+        if (downloaded != destPath)
+            FileOps::copyFile(downloaded, destPath, true);
+        FileOps::deleteFile(downloaded);  // clean up tmp
+
+        // Only update filePath if the extension MATCHES or filePath is empty:
+        std::string oldExt = filePath.rfind('.') != std::string::npos
+                            ? filePath.substr(filePath.rfind('.')) : "";
+        std::string newExt = destPath.rfind('.') != std::string::npos
+                            ? destPath.substr(destPath.rfind('.')) : "";
+
+        if (filePath.empty() || oldExt == newExt) {
+            // Same format or first download: replace
+            if (!filePath.empty() && filePath != destPath
+                    && FileOps::fileExists(filePath))
+                FileOps::deleteFile(filePath);
+            filePath = destPath;
+        } else {
+            // Different format (e.g. XLS vs PDF): keep BOTH.
+            // The new download IS the primary file; old path is an alternative.
+            // Store the new file as the primary filePath:
+            filePath = destPath;
+            // Note: old file is NOT deleted — it stays in the documents folder.
+        }
+
+        // Optional: generate PDF companion if the downloaded file is not a PDF
+        // and LibreOffice is available (soffice). Non-fatal if it fails.
+        if (newExt != ".pdf" && newExt != ".PDF") {
+            std::string soffice_cmd;
+            soffice_cmd = "which soffice >/dev/null 2>&1 && ";
+            soffice_cmd += "soffice --headless --convert-to pdf --outdir \"";
+            soffice_cmd += docDir + "\" \"" + destPath + "\" >/dev/null 2>&1";
+            system(soffice_cmd.c_str());
+            // PDF companion sits alongside the original — both preserved.
+        }
     }
     return update();
 }

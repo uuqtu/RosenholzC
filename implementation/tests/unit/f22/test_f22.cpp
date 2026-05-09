@@ -247,8 +247,8 @@ TEST_CASE("F22: registration number format XV/F22/NNNN/YY", "[f22][regnumber][sq
     std::string s = t->regNumber.toString();
     CHECK(s.substr(0,3) == "XV/");
     CHECK(s.substr(3,3) == "F22");
-    CHECK(s.substr(7,4) == "0001");
-    CHECK(s.size()      == 14);
+    CHECK(s.substr(7,6) == "000001");
+    CHECK(s.size()      == 16);
 
     CHECK(colValue("f22","tasks","reg_number","task_id='"+t->taskId+"'") == s);
     // f22.sql does not have separate reg_dept/reg_sequence columns:

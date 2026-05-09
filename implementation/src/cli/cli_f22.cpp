@@ -337,7 +337,7 @@ static bool f22_dok_new(std::shared_ptr<F22> t) {
         return true;
     }
     auto doc = createDocumentWizard(t->taskId, "");
-    if (doc) documentMenu(doc);
+    if (doc) documentMenu(doc, "");
     return true;
 }
 

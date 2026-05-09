@@ -27,6 +27,7 @@
 #include "../core/Config.h"
 #include <iomanip>
 #include <sstream>
+#include <set>
 
 namespace CLI {
 
@@ -496,8 +497,9 @@ void cmdCd(const std::vector<std::string>& args) {
     std::string target = args[0];
     if (target == "..") { nav.pop(); cmdLs({}); return; }
 
-    // Try each entity type:
-    {
+    // Route by ID prefix to avoid spurious WARN logs from wrong-type loads:
+    auto hasPrefix = [&](const std::string& p){ return target.find(p) != std::string::npos; };
+    if (hasPrefix("/F16/") || (!hasPrefix("/F22/") && !hasPrefix("/F18/") && !hasPrefix("/AKT/") && !hasPrefix("/F77") && !hasPrefix("/PER/"))) {
         auto p = F16::loadById(target);
         if (p) {
             nav.push({EntityType::F16, p->projectId, p->title, p->regNumber.toString()});
@@ -506,7 +508,7 @@ void cmdCd(const std::vector<std::string>& args) {
             cmdLs({}); return;
         }
     }
-    {
+    if (hasPrefix("/F22/")) {
         auto t = F22::loadById(target);
         if (t) {
             nav.push({EntityType::F22, t->taskId, t->title, t->regNumber.toString()});
@@ -515,7 +517,7 @@ void cmdCd(const std::vector<std::string>& args) {
             cmdLs({}); return;
         }
     }
-    {
+    if (hasPrefix("/F18/") && !hasPrefix("/F18S/")) {
         auto v = F18Operation::loadById(target);
         if (v) {
             nav.push({EntityType::F18, v->operationId, v->title, v->operationId});
@@ -524,7 +526,7 @@ void cmdCd(const std::vector<std::string>& args) {
             cmdLs({}); return;
         }
     }
-    {
+    if (hasPrefix("/AKT/")) {
         auto d = Folder::loadById(target);
         if (d) {
             nav.push({EntityType::AKT, d->folderId, d->title, d->folderId});
@@ -742,8 +744,8 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                 auto t = createTaskWizard(cur.id);
                 if (t) {
                     printOk("F22 angelegt: " + t->regNumber.toString() + "  " + t->title);
-                    if (yesno("  Jetzt navigieren?"))
-                        cmdCd({t->taskId});
+                    autoMFS();
+                    cmdCd({t->taskId});
                 }
             } else {
                 cmdF22({"-n"});
@@ -1011,39 +1013,47 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             return;
         }
         // -v: view/open current AKT menu
-        if (!args.empty() && (args[0] == "-v" || args[0] == "-e") && cur.type == EntityType::AKT) {
-            auto d = Folder::loadById(cur.id);
-            if (d) documentMenu(d);
-            return;
+        // All self-commands on the current AKT route through documentMenu:
+        if (!args.empty() && cur.type == EntityType::AKT) {
+            static const std::set<std::string> aktSelf =
+                {"-v","-e","-r","-hist","-rv","-obj","-co","-ci","-url"};
+            if (aktSelf.count(args[0])) {
+                auto d = Folder::loadById(cur.id);
+                std::string subcmd = args[0];
+                for (auto& a : std::vector<std::string>(args.begin()+1,args.end()))
+                    subcmd += " " + a;
+                if (d) documentMenu(d, subcmd);
+                return;
+            }
         }
-        // -obj: add object to current AKT
+        // -obj: add object to current AKT (legacy path, also in documentMenu)
         if (!args.empty() && args[0] == "-obj" && cur.type == EntityType::AKT) {
             auto d = Folder::loadById(cur.id);
-            if (d) documentMenu(d);  // documentMenu handles object addition
+            if (d) documentMenu(d, "-obj");  // documentMenu handles object addition
             return;
         }
         // -co <n>: checkout object #N
         if (!args.empty() && args[0] == "-co" && cur.type == EntityType::AKT) {
             auto d = Folder::loadById(cur.id);
-            if (d) documentMenu(d);
+            if (d) documentMenu(d, "");
             return;
         }
         // -ci: checkin
         if (!args.empty() && args[0] == "-ci" && cur.type == EntityType::AKT) {
             auto d = Folder::loadById(cur.id);
-            if (d) documentMenu(d);
+            if (d) documentMenu(d, "");
             return;
         }
         // -url: update all URLs in current AKT
         if (!args.empty() && args[0] == "-url" && cur.type == EntityType::AKT) {
             auto d = Folder::loadById(cur.id);
-            if (d) documentMenu(d);
+            if (d) documentMenu(d, "");
             return;
         }
         // -rv <n>: switch revision
         if (!args.empty() && args[0] == "-rv" && cur.type == EntityType::AKT) {
             auto d = Folder::loadById(cur.id);
-            if (d) documentMenu(d);
+            if (d) documentMenu(d, "");
             return;
         }
         // -oo / -soo: list FolderObjects in current context
@@ -1110,7 +1120,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         // No flag: open menu if in AKT context
         if (args.empty() && cur.type == EntityType::AKT) {
             auto d = Folder::loadById(cur.id);
-            if (d) documentMenu(d);
+            if (d) documentMenu(d, "");
             return;
         }
         // Context-filtered list/search:
@@ -1212,7 +1222,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             return;
         }
         auto d = Folder::loadById(cur.id);
-        if (d) documentMenu(d);  // documentMenu option 2 = revise
+        if (d) documentMenu(d, "");  // documentMenu option 2 = revise
         return;
     }
 
@@ -1280,6 +1290,29 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         auto n = Note::create(etype, cur.id, text);
         if (n) { std::cout << "  >> F99 gespeichert: " << n->noteId << "\n"; autoMFS(); }
         else   printErr("Fehler beim Speichern");
+        return;
+    }
+
+
+    // ── obj — object operations in AKT context ──────────────────────────────
+    if (cmd == "obj") {
+        if (cur.type != EntityType::AKT) {
+            printErr("obj ist nur im AKT-Kontext verfuegbar. cd <AKT-ID> zuerst.");
+            return;
+        }
+        auto d = Folder::loadById(cur.id);
+        if (!d) { printErr("AKT nicht gefunden."); return; }
+        std::string sub = args.empty() ? "" : args[0];
+        if (sub == "-n") {
+            // Re-use akt -obj handler:
+            std::vector<std::string> fwd{"-obj"};
+            cmdContextual("akt", fwd);
+        } else if (sub == "-s" || sub == "-so" || sub.empty()) {
+            // List objects of current revision:
+            cmdContextual("ls", {});
+        } else {
+            printErr("Unbekannter obj-Befehl: " + sub + "  (obj -n  obj -s  obj -so)");
+        }
         return;
     }
 

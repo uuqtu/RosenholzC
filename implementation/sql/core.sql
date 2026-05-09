@@ -107,3 +107,29 @@ CREATE TABLE IF NOT EXISTS reg_number_sequences (
     PRIMARY KEY (reg_dept, reg_year)
 );
 
+-- ── User/Role Management (v10) ──────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+    user_id      TEXT PRIMARY KEY,           -- XV/USR/000001/26
+    username     TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,             -- SHA-256 hex
+    full_name    TEXT,
+    email        TEXT,
+    is_active    INTEGER NOT NULL DEFAULT 1,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+    role_id      TEXT PRIMARY KEY,
+    role_name    TEXT NOT NULL UNIQUE,       -- 'admin', 'user'
+    description  TEXT,
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id      TEXT NOT NULL REFERENCES users(user_id),
+    role_id      TEXT NOT NULL REFERENCES roles(role_id),
+    granted_at   TEXT NOT NULL,
+    granted_by   TEXT,
+    PRIMARY KEY (user_id, role_id)
+);

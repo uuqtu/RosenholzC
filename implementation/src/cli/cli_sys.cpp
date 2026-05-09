@@ -234,7 +234,7 @@ void globalSearch(const std::string& query) {
         if (v) f18Menu(v);
     } else if (h.typeCode == "AKT") {
         auto d = Folder::loadById(h.id);
-        if (d) documentMenu(d);
+        if (d) documentMenu(d, "");
     } else if (h.typeCode == "WFI") {
         instanceMenu(h.id);
     }

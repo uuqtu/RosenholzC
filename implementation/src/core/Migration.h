@@ -27,7 +27,7 @@ namespace Rosenholz {
 // No backwards compatibility with v2/v3 databases.
 // Fresh databases start at v4 directly via SQL files.
 struct SchemaVersions {
-    static constexpr int core      = 4;  // v4 baseline
+    static constexpr int core      = 5;  // v5: users/roles tables added
     static constexpr int f16       = 5;  // v5: wf_locked flag
     static constexpr int f22       = 5;  // v5: wf_locked flag
     static constexpr int f77       = 5;  // v5: is_system + system_action added;  // v4 baseline

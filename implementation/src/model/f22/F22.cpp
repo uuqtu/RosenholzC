@@ -133,6 +133,7 @@ OperationResult F22::save() const {
                 auto allgAkte = Rosenholz::Folder::create("Allgemeine Akte " + taskId, "general", taskId, "");
                 if (opOk(allgAkte->save())) {
                     allgAkte->attachToEntity("f22", taskId);
+                    allgAkte->ensureRevision("system");  // auto-create Rev 1
                     LOG_INFO("[F22] Allgemeine Akte angelegt: " + allgAkte->folderId + " fuer " + taskId);
                 }
             }

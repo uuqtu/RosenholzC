@@ -71,6 +71,10 @@ std::vector<Migration> MigrationEngine::registry() {
           "ALTER TABLE f18_operations ADD COLUMN wf_locked INTEGER DEFAULT 0;" },
         { "akt", 8,
           "ALTER TABLE folders ADD COLUMN wf_locked INTEGER DEFAULT 0;" },
+        // ── v10: user/role tables (core.sql baseline handles fresh installs;
+        //         existing DBs need no ALTER TABLE — tables are created by
+        //         AuthSession::ensureSchema() which uses CREATE TABLE IF NOT EXISTS)
+        // No delta needed for core v5: CREATE TABLE IF NOT EXISTS is idempotent.
     }; // end registry
 }
 

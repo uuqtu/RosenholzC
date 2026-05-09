@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug/cmake_install.cmake",
+		"/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug/_deps/nlohmann_json-build/cmake_install.cmake",
+		"/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug/_deps/catch2-build/cmake_install.cmake",
+		"/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug/_deps/catch2-build/src/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

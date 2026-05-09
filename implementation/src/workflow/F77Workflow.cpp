@@ -786,10 +786,9 @@ std::shared_ptr<F77W> F77Engine::startDefault(
 
     storeWorkflowId(entityType, entityId, wf->workflowId);
 
-    // Auto-tick: if there are no pending mid-steps,
-    // the End step fires immediately.
-    tick(*wf);
-
+    // NOTE: tick() is NOT called here.
+    // startWfInstanceWizard calls tick() after adding any manual operations.
+    // Direct callers that don't use the wizard must call tick() themselves.
     return wf;
 }
 
@@ -1214,6 +1213,17 @@ bool F77Engine::checkAndComplete(F77W& wf) {
 bool F77Engine::applyTargetState(const F77W& wf) {
     if (wf.entityType == "akt") {
         auto rev = FolderRevision::currentRevision(wf.entityId);
+        if (!rev) {
+            // No revision exists yet — auto-create Rev 1 (in_work) before transitioning.
+            auto folder = Folder::loadById(wf.entityId);
+            if (folder) {
+                auto newRev = folder->revise("Initial — Freigabe-Workflow", "system");
+                if (newRev) {
+                    rev = FolderRevision::currentRevision(wf.entityId);
+                    LOG_INFO("[F77] AKT auto-created Rev 1 before state transition: " + wf.entityId);
+                }
+            }
+        }
         if (rev && FolderRevision::isTransitionAllowed(rev->revState,
              revStateFromString(entityStatusToString(wf.targetState)))) {
             rev->transitionState(revStateFromString(entityStatusToString(wf.targetState)), true);
@@ -1245,7 +1255,7 @@ bool F77Engine::applyTargetState(const F77W& wf) {
         std::vector<std::pair<std::string,std::string>> childEntities; // (entityType, entityId)
 
         if (wf.entityType == "f22") {
-            // Children: all F18 operations belonging to this F22 task
+            // Children A: all F18 operations belonging to this F22 task
             auto* f18db = DatabasePool::instance().get("f18");
             if (f18db) {
                 auto rows = f18db->query(
@@ -1260,6 +1270,28 @@ bool F77Engine::applyTargetState(const F77W& wf) {
                         childEntities.push_back({"f18", childId});
                     else if (propagateUnlock && cs == EntityStatus::LOCKED)
                         childEntities.push_back({"f18", childId});
+                }
+            }
+
+            // Children B: all AKTs (Folders) linked to this F22 via entity_folders
+            auto* aktdb = DatabasePool::instance().get("akt");
+            if (aktdb) {
+                auto rows = aktdb->query(
+                    "SELECT f.folder_id FROM folders f "
+                    "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
+                    "WHERE ef.entity_type='f22' AND ef.entity_id=?;",
+                    {BindParam::text(wf.entityId)});
+                for (auto& r : rows) {
+                    std::string childId = r.count("folder_id") ? r.at("folder_id") : "";
+                    if (childId.empty()) continue;
+                    auto rev = FolderRevision::currentRevision(childId);
+                    if (!rev) continue;
+                    bool childInWork = (rev->revState == RevState::IN_WORK);
+                    bool childLocked = (rev->revState == RevState::LOCKED);
+                    if (propagateLockOrRelease && childInWork)
+                        childEntities.push_back({"akt", childId});
+                    else if (propagateUnlock && childLocked)
+                        childEntities.push_back({"akt", childId});
                 }
             }
         } else if (wf.entityType == "f18") {
@@ -1430,7 +1462,7 @@ void F77Engine::seedDefaultTemplates() {
 std::vector<std::shared_ptr<F77W>> F77W::loadAll(int limit) {
     auto* db = wfDB(); if (!db) return {};
     auto rows = db->query(
-        "SELECT * FROM f77_workflows ORDER BY started_at DESC LIMIT ?;",
+        "SELECT * FROM f77_workflows ORDER BY created_at DESC LIMIT ?;",
         {BindParam::int64(limit)});
     std::vector<std::shared_ptr<F77W>> result;
     for (auto& r : rows) {

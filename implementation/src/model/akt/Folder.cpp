@@ -584,6 +584,15 @@ void Folder::ensureReleaseWorkflow() {
 // The sole entry point for creating new document revisions.
 // All other code paths that used to call createRevision have
 // been consolidated here.
+// Ensure at least one revision exists (creates Rev 1 if none)
+std::shared_ptr<FolderRevision> Folder::ensureRevision(
+    const std::string& createdBy)
+{
+    if (FolderRevision::latestRevNumber(folderId) > 0)
+        return FolderRevision::currentRevision(folderId);  // already exists
+    return revise("Initial — angelegt", createdBy.empty() ? authorId : createdBy);
+}
+
 std::shared_ptr<FolderRevision> Folder::revise(
     const std::string& changeNote,
     const std::string& createdBy)

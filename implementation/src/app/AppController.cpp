@@ -1,6 +1,7 @@
 // AppController.cpp
 #include "AppController.h"
 #include "../core/Config.h"
+#include "../auth/Auth.h"
 #include "../core/Logger.h"
 #include "../core/Database.h"
 #include "../core/FileOps.h"

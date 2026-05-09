@@ -355,7 +355,7 @@ static bool f16_dok_new(std::shared_ptr<F16> p) {
         return true;
     }
     auto doc = createDocumentWizardGuided();
-    if (doc) documentMenu(doc);
+    if (doc) documentMenu(doc, "");
     return true;
 }
 

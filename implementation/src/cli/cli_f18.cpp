@@ -315,7 +315,7 @@ void stepMenu(Rosenholz::F18OperationStep& step,
             auto docs = Folder::loadForEntity("f18s", step.stepId);
             if (sub == "-n") {
                 auto doc = createDocumentWizard("", step.stepId);
-                if (doc) { documentMenu(doc); autoMFS(); }
+                if (doc) { documentMenu(doc, ""); autoMFS(); }
             } else if (sub == "-o") {
                 if (docs.empty()) { std::cout << "  (keine Akten)\n"; continue; }
                 int n = 1;
@@ -557,7 +557,7 @@ static bool f18_dok_open(std::shared_ptr<F18Operation> v) {
 
 static bool f18_dok_new(std::shared_ptr<F18Operation> v) {
     auto doc = createDocumentWizard("", v->operationId);
-    if (doc) documentMenu(doc);
+    if (doc) documentMenu(doc, "");
     return true;
 }
 
@@ -659,8 +659,8 @@ void cmdF18s(const std::vector<std::string>& args,
         bool freeStep = yesno("  Freier Schritt (kein Vorgaenger)?");
         auto step = v->addStep(title, sts[st-1], ass, freeStep, start, end);
         printOk("F18S hinzugefuegt.");
-        // Auto-navigate into new F18S step:
-        if (step) cmdCd({step->stepId});
+        // Auto-open the new step's context menu:
+        if (step) stepMenu(*step, v->steps);
         return;
     }
 

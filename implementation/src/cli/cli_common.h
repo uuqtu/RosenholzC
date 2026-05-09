@@ -194,7 +194,8 @@ void cmdAkt(const std::vector<std::string>& args);
 void printDocument(const Rosenholz::Folder& d);
 void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Folder>>& docs,
                    const std::string& title = "AKTEN");
-void documentMenu(std::shared_ptr<Rosenholz::Folder> doc);
+void documentMenu(std::shared_ptr<Rosenholz::Folder> doc,
+                  const std::string& initialCmd = "");
 
 // Create document with known parent.
 std::shared_ptr<Rosenholz::Folder> createDocumentWizard(

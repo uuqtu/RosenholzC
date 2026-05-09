@@ -213,6 +213,7 @@ public:
     //   changeNote : description of why this revision was created
     //   createdBy  : Person-ID (optional)
     // Returns: new revision, or nullptr if rules prevent creation.
+    std::shared_ptr<FolderRevision> ensureRevision(const std::string& createdBy = "");
     std::shared_ptr<FolderRevision> revise(
         const std::string& changeNote = "",
         const std::string& createdBy  = "");

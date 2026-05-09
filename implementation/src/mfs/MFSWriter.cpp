@@ -53,6 +53,7 @@ static std::string fval(const std::string& v) {
   #endif
 #include <sstream>
 #include <map>
+#include <set>
 
 namespace Rosenholz {
 
@@ -217,6 +218,19 @@ bool MFSWriter::writeTask(const F22& t, const std::string& mfsRoot) {
     if (!t.assigneeId.empty())
         oss << "  BEARBEITER-REF  : " << t.assigneeId
             << "  → owner_key.txt\n";
+    // List all F18 operations belonging to this F22:
+    auto f18ops = F18Operation::loadForTask(t.taskId);
+    if (!f18ops.empty()) {
+        oss << "\nF18-VORGAENGE (" << f18ops.size() << "):\n";
+        for (auto& v : f18ops) {
+            oss << "  " << v->operationId
+                << "  [" << std::string(entityStatusToString(v->status)) << "]"
+                << "  " << v->title.substr(0, 50)
+                << "  → mfs/F18/" << yearFromRegNr(v->operationId)
+                << "/" << sanitiseRegNr(v->operationId) << "/\n";
+        }
+    }
+
     oss << "\nKLARNAMENZUORDNUNG → owner_key.txt\n";
 
     ownerOnlyWrite(cardPath, oss.str());
@@ -291,6 +305,8 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
     std::string f18sRoot = FileOps::joinPath(mfsRoot, "F18S");
     FileOps::makeDirs(f18sRoot);
     for (auto& s : steps) {
+        // Init and End steps are synthetic — no standalone MFS folder:
+        if (s.isInitialize || s.isFinal) continue;
         // mfs/F18S/<YY>/<sane-stepId>/
         std::string stepYear = yearFromRegNr(s.stepId);
         std::string stepDir  = FileOps::joinPath(
@@ -583,17 +599,33 @@ bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
             for (auto& v : f18s) { ok &= writeF18(*v, mfsRoot); ++nF18; }
         }
 
-        // Documents filed under their parent F22 task
-        for (auto& t : tasks) {
-            auto tDocs = Folder::loadForEntity("f22", t->taskId);
-            for (auto& d : tDocs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
-        }
-        // Documents filed under F18 operations
-        for (auto& t : F22::loadForProject(p->projectId)) {
-            auto f18s = F18Operation::loadForTask(t->taskId);
-            for (auto& v : f18s) {
-                auto fDocs = Folder::loadForEntity("f18", v->operationId);
-                for (auto& d : fDocs) { ok &= writeDocument(*d, mfsRoot); ++nDok; }
+        // Documents: collect all AKTs linked to this project's F22s and F18s,
+        // deduplicate by folderId so no AKT is written twice.
+        {
+            std::set<std::string> writtenDocs;
+            auto writeDedupDoc = [&](std::shared_ptr<Folder> d) {
+                if (writtenDocs.count(d->folderId)) return;
+                writtenDocs.insert(d->folderId);
+                ok &= writeDocument(*d, mfsRoot);
+                ++nDok;
+            };
+            for (auto& t : tasks) {
+                for (auto& d : Folder::loadForEntity("f22", t->taskId))
+                    writeDedupDoc(d);
+            }
+            for (auto& t : tasks) {
+                auto f18s = F18Operation::loadForTask(t->taskId);
+                for (auto& v : f18s) {
+                    for (auto& d : Folder::loadForEntity("f18", v->operationId))
+                        writeDedupDoc(d);
+                    // Also F18S step Akten:
+                    v->loadSteps();
+                    for (auto& s : v->steps) {
+                        if (s.isInitialize || s.isFinal) continue;
+                        for (auto& d : Folder::loadForEntity("f18s", s.stepId))
+                            writeDedupDoc(d);
+                    }
+                }
             }
         }
     }
