@@ -1,5 +1,31 @@
 // ============================================================
+// F77Workflow.cpp  —  Workflow Engine Implementation
+//
+// SECTION MAP (search for ── <name>):
+//   ── Template CRUD      F77W_Template / F77W_TemplateStep CRUD
+//   ── Operation CRUD     F77W_Operation (step instance) logic
+//   ── Workflow CRUD      F77W (instance) CRUD + fromRow
+//   ── Entity context     entityContext() — table+column map per type
+//   ── wfLocked           propagateWfLockedToChildren, storeWorkflowId
+//   ── Attach/Detach      attachWorkflow, detachWorkflow, cancelWorkflow
+//   ── defaultOperations  step chain config per entity type
+//   ── startFromTemplate  create workflow from template
+//   ── startDefault       create minimal workflow
+//   ── MFS helpers        pruneMFSRevisions
+//   ── executeSystemStep  CHECK_CHILDREN, SCAN, COMMIT handlers
+//   ── tick               drive workflow forward
+//   ── fireStep           admin: manually fire a step
+//   ── checkAndComplete   fire End when all steps done
+//   ── applyTargetState   set entity status when WF completes
+//   ── canRelease/lockAll capability queries
+//   ── seedDefaultTemplates bootstrap
+//   ── handleTaskAction   execute task's encoded action
+//   ── checkPropagationComplete re-apply after all child tasks done
+// ============================================================
+
+// ============================================================
 #include "F77Workflow.h"
+#include "../model/Guard.h"
 #include "F77Task.h"
 #include "../core/FileOps.h"
 #include "../model/akt/FolderObject.h"
@@ -514,6 +540,34 @@ static EntityCtx entityContext(const std::string& entityType) {
 
 
 
+/// Set wf_locked=1 on all direct child entities (cascading freeze).
+static void propagateWfLockedToChildren(const std::string& entityType,
+                                         const std::string& entityId,
+                                         int locked) {
+    if (entityType == "f22") {
+        // Freeze F18 children:
+        auto* f18db = DatabasePool::instance().get("f18");
+        if (f18db) f18db->exec(
+            "UPDATE f18_operations SET wf_locked=?, updated_at=? WHERE task_id=?;",
+            {BindParam::int64(locked), BindParam::text(nowIso()), BindParam::text(entityId)});
+        // Freeze AKT children:
+        auto* aktdb = DatabasePool::instance().get("akt");
+        if (aktdb) aktdb->exec(
+            "UPDATE folders SET wf_locked=?, updated_at=? "
+            "WHERE folder_id IN (SELECT folder_id FROM entity_folders "
+            "WHERE entity_type='f22' AND entity_id=?);",
+            {BindParam::int64(locked), BindParam::text(nowIso()), BindParam::text(entityId)});
+    } else if (entityType == "f18") {
+        // Freeze AKT children:
+        auto* aktdb = DatabasePool::instance().get("akt");
+        if (aktdb) aktdb->exec(
+            "UPDATE folders SET wf_locked=?, updated_at=? "
+            "WHERE folder_id IN (SELECT folder_id FROM entity_folders "
+            "WHERE entity_type='f18' AND entity_id=?);",
+            {BindParam::int64(locked), BindParam::text(nowIso()), BindParam::text(entityId)});
+    }
+}
+
 static void storeWorkflowId(const std::string& entityType,
                               const std::string& entityId,
                               const std::string& workflowId) {
@@ -522,6 +576,8 @@ static void storeWorkflowId(const std::string& entityType,
     std::string sql = std::string("UPDATE ") + ctx.table +
                       " SET " + ctx.wfIdCol + "=?, wf_locked=1, updated_at=? WHERE " + ctx.idCol + "=?;";
     ctx.db->exec(sql, { BindParam::text(workflowId), BindParam::text(nowIso()), BindParam::text(entityId) });
+    propagateWfLockedToChildren(entityType, entityId, 1);
+    LOG_INFO("[F77] wfLocked=1 propagated to children of " + entityType + "/" + entityId);
 }
 
 // ── Public Engine methods: attach / detach workflow ID on entity ──────────
@@ -547,6 +603,8 @@ void F77Engine::detachWorkflow(const std::string& entityType,
     std::string sql = std::string("UPDATE ") + ctx.table +
                       " SET " + ctx.wfIdCol + "=NULL, wf_locked=0, updated_at=? WHERE " + ctx.idCol + "=?;";
     ctx.db->exec(sql, { BindParam::text(nowIso()), BindParam::text(entityId) });
+    propagateWfLockedToChildren(entityType, entityId, 0);
+    LOG_INFO("[F77] wfLocked=0 cleared from children of " + entityType + "/" + entityId);
 }
 
 
@@ -563,16 +621,18 @@ void F77Engine::detachWorkflow(const std::string& entityType,
 std::vector<F77Engine::OperationSpec> F77Engine::defaultOperations(
     const std::string& entityType)
 {
-    if (entityType == "f16") {
-        // F16 owns no Akten directly — just commit.
+    if (entityType == "akt") {
+        // AKT has no child entities — just scan + commit.
         return {
-            {"DB schreiben", true, SystemAction::COMMIT_DB_OBJECTS, true},
+            {"Objektverwaltung", true, SystemAction::SCAN_UNREGISTERED_FILES, true},
+            {"DB schreiben",     true, SystemAction::COMMIT_DB_OBJECTS,       true},
         };
     }
-    // f22, akt, f18 — scan for unregistered files, then commit.
+    // F16, F22, F18: check children first, then scan for files, then commit.
     return {
-        {"Objektverwaltung", true, SystemAction::SCAN_UNREGISTERED_FILES, true},
-        {"DB schreiben",     true, SystemAction::COMMIT_DB_OBJECTS,       true},
+        {"Kindelemente",     true, SystemAction::CHECK_CHILDREN,           true},
+        {"Objektverwaltung", true, SystemAction::SCAN_UNREGISTERED_FILES,  true},
+        {"DB schreiben",     true, SystemAction::COMMIT_DB_OBJECTS,        true},
     };
 }
 
@@ -1211,147 +1271,43 @@ bool F77Engine::checkAndComplete(F77W& wf) {
 }
 
 bool F77Engine::applyTargetState(const F77W& wf) {
+    // ── AKT: transition via FolderRevision state machine ─────────────────────
     if (wf.entityType == "akt") {
         auto rev = FolderRevision::currentRevision(wf.entityId);
         if (!rev) {
-            // No revision exists yet — auto-create Rev 1 (in_work) before transitioning.
             auto folder = Folder::loadById(wf.entityId);
             if (folder) {
                 auto newRev = folder->revise("Initial — Freigabe-Workflow", "system");
-                if (newRev) {
-                    rev = FolderRevision::currentRevision(wf.entityId);
-                    LOG_INFO("[F77] AKT auto-created Rev 1 before state transition: " + wf.entityId);
-                }
+                if (newRev) rev = FolderRevision::currentRevision(wf.entityId);
             }
         }
         if (rev && FolderRevision::isTransitionAllowed(rev->revState,
              revStateFromString(entityStatusToString(wf.targetState)))) {
             rev->transitionState(revStateFromString(entityStatusToString(wf.targetState)), true);
-            LOG_INFO("[F77] AKT revision transitioned: "+wf.entityId+" → "+std::string(entityStatusToString(wf.targetState)));
+            LOG_INFO("[F77] AKT revision transitioned: " + wf.entityId
+                     + " → " + std::string(entityStatusToString(wf.targetState)));
         }
         return true;
     }
 
-    // F22 / F18: update status directly via EntityCtx
+    // ── F22 / F18 / F16: directly set the target status ──────────────────────
+    // Child-handling is done by the CHECK_CHILDREN system step BEFORE this runs.
+    // By the time applyTargetState fires, all children are already in target state.
     auto actx = entityContext(wf.entityType);
-    if (actx.valid())
+    if (actx.valid()) {
         actx.db->exec(
-            "UPDATE " + actx.table + " SET status=?, updated_at=? WHERE " + actx.idCol + "=?;",
-            {BindParam::text(entityStatusToString(wf.targetState)), BindParam::text(nowIso()),
-             BindParam::text(wf.entityId)});
-    LOG_INFO("[F77] Entity status → '" + std::string(entityStatusToString(wf.targetState)) + "': "
-             + wf.entityType + "/" + wf.entityId);
-
-    // ── Propagate to child entities ────────────────────────────────────────
-    // If this entity moved to LOCKED or RELEASED, spawn F77Tasks for all
-    // child entities that are still IN_WORK so the user can drive them forward.
-    // If this entity moved to IN_WORK (unlock), spawn F77Tasks for children
-    // that are LOCKED so the user can unlock them too.
-    bool propagateLockOrRelease = (wf.targetState == EntityStatus::LOCKED ||
-                                   wf.targetState == EntityStatus::RELEASED);
-    bool propagateUnlock = (wf.targetState == EntityStatus::IN_WORK);
-
-    if (propagateLockOrRelease || propagateUnlock) {
-        std::vector<std::pair<std::string,std::string>> childEntities; // (entityType, entityId)
-
-        if (wf.entityType == "f22") {
-            // Children A: all F18 operations belonging to this F22 task
-            auto* f18db = DatabasePool::instance().get("f18");
-            if (f18db) {
-                auto rows = f18db->query(
-                    "SELECT operation_id, status FROM f18_operations WHERE task_id=?;",
-                    {BindParam::text(wf.entityId)});
-                for (auto& r : rows) {
-                    std::string childId = r.count("operation_id") ? r.at("operation_id") : "";
-                    std::string childStatus = r.count("status") ? r.at("status") : "";
-                    if (childId.empty()) continue;
-                    EntityStatus cs = entityStatusFrom(childStatus);
-                    if (propagateLockOrRelease && cs == EntityStatus::IN_WORK)
-                        childEntities.push_back({"f18", childId});
-                    else if (propagateUnlock && cs == EntityStatus::LOCKED)
-                        childEntities.push_back({"f18", childId});
-                }
-            }
-
-            // Children B: all AKTs (Folders) linked to this F22 via entity_folders
-            auto* aktdb = DatabasePool::instance().get("akt");
-            if (aktdb) {
-                auto rows = aktdb->query(
-                    "SELECT f.folder_id FROM folders f "
-                    "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
-                    "WHERE ef.entity_type='f22' AND ef.entity_id=?;",
-                    {BindParam::text(wf.entityId)});
-                for (auto& r : rows) {
-                    std::string childId = r.count("folder_id") ? r.at("folder_id") : "";
-                    if (childId.empty()) continue;
-                    auto rev = FolderRevision::currentRevision(childId);
-                    if (!rev) continue;
-                    bool childInWork = (rev->revState == RevState::IN_WORK);
-                    bool childLocked = (rev->revState == RevState::LOCKED);
-                    if (propagateLockOrRelease && childInWork)
-                        childEntities.push_back({"akt", childId});
-                    else if (propagateUnlock && childLocked)
-                        childEntities.push_back({"akt", childId});
-                }
-            }
-        } else if (wf.entityType == "f18") {
-            // Children: all AKT (Folders) attached to this F18 operation
-            auto* aktdb = DatabasePool::instance().get("akt");
-            if (aktdb) {
-                auto rows = aktdb->query(
-                    "SELECT f.folder_id FROM folders f "
-                    "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
-                    "WHERE ef.entity_type='f18' AND ef.entity_id=?;",
-                    {BindParam::text(wf.entityId)});
-                for (auto& r : rows) {
-                    std::string childId = r.count("folder_id") ? r.at("folder_id") : "";
-                    if (childId.empty()) continue;
-                    // Check folder revision state:
-                    auto rev = FolderRevision::currentRevision(childId);
-                    if (!rev) continue;
-                    bool childInWork = (rev->revState == RevState::IN_WORK);
-                    bool childLocked = (rev->revState == RevState::LOCKED);
-                    if (propagateLockOrRelease && childInWork)
-                        childEntities.push_back({"akt", childId});
-                    else if (propagateUnlock && childLocked)
-                        childEntities.push_back({"akt", childId});
-                }
-            }
-        }
-
-        // Spawn F77Tasks for each child that needs a workflow started.
-        // If propagating LOCK or RELEASE and children are IN_WORK:
-        //   → revert the parent status back to IN_WORK (blocking)
-        //   → the parent is only released once all children complete their workflows
-        if (!childEntities.empty() && propagateLockOrRelease) {
-            // Revert parent entity to IN_WORK — it must wait for children
-            auto actx2 = entityContext(wf.entityType);
-            if (actx2.valid()) {
-                actx2.db->exec(
-                    "UPDATE " + actx2.table + " SET status='in_work', updated_at=? WHERE "
-                    + actx2.idCol + "=?;",
-                    {BindParam::text(nowIso()), BindParam::text(wf.entityId)});
-                LOG_WARN("[F77] Parent " + wf.entityType + "/" + wf.entityId
-                         + " reverted to in_work — waiting for " 
-                         + std::to_string(childEntities.size()) + " child(ren)");
-            }
-        }
-
-        for (auto& [childType, childId] : childEntities) {
-            std::string action = propagateUnlock ? "start_unlock_workflow" : 
-                                 (wf.targetState == EntityStatus::LOCKED ? 
-                                  "start_lock_workflow" : "start_release_workflow");
-            std::string taskTitle = (propagateUnlock ? "Entsperren: " : 
-                                     wf.targetState == EntityStatus::LOCKED ? "Sperren: " : "Freigabe: ")
-                + childType + " " + childId
-                + " (ausgeloest durch: " + wf.entityType + "/" + wf.entityId + ")";
-            F77Task::create(wf.workflowId, "", taskTitle, childType, childId, action);
-            LOG_INFO("[F77] Propagation F77Task spawned for child " + childType + "/" + childId);
-        }
+            "UPDATE " + actx.table + " SET status=?, wf_locked=0, updated_at=? WHERE "
+            + actx.idCol + "=?;",
+            {BindParam::text(entityStatusToString(wf.targetState)),
+             BindParam::text(nowIso()), BindParam::text(wf.entityId)});
+        LOG_INFO("[F77] Entity status set to '"
+                 + std::string(entityStatusToString(wf.targetState))
+                 + "': " + wf.entityType + "/" + wf.entityId);
     }
-
     return true;
 }
+
+
 
 bool F77Engine::canRelease(const std::string& entityType, const std::string& entityId,
                               const std::string& releaseWorkflowId, int& blockerCount)
@@ -1470,4 +1426,79 @@ std::vector<std::shared_ptr<F77W>> F77W::loadAll(int limit) {
     }
     return result;
 }
+bool F77Engine::canAddManualOperation(const F77W& wf) {
+    if (wf.status != WorkflowStatus::ACTIVE) return false;
+    for (auto& s : wf.steps) if (s.isFinal && s.isComplete()) return false;
+    return true;
+}
+
+// ── F77Engine::handleTaskAction ───────────────────────────────────────────────
+// Decodes the task's target_action and executes it.
+// Previously this logic was spread across cli_tasks.cpp.
+// Centralizing here keeps CLI free of workflow decision logic.
+std::string F77Engine::handleTaskAction(F77Task& task,
+                                         EntityStatus targetState,
+                                         const std::string& actor) {
+    const std::string& action = task.targetAction;
+    const std::string& cType  = task.targetEntityType;
+    const std::string& cId    = task.targetEntityId;
+
+    // start_release_workflow / start_lock_workflow / start_unlock_workflow:
+    // Spawn a new F77W on the child entity, then complete this task.
+    if (action == "start_release_workflow" ||
+        action == "start_lock_workflow"    ||
+        action == "start_unlock_workflow") {
+
+        EntityStatus ts = (action == "start_release_workflow") ? EntityStatus::RELEASED
+                        : (action == "start_lock_workflow")    ? EntityStatus::LOCKED
+                        :                                        EntityStatus::IN_WORK;
+        auto childWf = F77Engine::startDefault(cType, cId, ts, actor);
+        if (childWf) {
+            F77Engine::tick(*childWf);
+            return childWf->workflowId;
+        }
+        return "";
+    }
+
+    // "review" or generic: nothing automatic — caller handles UI.
+    return "";
+}
+
+
+// ── checkPropagationComplete ──────────────────────────────────────────────────
+// Called after any F77Task closes. If the parent WF is COMPLETED and ALL its
+// propagation tasks are now closed, re-apply the WF's targetState to the entity.
+// This handles the case: F22 WF completed but was blocked waiting for child AKTs.
+// Once those AKTs are released, the F22 can finally advance to its target state.
+bool F77Engine::checkPropagationComplete(const std::string& workflowId) {
+    auto wf = F77W::loadById(workflowId);
+    if (!wf || wf->status != WorkflowStatus::COMPLETED) return false;
+
+    // Check all F77Tasks for this workflow:
+    auto tasks = F77Task::loadForWorkflow(workflowId);
+    for (auto& t : tasks) {
+        if (!t->isClosed()) return false;  // still open tasks
+    }
+
+    // All tasks done — re-apply the target state to the parent entity.
+    // Only if the parent entity is still in_work (it was reverted by propagation):
+    auto actx = entityContext(wf->entityType);
+    if (!actx.valid()) return false;
+
+    std::string currentStatus;
+    auto rows = actx.db->query(
+        "SELECT status FROM " + actx.table + " WHERE " + actx.idCol + "=?;",
+        {BindParam::text(wf->entityId)});
+    if (!rows.empty() && rows[0].count("status"))
+        currentStatus = rows[0].at("status");
+
+    if (currentStatus != "in_work") return false;  // already advanced
+
+    LOG_INFO("[F77] All propagation tasks done for " + workflowId +
+             " — re-applying target state to " + wf->entityType + "/" + wf->entityId);
+    applyTargetState(*wf);
+    return true;
+}
+
+
 } // namespace Rosenholz

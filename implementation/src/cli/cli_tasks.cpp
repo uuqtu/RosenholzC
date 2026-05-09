@@ -159,10 +159,15 @@ static void executeTask(std::shared_ptr<F77Task> task) {
             task->complete("Datei einer Akte zugewiesen: " + targetDoc->folderId);
             std::cout << "  >> Aufgabe abgeschlossen.\n";
 
-    // Tick the parent workflow to advance state after task closure:
+    // Tick the parent workflow; if already completed, check propagation:
     if (!task->workflowId.empty()) {
         auto wf = Rosenholz::F77W::loadById(task->workflowId);
-        if (wf) Rosenholz::F77Engine::tick(*wf);
+        if (wf) {
+            if (wf->status == Rosenholz::WorkflowStatus::ACTIVE)
+                Rosenholz::F77Engine::tick(*wf);
+            else
+                Rosenholz::F77Engine::checkPropagationComplete(task->workflowId);
+        }
     }
         } else {
             std::cout << "  >> " << opResultMessage(res) << "\n";
@@ -170,57 +175,48 @@ static void executeTask(std::shared_ptr<F77Task> task) {
         return;
     }
 
-    // ── start_release_workflow / start_lock_workflow: trigger child workflow ─
+    // ── Propagation tasks: delegate entirely to engine ─────────────────────────
     if (task->targetAction == "start_release_workflow" ||
         task->targetAction == "start_lock_workflow"    ||
         task->targetAction == "start_unlock_workflow") {
 
-        std::string action = task->targetAction;
-        std::string childType = task->targetEntityType;
-        std::string childId   = task->targetEntityId;
-
-        // Resolve child entity name:
-        std::string childName;
-        if (childType == "f18") {
-            auto v = F18Operation::loadById(childId);
-            if (v) childName = v->title;
-        } else if (childType == "akt") {
-            auto d = Folder::loadById(childId);
-            if (d) childName = d->title;
-        }
-
-        std::string verb = (action == "start_release_workflow") ? "freigeben" :
-                           (action == "start_lock_workflow")    ? "sperren"   : "entsperren";
-
-        std::cout << "\n  Aktion: " << childType << " " << childId;
-        if (!childName.empty()) std::cout << " \"" << childName << "\"";
-        std::cout << " muss " << verb << " werden.\n\n"
+        std::cout << "\n  Aktion: "
+                  << task->targetEntityType << " " << task->targetEntityId
+                  << " muss freigeben werden.\n\n"
                   << "  1. F77-Workflow fuer dieses Objekt jetzt starten\n"
                   << "  2. Aufgabe ueberspringen (Objekt bleibt unveraendert)\n"
                   << "  0. Spaeter\n";
         int ch = readInt("Wahl", 0, 2);
         if (ch == 0) return;
         if (ch == 2) {
-            task->skip("Kindpropagation uebersprungen");
-            std::cout << "  >> Uebersprungen.\n";
-            return;
+            task->skip("Uebersprungen durch Nutzer");
+        } else {
+            // Engine handles: starts child WF, ticks it:
+            std::string wfId = Rosenholz::F77Engine::handleTaskAction(
+                *task, Rosenholz::EntityStatus::RELEASED, "system");
+            if (!wfId.empty()) {
+                task->complete("F77 gestartet: " + wfId);
+                std::cout << "  >> Aufgabe abgeschlossen — F77 " << wfId << " laeuft.\n";
+            } else {
+                std::cout << "  >> Fehler beim Starten des Workflows.\n";
+                return;
+            }
         }
-        // Start workflow on the child entity:
-        std::string wfId = startWfInstanceWizard(childType, childId);
-        if (!wfId.empty()) {
-            task->complete("F77 gestartet: " + wfId);
 
-    // Tick the parent workflow to advance state after task closure:
-    if (!task->workflowId.empty()) {
-        auto wf = Rosenholz::F77W::loadById(task->workflowId);
-        if (wf) Rosenholz::F77Engine::tick(*wf);
-    }
-            std::cout << "  >> Aufgabe abgeschlossen — F77 " << wfId << " laeuft.\n";
+        // Re-check parent workflow propagation:
+        if (!task->workflowId.empty()) {
+            auto wf = Rosenholz::F77W::loadById(task->workflowId);
+            if (wf) {
+                if (wf->status == Rosenholz::WorkflowStatus::ACTIVE)
+                    Rosenholz::F77Engine::tick(*wf);
+                else
+                    Rosenholz::F77Engine::checkPropagationComplete(task->workflowId);
+            }
         }
         return;
     }
 
-    // ── Generic task: review/approve ─────────────────────────────────────
+    // ── Generic task:c task: review/approve ─────────────────────────────────────
     std::cout << "\n  1. Aufgabe abschliessen\n"
               << "  2. Ueberspringen\n"
               << "  0. Spaeter\n";
@@ -231,10 +227,15 @@ static void executeTask(std::shared_ptr<F77Task> task) {
     else              task->skip(note);
     std::cout << "  >> " << task->status << ".\n";
 
-    // Tick the parent workflow to advance state after task closure:
+    // Tick the parent workflow; if already completed, check propagation:
     if (!task->workflowId.empty()) {
         auto wf = Rosenholz::F77W::loadById(task->workflowId);
-        if (wf) Rosenholz::F77Engine::tick(*wf);
+        if (wf) {
+            if (wf->status == Rosenholz::WorkflowStatus::ACTIVE)
+                Rosenholz::F77Engine::tick(*wf);
+            else
+                Rosenholz::F77Engine::checkPropagationComplete(task->workflowId);
+        }
     }
 }
 

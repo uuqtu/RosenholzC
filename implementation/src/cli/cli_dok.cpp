@@ -555,19 +555,19 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
 
         std::string toImport = downloaded;
 #ifndef _WIN32
+        std::string pdfPath;
         if (isOffice) {
             std::cout << "  Office-Datei erkannt (" << ext << ") — konvertiere zu PDF...\n";
-            std::string pdfPath = downloaded.substr(0, downloaded.rfind('.')) + ".pdf";
+            pdfPath = downloaded.substr(0, downloaded.rfind('.')) + ".pdf";
             std::string cmd = "libreoffice --headless --convert-to pdf"
                               " --outdir \"" + tmpDir + "\""
                               " \"" + downloaded + "\" 2>/dev/null";
             if (std::system(cmd.c_str()) == 0 && FileOps::fileExists(pdfPath)) {
-                FileOps::deleteFile(downloaded);
-                toImport = pdfPath;
-                ext = "pdf";
-                std::cout << "  >> PDF erstellt.\n";
+                // PDF exists — keep BOTH: import original AND PDF.
+                std::cout << "  >> PDF erstellt. Original und PDF werden beide registriert.\n";
             } else {
-                std::cout << "  >> Konvertierung fehlgeschlagen — Original wird importiert.\n";
+                pdfPath.clear();  // conversion failed
+                std::cout << "  >> PDF-Konvertierung fehlgeschlagen — nur Original importiert.\n";
             }
         }
 #endif
@@ -575,6 +575,8 @@ static bool dokHandleAddObject(DocMenuCtx& ctx) {
         std::string label2 = readOpt("  Bezeichnung (sprechend, leer=Dateiname): ");
         std::string desc2  = readOpt("  Beschreibung (optional): ");
         OperationResult res = OperationResult::OPERATION_ACK;
+        // Import the ORIGINAL file (always):
+        toImport = downloaded;
         auto obj = FolderObject::importFile(
             ctx.doc->folderId, ctx.curRevNum, toImport, res, label2, desc2);
         if (opOk(res) && obj) {

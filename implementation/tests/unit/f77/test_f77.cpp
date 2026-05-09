@@ -228,7 +228,7 @@ TEST_CASE("F77/Engine: lockAll returns 0 for the sole workflow", "[f77][engine][
 
 // ── applyTargetState ─────────────────────────────────────────────────────────
 
-TEST_CASE("F77/Engine: applyTargetState reverts F22 when AKT children pending", "[f77][engine][lifecycle]") {
+TEST_CASE("F77/Engine: applyTargetState sets status when called after CHECK_CHILDREN", "[f77][engine][lifecycle]") {
     TempDB db("f77_apply");
     auto proj = makeF16("Apply-F16");
     auto task = makeF22(proj->projectId, "Apply-F22");
@@ -239,11 +239,11 @@ TEST_CASE("F77/Engine: applyTargetState reverts F22 when AKT children pending", 
     wf->targetState = EntityStatus::RELEASED;
     REQUIRE(F77Engine::applyTargetState(*wf));
 
-    // F22 has an Allgemeine Akte (in_work) → propagation reverts F22 to in_work.
-    // F22 can only be released once the AKT is released.
+    // applyTargetState now directly sets status (CHECK_CHILDREN step handles
+    // children before End fires). So F22 should be RELEASED here.
     auto r = F22::loadById(task->taskId);
     REQUIRE(r != nullptr);
-    CHECK(r->status == EntityStatus::IN_WORK);  // correctly reverted — AKT not yet released
+    CHECK(r->status == EntityStatus::RELEASED);
 }
 
 // ── seedDefaultTemplates ─────────────────────────────────────────────────────

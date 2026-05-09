@@ -1,5 +1,0 @@
-if(EXISTS "/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug/rosenholz_unit-b12d07c_tests.cmake")
-  include("/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug/rosenholz_unit-b12d07c_tests.cmake")
-else()
-  add_test(rosenholz_unit_NOT_BUILT-b12d07c rosenholz_unit_NOT_BUILT-b12d07c)
-endif()

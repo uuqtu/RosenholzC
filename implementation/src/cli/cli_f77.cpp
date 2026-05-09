@@ -260,14 +260,10 @@ void instanceMenu(const std::string& workflowId) {
         else if (action == 3) {
             // ── Optionalen Schritt hinzufügen ─────────────────────────────────
             // Only allowed while workflow is active and End step not yet reached
-            if (wf->status != WorkflowStatus::ACTIVE) {
-                std::cout << "  >> Nur bei aktivem F77 möglich.\n"; continue;
+            if (!F77Engine::canAddManualOperation(*wf)) {
+                std::cout << "  >> Manueller Schritt nicht moeglich (WF inaktiv oder End erreicht).\n"; continue;
             }
-            // Check End step not yet done
-            bool endDone = false;
-            for (auto& s : wf->steps) if (s.isFinal && s.isComplete()) { endDone = true; break; }
-            if (endDone) {
-                std::cout << "  >> End-Schritt bereits abgeschlossen.\n"; continue;
+            if (false) {  // placeholder for removed end-check
             }
             std::cout << "  Neuen optionalen Schritt hinzufuegen.\n"
                       << "  Jeder Schritt erzeugt eine F18 (Typ: measure)\n"

@@ -8,6 +8,7 @@
 // ============================================================
 
 #include "F16.h"
+#include "../Guard.h"
 #include "../../mfs/MFSWriter.h"
 #include "../akt/Folder.h"
 #include "../f22/F22.h"
@@ -188,9 +189,9 @@ bool F16::load(const std::string& id) {
 }
 
 OperationResult F16::update() {
-    if (wfLocked) {
-        LOG_WARN("[F16] update() refused: wf_locked — F77W active for " + projectId);
-        return OperationResult::ENTITY_LOCKED;
+    {
+        auto g = guard::isEditable(EntityStatus::IN_WORK, wfLocked, projectId, "F16::update");
+        if (!g.isOk()) { LOG_WARN("[F16] update refused: " + g.detail); return g.code; }
     }
     updatedAt = nowIso();
     return save();

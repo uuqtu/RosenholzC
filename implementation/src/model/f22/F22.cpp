@@ -4,6 +4,7 @@
 
 #include <regex>
 #include "F22.h"
+#include "../Guard.h"
 #include "../../core/Config.h"
 #include "../../core/FileOps.h"
 #include "../../core/Database.h"

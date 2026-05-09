@@ -330,13 +330,15 @@ void printContextHelp() {
     std::cout << "\n";
     if (!cur.valid()) {
         // ── Global (top level): show concise command reference ──────────────
-        std::cout << Color::bold("  Rosenholz PM v9  |  rh <BEFEHL> [ARGS]") << "\n\n"
+        std::cout << Color::bold("  Rosenholz PM v10  |  rh <BEFEHL> [ARGS]") << "\n\n"
                   << "  Navigation (Linux-Stil):\n"
                   << "    cd <ID>    In Entität navigieren (F16/F22/F18/AKT)\n"
                   << "    ls         Inhalt der aktuellen Ebene auflisten\n"
                   << "    lo / -h    Kontextabhängige Optionen anzeigen\n"
                   << "    ..         Eine Ebene zurück\n\n"
-                  << "  F16: f16 -n  Neu   f16 -so  Suchen/Auswahl   f16 -arc  Archivieren\n"
+                  << "  LOKAL: f16/f22/f18/akt TYPE -n  Neu  |  TYPE -so  Suchen\n"
+                  << "  GLOBAL: -f16/-f22/-f18/-akt   -TYPE -n/-so/-s (global)\n"
+                  << "  SELBST: .  Selbst-Operator auf aktuellem Objekt\n"
                   << "  F77: -f77 -o/-so    Workflows listen/suchen\n"
                   << "  TSK: tsk / -tasks     Offene F77-Aufgaben  tsk -a  alle\n"
                   << "  WFL: wfl / -workflows  Alle Workflows und Status  -a aktive  -d abgeschlossene\n"
@@ -370,7 +372,7 @@ void printContextHelp() {
           << "  F22: f22 -n Neu  |  f22 -o/-so Auswahl\n"
           << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
           << "  AKT: f16 -e Bearbeiten  |  . -arc Archivieren  |  . -v Detail\n"
-          << "  KOM: kom -n/-o  |  F99: f99 <Text>  |  srch <q>  |  mfs\n";
+          << "  KOM: kom -n/-o  |  F99: f99 <Text>  |  . -i  Notizen anzeigen\n";
         break;
 
     case ET::F22:
@@ -378,7 +380,7 @@ void printContextHelp() {
           << "  F18: f18 -n Neu  |  f18 -o/-so Auswahl\n"
           << "  AKT: akt -n Neu  |  akt -o/-so Auswahl  |  akt -oo Objekte\n"
           << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
-          << "  KOM: kom -n/-o  |  F99: f99 <Text>  |  srch <q>  |  mfs\n"
+          << "  KOM: kom -n/-o  |  F99: f99 <Text>  |  . -i  Notizen anzeigen\n"
           << "  ACT: . -e Bearbeiten  |  . -v Detail  |  . -ind Nacherfassung\n";
         break;
 

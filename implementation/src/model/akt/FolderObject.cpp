@@ -3,6 +3,7 @@
 // ============================================================
 #include <regex>
 #include "FolderObject.h"
+#include "../Guard.h"
 #ifdef _WIN32
 #  include <windows.h>
 #  include <shellapi.h>

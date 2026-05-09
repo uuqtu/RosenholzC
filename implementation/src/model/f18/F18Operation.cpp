@@ -2,6 +2,7 @@
 // F18Operation.cpp  —  Implementation of the unified F18Operation entity
 // ============================================================
 #include "F18Operation.h"
+#include "../Guard.h"
 #include "../akt/Folder.h"
 #include "../f22/F22.h"
 #include "../../core/OperationResult.h"
@@ -399,9 +400,9 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     const std::string& startDatePlanned,
     const std::string& endDatePlanned)
 {
-    if (wfLocked) {
-        LOG_WARN("[F18] addStep() refused: wf_locked — F77W active for " + operationId);
-        return nullptr;
+    {
+        auto g = guard::isEditable(status, wfLocked, operationId, "F18Operation::addStep");
+        if (!g.isOk()) { LOG_WARN("[F18] addStep refused: " + g.detail); return nullptr; }
     }
 
     // Find End step index and max sequence order

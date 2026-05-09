@@ -1,5 +1,6 @@
 // Folder.cpp
 #include "Folder.h"
+#include "../Guard.h"
 #include "FolderObject.h"
 #include "../../model/akt/ArchiveStore.h"
 #include "../../model/akt/FolderRevision.h"

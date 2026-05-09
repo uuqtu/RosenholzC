@@ -673,6 +673,18 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             cmdF16(sa); return;
         }
         // -note: quick note on current F16 (no ID needed)
+        // -i: show all F99 notes for this entity
+        if (!args.empty() && args[0] == "-i" && cur.valid()) {
+            auto notes = Note::loadForEntity(cur.type == EntityType::F16 ? "f16" :
+                          cur.type == EntityType::F22 ? "f22" : "f18", cur.id);
+            if (notes.empty()) { std::cout << "  (keine F99 Notizen)\n"; return; }
+            std::cout << "\n  F99 Notizen fuer " << cur.id << " (" << notes.size() << "):\n";
+            for (auto& n : notes)
+                std::cout << "  " << n->createdAt.substr(0,10) << "  "
+                          << n->body.substr(0,70) << "\n";
+            std::cout << "\n";
+            return;
+        }
         if (!args.empty() && args[0] == "-note" && cur.type == EntityType::F16) {
             std::string text;
             for (std::size_t i=1; i<args.size(); i++) { if(!text.empty()) text+=" "; text+=args[i]; }
@@ -792,6 +804,38 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         // Self sub-commands require F22 context:
         if (!args.empty() && cur.type != EntityType::F22) {
             // -n, -o, -s, -so always work globally:
+            // In F16 context: filter F22 list to this F16's children:
+            if (cur.type == EntityType::F16 &&
+                (args[0] == "-o" || args[0] == "-so" || args[0] == "-s")) {
+                std::string q;
+                if (args.size() > 1) q = args[1];
+                else if (args[0] == "-so" || args[0] == "-s") {
+                    std::cout << "  Suche [*=alle]: "; std::getline(std::cin, q);
+                    if (q.empty()) q = "*";
+                }
+                auto tasks = F22::loadForProject(cur.id);
+                if (!q.empty() && q != "*") {
+                    tasks.erase(std::remove_if(tasks.begin(), tasks.end(),
+                        [&](auto& t){ return !matchesPattern(t->title, q) &&
+                                             !matchesPattern(t->regNumber.toString(), q); }),
+                        tasks.end());
+                }
+                if (tasks.empty()) { std::cout << "  (keine F22-Vorgaenge)\n"; return; }
+                int n = 1;
+                for (auto& t : tasks) {
+                    std::string statusStr = std::string(entityStatusToString(t->status));
+                    if (t->wfLocked) statusStr += " [WF]";
+                    std::cout << "  " << std::setw(3) << n++ << "  "
+                              << std::left << std::setw(26) << t->regNumber.toString()
+                              << std::setw(30) << t->title.substr(0,28)
+                              << statusStr << "\n";
+                }
+                if (args[0] == "-so" || args[0] == "-s") {
+                    int pick = readInt("  Auswahl [0=Abbrechen]", 0, (int)tasks.size());
+                    if (pick >= 1) cmdCd({tasks[pick-1]->taskId});
+                }
+                return;
+            }
             if (args[0] == "-n" || args[0] == "-o" || args[0] == "-s" || args[0] == "-so") {
                 cmdF22(args); return;
             }

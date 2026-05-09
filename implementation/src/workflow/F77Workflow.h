@@ -37,8 +37,9 @@ namespace Rosenholz {
 // Adding a new system action: add an enum value + a case in executeSystemStep().
 enum class SystemAction {
     NONE,               // Not a system step (default)
-    COMMIT_DB_OBJECTS,      // Commit all uncommitted FolderObjects to LMDB archive
+    CHECK_CHILDREN,         // Check all child entities; spawn F77Tasks if any are in_work
     SCAN_UNREGISTERED_FILES, // Scan entity MFS folder; spawn F77Task per loose file
+    COMMIT_DB_OBJECTS,      // Commit all uncommitted FolderObjects to LMDB archive
 };
 
 // ── WorkflowStatus / StepStatus ──────────────────────────────
@@ -243,6 +244,7 @@ private:
 
 // ── F77Engine ────────────────────────────────────────────────
 // Stateless coordinator. All methods are static.
+struct F77Task;  // forward decl for handleTaskAction
 class F77Engine {
 public:
     /// Start a F77W from a named template.
@@ -278,6 +280,17 @@ public:
     /// Check if all blocking sub-workflows for an entity are done.
     // ── Workflow attachment (engine-owned, no raw SQL in CLI) ─────
     /// Persist a workflow ID back to the entity (after startDefault/startFromTemplate).
+    static bool checkPropagationComplete(const std::string& workflowId);
+
+    /// Can a manual operation still be added to this workflow?
+    static bool canAddManualOperation(const F77W& wf);
+
+    /// Execute the action encoded in a task (start child workflow, etc.).
+    /// Returns the ID of any sub-workflow started, or empty string.
+    /// The CLI calls this and then calls tick() + checkPropagationComplete().
+    static std::string handleTaskAction(F77Task& task,
+                                        EntityStatus targetState,
+                                        const std::string& actor = "system");
     static void attachWorkflow(const std::string& entityType,
                                 const std::string& entityId,
                                 const std::string& workflowId);
