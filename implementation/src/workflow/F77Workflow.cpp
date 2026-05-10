@@ -954,6 +954,85 @@ static void executeSystemStep(F77W_Operation& step,
     // step.systemAction determines what this step does.
     // COMMIT_DB_OBJECTS is the only action currently; the enum makes it
     // extensible without touching tick().
+    // ── CHECK_CHILDREN ───────────────────────────────────────────────────────
+    // Must run BEFORE the step is considered done.
+    // If blocking children exist, revert step to IN_PROGRESS and spawn F77Tasks.
+    // tick() will re-enter here on every tick and check if tasks are now closed.
+    if (step.systemAction == SystemAction::CHECK_CHILDREN) {
+        // Check if previously spawned tasks are all done:
+        auto prevTasks = F77Task::loadForOperation(step.stepId);
+        if (!prevTasks.empty()) {
+            bool allClosed = true;
+            for (auto& t : prevTasks) if (!t->isClosed()) { allClosed = false; break; }
+            if (allClosed) {
+                LOG_INFO("[F77] CHECK_CHILDREN: all child tasks closed for " + wf.entityId);
+                return;  // step stays APPROVED
+            }
+            // Still waiting — revert:
+            step.status = StepStatus::IN_PROGRESS; step.completedDate = ""; step.save();
+            changed = false;
+            LOG_INFO("[F77] CHECK_CHILDREN: still waiting for child tasks on " + wf.entityId);
+            return;
+        }
+
+        // No tasks yet — collect blocking children:
+        std::vector<std::pair<std::string,std::string>> blockingChildren;
+
+        // AKT children of this entity:
+        auto* aktdb = DatabasePool::instance().get("akt");
+        if (aktdb) {
+            // entity_folders links AKTs to F22/F18:
+            auto rows = aktdb->query(
+                "SELECT f.folder_id FROM folders f "
+                "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
+                "WHERE ef.entity_type=? AND ef.entity_id=?;",
+                {BindParam::text(wf.entityType), BindParam::text(wf.entityId)});
+            for (auto& r : rows) {
+                std::string cid = r.count("folder_id") ? r.at("folder_id") : "";
+                if (cid.empty()) continue;
+                auto rev = FolderRevision::currentRevision(cid);
+                if (rev && rev->revState == RevState::IN_WORK)
+                    blockingChildren.push_back({"akt", cid});
+            }
+        }
+
+        // F18 children of F22:
+        if (wf.entityType == "f22") {
+            auto* f18db = DatabasePool::instance().get("f18");
+            if (f18db) {
+                auto rows = f18db->query(
+                    "SELECT operation_id, status FROM f18_operations WHERE task_id=?;",
+                    {BindParam::text(wf.entityId)});
+                for (auto& r : rows) {
+                    std::string cid    = r.count("operation_id") ? r.at("operation_id") : "";
+                    std::string cstatus = r.count("status") ? r.at("status") : "in_work";
+                    if (!cid.empty() && entityStatusFrom(cstatus) == EntityStatus::IN_WORK)
+                        blockingChildren.push_back({"f18", cid});
+                }
+            }
+        }
+
+        if (blockingChildren.empty()) {
+            // No blocking children — step is correctly approved.
+            LOG_INFO("[F77] CHECK_CHILDREN: no blocking children for " + wf.entityId);
+            return;
+        }
+
+        // Blocking children found: revert step, spawn one F77Task per child:
+        step.status = StepStatus::IN_PROGRESS; step.completedDate = ""; step.save();
+        changed = false;
+        LOG_INFO("[F77] CHECK_CHILDREN: " + std::to_string(blockingChildren.size())
+                 + " blocking child(ren) for " + wf.entityId + " — spawning tasks");
+        for (auto& [ct, cid] : blockingChildren) {
+            std::string title = "Freigabe: " + ct + " " + cid
+                + " (ausgeloest durch: " + wf.entityType + "/" + wf.entityId + ")";
+            F77Task::create(wf.workflowId, step.stepId, title, ct, cid,
+                            "start_release_workflow");
+            LOG_INFO("[F77] CHECK_CHILDREN: spawned F77Task for " + ct + "/" + cid);
+        }
+        return;
+    }
+
     // ── SCAN_UNREGISTERED_FILES ─────────────────────────────────────────────
     if (step.systemAction == SystemAction::SCAN_UNREGISTERED_FILES) {
         // Scan the entity's MFS folder for files not registered as AKT objects.
@@ -1062,14 +1141,21 @@ bool F77Engine::tick(F77W& wf) {
             if(s.isSystem) executeSystemStep(s, wf, changed);
         }
 
-        // Re-check in_progress steps: if all F77Tasks closed, approve.
-        // This handles both SCAN steps (Objektverwaltung) and manual operations.
+        // Re-check in_progress steps.
         if(s.status==StepStatus::IN_PROGRESS) {
-            auto tasks = F77Task::loadForOperation(s.stepId);
-            if (!tasks.empty() && F77Task::checkOperationComplete(s.stepId)) {
-                s.status=StepStatus::APPROVED; s.completedDate=nowIso(); s.save(); changed=true;
-                LOG_INFO("[F77] Step approved (all tasks closed): " + s.title
-                         + " [" + s.stepId + "]");
+            if (s.isSystem) {
+                // System steps (CHECK_CHILDREN, SCAN) re-run their logic
+                // to verify children are actually in target state, not just
+                // that the tasks are closed.
+                executeSystemStep(s, wf, changed);
+                // executeSystemStep will approve or keep IN_PROGRESS.
+            } else {
+                // Manual operation: approve when all F77Tasks are closed.
+                auto tasks = F77Task::loadForOperation(s.stepId);
+                if (!tasks.empty() && F77Task::checkOperationComplete(s.stepId)) {
+                    s.status=StepStatus::APPROVED; s.completedDate=nowIso(); s.save(); changed=true;
+                    LOG_INFO("[F77] Manual step approved (all tasks closed): " + s.title);
+                }
             }
         }
 
