@@ -355,7 +355,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
     F77Engine::attachWorkflow(effType, effId, wf->workflowId);
     std::cout << "  >> F77 gestartet: " << wf->workflowId << "\n";
 
-    // ── Auto-spawn F77Tasks for pending F18S steps (if F18 entity) ─────────────
+    // ── Auto-spawn F77Tasks for pending F24 steps (if F18 entity) ─────────────
     if (effType == "f18") {
         auto f18op = F18Operation::loadById(effId);
         if (f18op) {
@@ -374,7 +374,7 @@ std::string startWfInstanceWizard(const std::string& entityType,
             }
             if (spawned > 0)
                 std::cout << "  >> " << spawned
-                          << " F77-Task(s) für offene F18S-Schritte angelegt.\n";
+                          << " F77-Task(s) für offene F24-Schritte angelegt.\n";
         }
     }
 

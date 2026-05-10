@@ -33,9 +33,9 @@ enum class EntityStatus {
 const char* entityStatusToString(EntityStatus s);
 EntityStatus entityStatusFrom(const std::string& s);
 
-// ── F18StepSymbol ──────────────────────────────────────────────────────────
-// Display symbol for F18OperationStep — returned by model, mapped by UI.
-enum class F18StepSymbol {
+// ── F24Symbol ──────────────────────────────────────────────────────────
+// Display symbol for F24 — returned by model, mapped by UI.
+enum class F24Symbol {
     PENDING,      ///< not yet started
     IN_PROGRESS,  ///< being worked
     WAITING,      ///< waiting on external input
@@ -44,9 +44,9 @@ enum class F18StepSymbol {
     SKIPPED,      ///< terminal — skipped/cancelled
 };
 
-// ── F18StepStatus ──────────────────────────────────────────────────────────
-// Status of a single F18OperationStep.
-enum class F18StepStatus {
+// ── F24StepStatus ──────────────────────────────────────────────────────────
+// Status of a single F24.
+enum class F24StepStatus {
     PENDING = 0,
     IN_PROGRESS,
     WAITING,      ///< blocked on external input (resumable)
@@ -56,8 +56,8 @@ enum class F18StepStatus {
     APPROVED,
     REJECTED,
 };
-const char* f18StepStatusToString(F18StepStatus s);
-F18StepStatus f18StepStatusFrom(const std::string& s);
+const char* f24StepStatusToString(F24StepStatus s);
+F24StepStatus f24StepStatusFrom(const std::string& s);
 
 // ── CommType ──────────────────────────────────────────────────────────────
 // Type of a Communication entry.

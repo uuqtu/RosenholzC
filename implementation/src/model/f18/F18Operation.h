@@ -15,7 +15,7 @@
 // Hierarchy:
 //   F16 (Projekt) ──0..*──► F18Operation
 //   F22 (Aufgabe) ──0..*──► F18Operation
-//   F18Operation   ──1..*──► F18OperationStep
+//   F18Operation   ──1..*──► F24
 //
 // ChangeObject is the only F18 that references another F18
 // (parentVorgangId → a ChangeRequest F18).
@@ -56,7 +56,7 @@ namespace F18OperationType {
     constexpr const char* F77_STEP             = "f77_step";  ///< F77 workflow step
 }
 
-class F18OperationStep; // forward
+class F24; // forward
 
 class F18Operation {
 public:
@@ -165,7 +165,7 @@ public:
     std::string links;
 
     // ── Lazy-loaded children ──────────────────────────────────
-    std::vector<F18OperationStep> steps;  ///< Lazy-loaded, value type for iteration
+    std::vector<F24> steps;  ///< Lazy-loaded, value type for iteration
 
 
     // ── State predicates ──────────────────────────────────────
@@ -221,7 +221,7 @@ public:
 
     // ── Step management ───────────────────────────────────────
     // ------------------------------
-    // addStep — add an F18OperationStep to this workflow.
+    // addStep — add an F24 to this workflow.
     // Always inserts between Init and End bookends.
     // ------------------------------
     /// Default: appends new step before the End step.
@@ -231,7 +231,7 @@ public:
     /// Returns true if any state changed.
     bool tick();
 
-    std::shared_ptr<F18OperationStep> addStep(
+    std::shared_ptr<F24> addStep(
         const std::string& title,
         const std::string& stepType        = "task",
         const std::string& assigneeId      = "",
@@ -241,7 +241,7 @@ public:
 
     /// Custom: inserts between predecessorStepId and its successor.
     /// The old successor then points to the new step.
-    std::shared_ptr<F18OperationStep> insertAfter(
+    std::shared_ptr<F24> insertAfter(
         const std::string& predecessorStepId,
         const std::string& title,
         const std::string& stepType   = "task",

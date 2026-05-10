@@ -1,5 +1,5 @@
 -- ============================================================
--- f18.db  —  F18Operation + F18OperationStep + Communication
+-- f18.db  —  F18Operation + F24 + Communication
 --
 -- Replaces:
 --   - reporting.db (risks, measures, quality_gates,
@@ -129,7 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_f18_status     ON f18_operations(status);
 CREATE INDEX IF NOT EXISTS idx_f18_type       ON f18_operations(operation_type);
 
 -- ── F18 Workflow Steps ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS f18_operation_steps (
+CREATE TABLE IF NOT EXISTS f24_steps (
     step_id             TEXT PRIMARY KEY,
     operation_id          TEXT NOT NULL REFERENCES f18_operations(vorgang_id),
     tpl_step_id         TEXT,           -- soft ref to template step
@@ -187,16 +187,16 @@ CREATE TABLE IF NOT EXISTS f18_operation_steps (
     updated_at          TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_f18step_vorgang  ON f18_operation_steps(operation_id, sequence_order);
-CREATE INDEX IF NOT EXISTS idx_f18step_status   ON f18_operation_steps(status);
-CREATE INDEX IF NOT EXISTS idx_f18step_assigned ON f18_operation_steps(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_f18step_vorgang  ON f24_steps(operation_id, sequence_order);
+CREATE INDEX IF NOT EXISTS idx_f18step_status   ON f24_steps(status);
+CREATE INDEX IF NOT EXISTS idx_f18step_assigned ON f24_steps(assigned_to);
 
 -- ── Communication (replaces meetings) ────────────────────────
 CREATE TABLE IF NOT EXISTS communications (
     communication_id TEXT PRIMARY KEY,
     owner_id        TEXT NOT NULL,
     owner_type      TEXT NOT NULL
-                         CHECK(owner_type IN ('f16','f22','f18','f18step')),
+                         CHECK(owner_type IN ('f16','f22','f18','f24')),
     comm_type       TEXT DEFAULT 'meeting'
                          CHECK(comm_type IN ('message','call','meeting','email','report')),
     title           TEXT NOT NULL,

@@ -48,7 +48,7 @@
 #include "../../src/model/f16/F16.h"
 #include "../../src/model/f22/F22.h"
 #include "../../src/model/f18/F18Operation.h"
-#include "../../src/model/f18/F18OperationStep.h"
+#include "../../src/model/f24/F24.h"
 #include "../../src/model/f18/Communication.h"
 #include "../../src/model/akt/Folder.h"
 #include "../../src/model/akt/FolderRevision.h"

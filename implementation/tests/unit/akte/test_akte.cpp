@@ -133,17 +133,17 @@ TEST_CASE("AKT/Folder: loadForEntity via entity_folders (polymorphic attach)",
     // Create Akte attached via entity_folders to f18s entity:
     auto d = Folder::create("F18S-Akte", "general", task->taskId, "");
     REQUIRE(opOk(d->save()));
-    std::string stepId = "XV/F18S/9999/26";
-    REQUIRE(opOk(d->attachToEntity("f18s", stepId)));
+    std::string stepId = "XV/F24/9999/26";
+    REQUIRE(opOk(d->attachToEntity("f24", stepId)));
 
-    // Should be findable via loadForEntity("f18s", stepId):
-    auto docs = Folder::loadForEntity("f18s", stepId);
+    // Should be findable via loadForEntity("f24", stepId):
+    auto docs = Folder::loadForEntity("f24", stepId);
     REQUIRE(docs.size() == 1);
     CHECK(docs[0]->folderId == d->folderId);
 
     // SQL: entity_folders row exists:
     CHECK(rowCount("akt","entity_folders",
-                   "entity_type='f18s' AND entity_id='"+stepId+"'") == 1);
+                   "entity_type='f24' AND entity_id='"+stepId+"'") == 1);
 }
 
 TEST_CASE("AKT/Folder: loadForEntity returns empty for unknown entity ID", "[akte][folder][query]") {

@@ -16,7 +16,7 @@
 #include "../model/person/Person.h"
 #include "../model/team/Team.h"
 #include "../model/f18/F18Operation.h"
-#include "../model/f18/F18OperationStep.h"
+#include "../model/f24/F24.h"
 #include "../model/f18/Communication.h"
 #include "../workflow/F77Workflow.h"
 #include "../model/NavigationContext.h"
@@ -110,12 +110,12 @@ inline const char* workflowSymbolStr(Rosenholz::WorkflowSymbol s) {
     }
     return "[?]";
 }
-inline const char* f18StepSymbolStr(Rosenholz::F18StepSymbol s) {
+inline const char* f18StepSymbolStr(Rosenholz::F24Symbol s) {
     switch (s) {
-        case Rosenholz::F18StepSymbol::DONE:        return "OK";
-        case Rosenholz::F18StepSymbol::SKIPPED:     return "--";
-        case Rosenholz::F18StepSymbol::IN_PROGRESS: return " >";
-        case Rosenholz::F18StepSymbol::PENDING:     return "  ";
+        case Rosenholz::F24Symbol::DONE:        return "OK";
+        case Rosenholz::F24Symbol::SKIPPED:     return "--";
+        case Rosenholz::F24Symbol::IN_PROGRESS: return " >";
+        case Rosenholz::F24Symbol::PENDING:     return "  ";
     }
     return "  ";
 }
@@ -179,9 +179,9 @@ std::shared_ptr<Rosenholz::F22> createTaskWizard(const std::string& projectId);
 std::shared_ptr<Rosenholz::F22> createTaskWizardGuided();
 
 // ── F18 operation commands (cli_f18.cpp) ──────────────────────
-void cmdF18(const std::vector<std::string>& args);
-void cmdF18s(const std::vector<std::string>& args,
-             std::shared_ptr<Rosenholz::F18Operation> v = nullptr);
+void cmdF24(const std::vector<std::string>& args);
+void cmdF24Step(const std::vector<std::string>& args,
+                std::shared_ptr<Rosenholz::F18Operation> v = nullptr);
 std::shared_ptr<Rosenholz::F18Operation> createF18Wizard(
     const std::string& projectId = "",
     const std::string& taskId    = "",
@@ -260,8 +260,8 @@ void globalSearch(const std::string& query);
 
     // ── F18 functions (defined in cli_f18.cpp) ──────────────
     void f18Menu(std::shared_ptr<Rosenholz::F18Operation> v);
-void stepMenu(Rosenholz::F18OperationStep& step,
-              std::vector<Rosenholz::F18OperationStep>& allSteps);
+void stepMenu(Rosenholz::F24& step,
+              std::vector<Rosenholz::F24>& allSteps);
     void printF18Operation(const Rosenholz::F18Operation& v);
     std::shared_ptr<Rosenholz::F18Operation> createF18WizardGuided();
 } // namespace CLI

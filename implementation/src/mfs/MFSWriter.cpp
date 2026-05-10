@@ -43,7 +43,7 @@ static std::string fval(const std::string& v) {
 #include "../model/akt/Folder.h"
 #include "../model/akt/FolderObject.h"
 #include "../model/f18/F18Operation.h"
-#include "../model/f18/F18OperationStep.h"
+#include "../model/f24/F24.h"
 #include "../model/person/Person.h"
 #include "../model/team/Team.h"
 #include "../workflow/F77Workflow.h"
@@ -253,7 +253,7 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
         return false;
     }
     // F18 is a SINGLE TEXT FILE under mfs/F18/<sane-id>.txt (no subfolder).
-    // F18S steps each get their own folder: mfs/F18S/<step-id>/<step-id>.txt
+    // F24 steps each get their own folder: mfs/F24/<step-id>/<step-id>.txt
     auto task = F22::loadById(v.taskId);
     if (!task) return false;
 
@@ -281,19 +281,19 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
         oss << "URSACHE/ROOT-CAUSE:\n" << v.rootCause << "\n\n";
 
     // List all steps inline:
-    auto steps = F18OperationStep::loadForVorgang(v.operationId);
+    auto steps = F24::loadForVorgang(v.operationId);
     if (!steps.empty()) {
-        oss << "F18S-SCHRITTE (" << steps.size() << "):\n"
+        oss << "F24-SCHRITTE (" << steps.size() << "):\n"
             << std::string(40, '-') << "\n";
         for (auto& s : steps) {
             oss << "  " << s.stepId
-                << "  [" << f18StepStatusToString(s.status) << "]"
+                << "  [" << f24StepStatusToString(s.status) << "]"
                 << "  " << s.title << "\n";
             if (!s.startDatePlanned.empty())
                 oss << "    Start: " << s.startDatePlanned << "\n";
             if (!s.endDatePlanned.empty())
                 oss << "    Ende : " << s.endDatePlanned   << "\n";
-            oss << "    mfs/F18S/" << sanitiseRegNr(s.stepId) << "/\n";
+            oss << "    mfs/F24/" << sanitiseRegNr(s.stepId) << "/\n";
         }
         oss << "\n";
     }
@@ -301,13 +301,13 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
 
     ownerOnlyWrite(cardPath, oss.str());
 
-    // ── F18S step folders ────────────────────────────────────────────────────
-    std::string f18sRoot = FileOps::joinPath(mfsRoot, "F18S");
+    // ── F24 step folders ────────────────────────────────────────────────────
+    std::string f18sRoot = FileOps::joinPath(mfsRoot, "F24");
     FileOps::makeDirs(f18sRoot);
     for (auto& s : steps) {
         // Init and End steps are synthetic — no standalone MFS folder:
         if (s.isInitialize || s.isFinal) continue;
-        // mfs/F18S/<YY>/<sane-stepId>/
+        // mfs/F24/<YY>/<sane-stepId>/
         std::string stepYear = yearFromRegNr(s.stepId);
         std::string stepDir  = FileOps::joinPath(
                                    FileOps::joinPath(f18sRoot, stepYear),
@@ -316,13 +316,13 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
         std::string stepCard = FileOps::joinPath(stepDir,
                                    sanitiseRegNr(s.stepId) + ".txt");
         std::ostringstream soss;
-        soss << "F18S-SCHRITT\n"
+        soss << "F24-SCHRITT\n"
              << "=======================================================\n"
              << "SCHRITT-ID     : " << s.stepId           << "\n"
              << "F18 (VORGANG)  : " << v.operationId       << "\n"
              << "TITEL          : " << s.title             << "\n"
              << "TYP            : " << s.stepType          << "\n"
-             << "STATUS         : " << f18StepStatusToString(s.status) << "\n"
+             << "STATUS         : " << f24StepStatusToString(s.status) << "\n"
              << "TRACKING       : " << s.trackingStatus    << "\n"
              << "START-PLAN     : " << fval(s.startDatePlanned) << "\n"
              << "ENDE-PLAN      : " << fval(s.endDatePlanned)   << "\n"
@@ -342,7 +342,7 @@ bool MFSWriter::writeF18(const F18Operation& v, const std::string& mfsRoot) {
     appendOwnerKey(v.operationId, v.title, conn, mfsRoot);
 
     LOG_DEBUG("MFS F18 written: " + cardPath + " + " +
-              std::to_string(steps.size()) + " F18S folders");
+              std::to_string(steps.size()) + " F24 folders");
     return true;
 }
 
@@ -618,11 +618,11 @@ bool MFSWriter::rebuildAll(const std::string& mfsRoot) {
                 for (auto& v : f18s) {
                     for (auto& d : Folder::loadForEntity("f18", v->operationId))
                         writeDedupDoc(d);
-                    // Also F18S step Akten:
+                    // Also F24 step Akten:
                     v->loadSteps();
                     for (auto& s : v->steps) {
                         if (s.isInitialize || s.isFinal) continue;
-                        for (auto& d : Folder::loadForEntity("f18s", s.stepId))
+                        for (auto& d : Folder::loadForEntity("f24", s.stepId))
                             writeDedupDoc(d);
                     }
                 }

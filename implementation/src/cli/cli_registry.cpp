@@ -27,8 +27,8 @@ void cmdLs(const std::vector<std::string>&);
 void cmdContextual(const std::string& name, const std::vector<std::string>&);
 void cmdF16(const std::vector<std::string>&);
 void cmdF22(const std::vector<std::string>&);
-void cmdF18(const std::vector<std::string>&);
-void cmdF18s(const std::vector<std::string>&, std::shared_ptr<Rosenholz::F18Operation>);
+void cmdF24(const std::vector<std::string>&);
+void cmdF24Step(const std::vector<std::string>&, std::shared_ptr<Rosenholz::F18Operation>);
 void cmdAkt(const std::vector<std::string>&);
 void cmdF77(const std::vector<std::string>&);
 void cmdWorkflows(const std::vector<std::string>&);
@@ -109,7 +109,7 @@ const std::vector<CliCommand>& registry() {
     { "f18", "-f18",  CTX_NONE,
       "f18 -n  neuer F18 (im Kontext)  f18 -o/-so  listen/suchen  f18 -stp  Schritte",
       {"-n","-e","-v","-note","-f77","-o","-so","-s"},
-      ctx("f18"),   global(cmdF18) },
+      ctx("f18"),   global(cmdF24) },
 
     { "akt", "-akt",  CTX_NONE,
       "akt -o/-so  Akten  akt -oo/-soo  Objekte (kontextuell)  akt -n  neu",
@@ -122,8 +122,8 @@ const std::vector<CliCommand>& registry() {
       ctx("f77"),   global(cmdF77) },
 
     // ── F18S: F18-Schritte ────────────────────────────────────────────────────
-    { "f18s", nullptr, CTX_F18,
-      "f18s -n  Neuer Schritt  f18s -o/-so  listen/suchen  f18s -e <n>  bearbeiten",
+    { "f24", nullptr, CTX_F18,
+      "f24 -n  Neuer Schritt  f24 -o/-so  listen/suchen  f18s -e <n>  bearbeiten",
       {"-n","-e","-o","-so","-s"},
       [](const std::vector<std::string>& a) {
           auto& nav = Rosenholz::NavigationStack::instance();
@@ -131,9 +131,9 @@ const std::vector<CliCommand>& registry() {
           std::shared_ptr<Rosenholz::F18Operation> v;
           if (cur.valid() && cur.type == Rosenholz::EntityType::F18)
               v = Rosenholz::F18Operation::loadById(cur.id);
-          cmdF18s(a, v);
+          cmdF24Step(a, v);
       },
-      [](const std::vector<std::string>& a) { cmdF18s(a, nullptr); }
+      [](const std::vector<std::string>& a) { cmdF24Step(a, nullptr); }
     },
 
     // ── AKT-only ─────────────────────────────────────────────────────────────
@@ -153,6 +153,25 @@ const std::vector<CliCommand>& registry() {
       ctx("f99"),  global(cmdF99) },
 
     // ── F77 Tasks ─────────────────────────────────────────────────────────────
+    { "tick", "-tick",  CTX_NONE,
+      "tick / -tick  Manuellen Tick auf aktiven Workflows ausfuehren",
+      {},
+      [](const std::vector<std::string>&) {
+          auto wfs = Rosenholz::F77W::loadActive();
+          if (wfs.empty()) { std::cout << "  (keine aktiven Workflows)\n"; return; }
+          int ticked = 0;
+          for (auto& wf : wfs) {
+              bool changed = Rosenholz::F77Engine::tick(*wf);
+              if (changed) {
+                  std::cout << "  >> Tick: " << wf->workflowId
+                            << " [" << wf->entityType << "/" << wf->entityId << "]\n";
+                  ++ticked;
+              }
+          }
+          if (ticked == 0) std::cout << "  (keine Aenderungen)\n";
+          else std::cout << "  >> " << ticked << " Workflow(s) getickt.\n";
+      }, nullptr },
+
     { "wfl",  "-workflows", CTX_NONE,
       "wfl / -workflows  Alle Workflows  -a aktive  -d abgeschlossene",
       {"-a","-d"},
@@ -342,7 +361,7 @@ void printContextHelp() {
                   << "  F77: -f77 -o/-so    Workflows listen/suchen\n"
                   << "  TSK: tsk / -tasks     Offene F77-Aufgaben  tsk -a  alle\n"
                   << "  WFL: wfl / -workflows  Alle Workflows und Status  -a aktive  -d abgeschlossene\n"
-                  << "  F18S:-f18s -o/-so   F18-Schritte\n"
+                  << "  F18S:-f24 -o/-so   F18-Schritte\n"
                   << "  F99: -f99 -s/-so    Notizen suchen/Manager\n"
                   << "  PER: -per -s <q>    Personen      -de  Diensteinheiten\n"
                   << "  USR: user        Benutzerverwaltung   user -pw  Passwort aendern\n\n"
@@ -386,7 +405,7 @@ void printContextHelp() {
 
     case ET::F18:
         std::cout
-          << "  F18S: f18s -n Neu  |  f18s -o/-so Auswahl  |  f18s -e <n> Edit\n"
+          << "  F18S: f24 -n Neu  |  f24 -o/-so Auswahl  |  f18s -e <n> Edit\n"
           << "  AKT:  akt -n Neu  |  akt -o/-so Auswahl  |  akt -oo Objekte\n"
           << "  WF:   . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
           << "  KOM:  kom -n/-o  |  F99: f99 <Text>\n"

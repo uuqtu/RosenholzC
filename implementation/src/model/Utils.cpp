@@ -67,29 +67,29 @@ EntityStatus entityStatusFrom(const std::string& s) {
     return EntityStatus::IN_WORK;
 }
 
-// ── F18StepStatus ─────────────────────────────────────────────────────────
-const char* f18StepStatusToString(F18StepStatus s) {
+// ── F24StepStatus ─────────────────────────────────────────────────────────
+const char* f24StepStatusToString(F24StepStatus s) {
     switch (s) {
-        case F18StepStatus::PENDING:     return "pending";
-        case F18StepStatus::IN_PROGRESS: return "in_progress";
-        case F18StepStatus::WAITING:     return "waiting";
-        case F18StepStatus::BLOCKED:     return "blocked";
-        case F18StepStatus::DONE:        return "done";
-        case F18StepStatus::SKIPPED:     return "skipped";
-        case F18StepStatus::APPROVED:    return "approved";
-        case F18StepStatus::REJECTED:    return "rejected";
+        case F24StepStatus::PENDING:     return "pending";
+        case F24StepStatus::IN_PROGRESS: return "in_progress";
+        case F24StepStatus::WAITING:     return "waiting";
+        case F24StepStatus::BLOCKED:     return "blocked";
+        case F24StepStatus::DONE:        return "done";
+        case F24StepStatus::SKIPPED:     return "skipped";
+        case F24StepStatus::APPROVED:    return "approved";
+        case F24StepStatus::REJECTED:    return "rejected";
     }
     return "pending";
 }
-F18StepStatus f18StepStatusFrom(const std::string& s) {
-    if (s == "in_progress") return F18StepStatus::IN_PROGRESS;
-    if (s == "waiting")     return F18StepStatus::WAITING;
-    if (s == "blocked")     return F18StepStatus::BLOCKED;
-    if (s == "done")        return F18StepStatus::DONE;
-    if (s == "skipped")     return F18StepStatus::SKIPPED;
-    if (s == "approved")    return F18StepStatus::APPROVED;
-    if (s == "rejected")    return F18StepStatus::REJECTED;
-    return F18StepStatus::PENDING;
+F24StepStatus f24StepStatusFrom(const std::string& s) {
+    if (s == "in_progress") return F24StepStatus::IN_PROGRESS;
+    if (s == "waiting")     return F24StepStatus::WAITING;
+    if (s == "blocked")     return F24StepStatus::BLOCKED;
+    if (s == "done")        return F24StepStatus::DONE;
+    if (s == "skipped")     return F24StepStatus::SKIPPED;
+    if (s == "approved")    return F24StepStatus::APPROVED;
+    if (s == "rejected")    return F24StepStatus::REJECTED;
+    return F24StepStatus::PENDING;
 }
 
 // ── CommType ──────────────────────────────────────────────────────────────

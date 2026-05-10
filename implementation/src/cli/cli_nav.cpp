@@ -16,7 +16,7 @@
 #include "../model/f16/F16.h"
 #include "../model/f22/F22.h"
 #include "../model/f18/F18Operation.h"
-#include "../model/f18/F18OperationStep.h"
+#include "../model/f24/F24.h"
 #include "../model/akt/Folder.h"
 #include "../model/akt/FolderRevision.h"
 #include "../model/akt/FolderObject.h"
@@ -213,9 +213,9 @@ void cmdLs(const std::vector<std::string>& args) {
                           << std::setw(24) << s.title.substr(0,22)
                       << std::setw(12) << (s.startDatePlanned.empty() ? "-" : s.startDatePlanned.substr(0,10))
                       << std::setw(12) << (s.endDatePlanned.empty() ? "-" : s.endDatePlanned.substr(0,10));
-                if (s.status == F18StepStatus::DONE)
+                if (s.status == F24StepStatus::DONE)
                     std::cout << Color::green(sym);
-                else if (s.status == F18StepStatus::IN_PROGRESS)
+                else if (s.status == F24StepStatus::IN_PROGRESS)
                     std::cout << Color::yellow(sym);
                 else
                     std::cout << Color::dim(sym);
@@ -517,7 +517,7 @@ void cmdCd(const std::vector<std::string>& args) {
             cmdLs({}); return;
         }
     }
-    if (hasPrefix("/F18/") && !hasPrefix("/F18S/")) {
+    if (hasPrefix("/F18/") && !hasPrefix("/F24/")) {
         auto v = F18Operation::loadById(target);
         if (v) {
             nav.push({EntityType::F18, v->operationId, v->title, v->operationId});
@@ -611,7 +611,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
                 // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
-                // then ticks — also handles F18S pending step detection
+                // then ticks — also handles F24 pending step detection
                 std::string entityTypeStr = cmd; // f16|f22|f18|akt
                 std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
                 if (!wfId.empty()) {
@@ -720,7 +720,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
                 // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
-                // then ticks — also handles F18S pending step detection
+                // then ticks — also handles F24 pending step detection
                 std::string entityTypeStr = cmd; // f16|f22|f18|akt
                 std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
                 if (!wfId.empty()) {
@@ -854,7 +854,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
                 // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
-                // then ticks — also handles F18S pending step detection
+                // then ticks — also handles F24 pending step detection
                 std::string entityTypeStr = cmd; // f16|f22|f18|akt
                 std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
                 if (!wfId.empty()) {
@@ -915,7 +915,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                     cmdCd({v->operationId});  // auto-navigate
                 }
             } else {
-                cmdF18({"-n"});
+                cmdF24({"-n"});
             }
             return;
         }
@@ -967,13 +967,13 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
         // Self sub-commands require F18 context:
         if (!args.empty() && cur.type != EntityType::F18) {
             if (args[0] == "-n" || args[0] == "-o" || args[0] == "-s" || args[0] == "-so") {
-                cmdF18(args); return;  // these work globally
+                cmdF24(args); return;  // these work globally
             }
             printErr("'" + args[0] + "' erfordert F18-Kontext.\n"
                      "  cd <F18-ID>  dann: . " + args[0]);
             return;
         }
-        cmdF18(args); return;
+        cmdF24(args); return;
     }
 
     // ── akt ──────────────────────────────────────────────────────────────────
@@ -984,7 +984,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (sub == "-n") {
                 if (!cur.valid()) { printErr("Kein Kontext."); return; }
                 // startWfInstanceWizard: asks for manual steps, spawns F77Tasks,
-                // then ticks — also handles F18S pending step detection
+                // then ticks — also handles F24 pending step detection
                 std::string entityTypeStr = cmd; // f16|f22|f18|akt
                 std::string wfId = startWfInstanceWizard(entityTypeStr, cur.id);
                 if (!wfId.empty()) {

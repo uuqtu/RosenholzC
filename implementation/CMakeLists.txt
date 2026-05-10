@@ -113,7 +113,7 @@ set(MODEL_SOURCES
     src/model/NavigationContext.cpp
     src/model/akt/FolderObject.cpp
     src/model/f18/F18Operation.cpp
-    src/model/f18/F18OperationStep.cpp
+    src/model/f24/F24.cpp
     src/model/f18/Communication.cpp
 )
 
@@ -183,7 +183,7 @@ set(CLI_SOURCES
     src/cli/cli_utils.cpp
     src/cli/cli_f16.cpp
     src/cli/cli_f22.cpp
-    src/cli/cli_f18.cpp
+    src/cli/cli_f24.cpp
     src/cli/cli_dok.cpp
     src/cli/cli_f77.cpp
     src/cli/cli_per.cpp

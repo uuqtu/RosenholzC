@@ -7,7 +7,7 @@
 #include "../f22/F22.h"
 #include "../../core/OperationResult.h"
 #include "../../workflow/F77Workflow.h"
-#include "F18OperationStep.h"
+#include "../f24/F24.h"
 #include "../../core/Database.h"
 #include "../../workflow/F77Workflow.h"
 #include "../../core/Logger.h"
@@ -256,7 +256,7 @@ OperationResult F18Operation::update() {
 OperationResult F18Operation::remove() const {
     auto* d = db(); if (!d) return OperationResult::DB_ERROR;
     // Steps are cascade-deleted via FK or explicit delete
-    d->exec("DELETE FROM f18_operation_steps WHERE operation_id=?;",
+    d->exec("DELETE FROM f24_steps WHERE operation_id=?;",
             {BindParam::text(operationId)});
     return d->exec("DELETE FROM f18_operations WHERE operation_id=?;",
                    {BindParam::text(operationId)})
@@ -309,8 +309,8 @@ std::shared_ptr<F18Operation> F18Operation::create(
     }
 
     // Auto-create Init and End steps
-    auto initStep = std::make_shared<F18OperationStep>();
-    initStep->stepId        = genId("F18S");
+    auto initStep = std::make_shared<F24>();
+    initStep->stepId        = genId("F24");
     initStep->operationId     = v->operationId;
     initStep->title         = "Init";
     initStep->description   = "Automatischer Startschritt.";
@@ -318,7 +318,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     initStep->isInitialize  = true;
     initStep->autoApprove   = true;
     // Init step is always auto-approved immediately
-    initStep->status        = F18StepStatus::DONE;   // auto-approved at creation
+    initStep->status        = F24StepStatus::DONE;   // auto-approved at creation
     initStep->decision      = "approved";
     initStep->decisionDate  = nowIso();
     initStep->completedDate = nowIso();
@@ -326,8 +326,8 @@ std::shared_ptr<F18Operation> F18Operation::create(
     initStep->updatedAt     = nowIso();
     initStep->save();
 
-    auto endStep = std::make_shared<F18OperationStep>();
-    endStep->stepId         = genId("F18S");
+    auto endStep = std::make_shared<F24>();
+    endStep->stepId         = genId("F24");
     endStep->operationId      = v->operationId;
     endStep->title          = "End";
     endStep->description    = "Abschlussschritt.";
@@ -335,7 +335,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
     endStep->isFinal        = true;
     endStep->autoApprove    = false;
     endStep->predecessorStepIds = initStep->stepId;
-    endStep->status         = F18StepStatus::PENDING;
+    endStep->status         = F24StepStatus::PENDING;
     endStep->createdAt      = nowIso();
     endStep->updatedAt      = nowIso();
     endStep->save();
@@ -392,7 +392,7 @@ std::vector<std::shared_ptr<F18Operation>> F18Operation::loadRecent(int n) {
 }
 
 // ── Step management ───────────────────────────────────────────
-std::shared_ptr<F18OperationStep> F18Operation::addStep(
+std::shared_ptr<F24> F18Operation::addStep(
     const std::string& title,
     const std::string& stepType,
     const std::string& assigneeId,
@@ -422,8 +422,8 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
         for (auto& s : steps) if (s.isInitialize) { predId = s.stepId; break; }
     }
 
-    F18OperationStep newStep;
-    newStep.stepId             = genId("F18S");
+    F24 newStep;
+    newStep.stepId             = genId("F24");
     newStep.operationId          = operationId;
     newStep.title              = title;
     newStep.stepType           = stepType;
@@ -433,7 +433,7 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
     newStep.startDatePlanned   = startDatePlanned;
     newStep.endDatePlanned     = endDatePlanned;
     if (!endDatePlanned.empty()) newStep.dueDate = endDatePlanned;
-    newStep.status             = F18StepStatus::PENDING;
+    newStep.status             = F24StepStatus::PENDING;
     newStep.createdAt          = nowIso();
     newStep.updatedAt          = nowIso();
 
@@ -444,7 +444,7 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
         newStep.predecessorStepIds = predId;
     }
     newStep.save();
-    auto step = std::make_shared<F18OperationStep>(newStep);
+    auto step = std::make_shared<F24>(newStep);
 
     // V9: every manual step (not Init, not End) gets its own "Allgemeine Akte"
     // Init and End are lifecycle bookends and need no document storage.
@@ -453,11 +453,11 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
             "Allgemeine Akte " + step->stepId,
             "general",
             taskId,  // parent task context for AKT pool
-            "");     // no f18OpId — this Akte belongs to the F18S, not the F18
+            "");     // no f18OpId — this Akte belongs to the F24, not the F18
         if (allgAkte && opOk(allgAkte->save())) {
-            allgAkte->attachToEntity("f18s", step->stepId);
+            allgAkte->attachToEntity("f24", step->stepId);
             LOG_INFO("[F18S] Allgemeine Akte angelegt: " + allgAkte->folderId
-                     + " fuer F18S " + step->stepId);
+                     + " fuer F24 " + step->stepId);
         } else {
             LOG_WARN("[F18S] Allgemeine Akte konnte nicht angelegt werden fuer "
                      + step->stepId);
@@ -482,7 +482,7 @@ std::shared_ptr<F18OperationStep> F18Operation::addStep(
 // ── insertAfter ───────────────────────────────────────────────
 // Inserts a new step between predecessorStepId and its current successor.
 // The new step takes over as the predecessor of the old successor.
-std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
+std::shared_ptr<F24> F18Operation::insertAfter(
     const std::string& predecessorStepId,
     const std::string& title,
     const std::string& stepType,
@@ -491,7 +491,7 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
     loadSteps();
 
     // Find the predecessor step
-    F18OperationStep* pred = nullptr;
+    F24* pred = nullptr;
     for (auto& s : steps)
         if (s.stepId == predecessorStepId) { pred = &s; break; }
     if (!pred) {
@@ -501,7 +501,7 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
 
     // Find the current successor of predecessor
     // (the step whose predecessorStepIds contains predecessorStepId)
-    F18OperationStep* successor = nullptr;
+    F24* successor = nullptr;
     for (auto& s : steps) {
         if (!s.isInitialize && s.predecessorStepIds.find(predecessorStepId) != std::string::npos) {
             successor = &s;
@@ -516,15 +516,15 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
     if (newSeq <= pred->sequenceOrder) newSeq = pred->sequenceOrder + 1;
 
     // Create the new step
-    F18OperationStep newStep;
-    newStep.stepId             = genId("F18S");
+    F24 newStep;
+    newStep.stepId             = genId("F24");
     newStep.operationId          = operationId;
     newStep.title              = title;
     newStep.stepType           = stepType;
     newStep.sequenceOrder      = newSeq;
     newStep.predecessorStepIds = predecessorStepId;
     newStep.assignedTo         = assigneeId;
-    newStep.status             = F18StepStatus::PENDING;
+    newStep.status             = F24StepStatus::PENDING;
     newStep.createdAt          = nowIso();
     newStep.updatedAt          = nowIso();
     newStep.save();
@@ -539,14 +539,14 @@ std::shared_ptr<F18OperationStep> F18Operation::insertAfter(
         successor->save();
     }
 
-    auto step = std::make_shared<F18OperationStep>(newStep);
+    auto step = std::make_shared<F24>(newStep);
     steps.push_back(newStep);
     LOG_INFO("[F18Operation] Step inserted after " + predecessorStepId + ": " + newStep.stepId);
     return step;
 }
 
 void F18Operation::loadSteps() {
-    steps = F18OperationStep::loadForVorgang(operationId);
+    steps = F24::loadForVorgang(operationId);
 }
 
 // ── Risk score calculation ────────────────────────────────────
@@ -632,8 +632,8 @@ bool F18Operation::tick() {
 
     // Auto-approve Init step:
     for (auto& s : steps) {
-        if (s.isInitialize && s.status == F18StepStatus::PENDING) {
-            s.status = F18StepStatus::DONE;
+        if (s.isInitialize && s.status == F24StepStatus::PENDING) {
+            s.status = F24StepStatus::DONE;
             s.completedDate = nowIso();
             s.save();
             changed = true;
@@ -654,9 +654,9 @@ bool F18Operation::tick() {
 
     // Auto-approve End step when all mid-steps are done:
     for (auto& s : steps) {
-        if (s.isFinal && s.status == F18StepStatus::PENDING
+        if (s.isFinal && s.status == F24StepStatus::PENDING
             && (allMidDone || !hasMid)) {
-            s.status = F18StepStatus::DONE;
+            s.status = F24StepStatus::DONE;
             s.completedDate = nowIso();
             s.save();
             // Advance operation status to released:

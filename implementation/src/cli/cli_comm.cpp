@@ -4,7 +4,7 @@
 // Public functions:
 //   communicationMenu(ownerId, ownerType)
 //     — list and manage communications for any owner entity
-//     — ownerType: "f16" | "f22" | "f18" | "f18step"
+//     — ownerType: "f16" | "f22" | "f18" | "f24"
 // ============================================================
 #include "cli_common.h"
 #include "../model/f18/Communication.h"

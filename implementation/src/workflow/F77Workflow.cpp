@@ -608,7 +608,7 @@ void F77Engine::detachWorkflow(const std::string& entityType,
 }
 
 
-// ── // When a DOK gets a F77 workflow, create an F18OperationStep on the parent
+// ── // When a DOK gets a F77 workflow, create an F24 on the parent
 // F22 (via its tracking F18) so the document release is visible in the chain.
 
 
