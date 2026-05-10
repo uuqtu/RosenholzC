@@ -400,7 +400,7 @@ void printContextHelp() {
           << "  AKT: akt -n Neu  |  akt -o/-so Auswahl  |  akt -oo Objekte\n"
           << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
           << "  KOM: kom -n/-o  |  F99: f99 <Text>  |  . -i  Notizen anzeigen\n"
-          << "  ACT: . -e Bearbeiten  |  . -v Detail  |  . -ind Nacherfassung\n";
+          << "  ACT: . -e Bearbeiten  |  . -v Detail  |  . -ind Nacherfassung  |  . -p Elternobjekt\n";
         break;
 
     case ET::F18:
@@ -414,7 +414,7 @@ void printContextHelp() {
 
     case ET::AKT:
         std::cout
-          << "  AKT: . -e Edit  |  . -r Rev+  |  . -hist Verlauf  |  . -rv RevWechsel\n"
+          << "  AKT: . -e Edit  |  . -r Rev+  |  . -hist Verlauf  |  . -rv RevWechsel  |  . -p Elternobjekt\n"
           << "  OBJ: ls  |  obj -n Neu  |  obj -s/-so Auflisten  |  . -co Checkout  |  . -ci Checkin\n"
           << "  WF:  . -f77 -n Starten  |  . -f77 -d Anzeigen\n"
           << "  F99: f99 <Text>\n";

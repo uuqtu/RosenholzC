@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="BackendCodeEditorMiscSettings">
-    <option name="/Default/Environment/Hierarchy/GeneratedFilesCacheKey/Timestamp/@EntryValue" value="12" type="long" />
+    <option name="/Default/Environment/Hierarchy/GeneratedFilesCacheKey/Timestamp/@EntryValue" value="14" type="long" />
     <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
   </component>
   <component name="CMakePresetLoader">{
@@ -62,28 +62,13 @@
   <component name="ChangeListManager">
     <list default="true" id="a687252b-19fa-45ab-b1cf-a8a53c29ca17" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/CMakeConfigureLog.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/CMakeConfigureLog.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/clion-Debug-log.txt" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/clion-Debug-log.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/.ninja_log" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/.ninja_log" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/build.ninja" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/_deps/nlohmann_json-subbuild/build.ninja" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sql/f18.sql" beforeDir="false" afterPath="$PROJECT_DIR$/sql/f18.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_comm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_comm.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_common.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_common.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cli/cli_f77.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f77.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/cli/cli_f24.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_f24.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_nav.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_nav.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/cli/cli_registry.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/cli/cli_registry.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/core/RegNumber.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/RegNumber.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/mfs/MFSWriter.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Utils.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Utils.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/Utils.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/Utils.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/Communication.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/Communication.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Operation.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/model/f18/F18Operation.h" beforeDir="false" afterPath="$PROJECT_DIR$/src/model/f18/F18Operation.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/workflow/F77Workflow.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/akte/test_akte.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/akte/test_akte.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/f18/test_f18.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/f18/test_f18.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_helpers.h" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_helpers.h" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -415,7 +400,7 @@
       <workItem from="1778348188026" duration="1559000" />
       <workItem from="1778349854165" duration="2039000" />
       <workItem from="1778351962990" duration="6174000" />
-      <workItem from="1778364809883" duration="6451000" />
+      <workItem from="1778364809883" duration="7872000" />
     </task>
     <servers />
   </component>

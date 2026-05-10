@@ -1057,6 +1057,27 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             return;
         }
         // -v: view/open current AKT menu
+        // -p: navigate to parent (F22 or F18) via entity_folders
+        if (!args.empty() && args[0] == "-p" && cur.type == EntityType::AKT) {
+            auto d = Folder::loadById(cur.id);
+            if (d && !d->taskId.empty()) { cmdCd({d->taskId}); return; }
+            if (d && !d->f18OperationId.empty()) { cmdCd({d->f18OperationId}); return; }
+            // Check entity_folders:
+            auto* aktdb = DatabasePool::instance().get("akt");
+            if (aktdb) {
+                auto rows = aktdb->query(
+                    "SELECT entity_type, entity_id FROM entity_folders WHERE folder_id=? LIMIT 1;",
+                    {BindParam::text(cur.id)});
+                if (!rows.empty()) {
+                    auto& r = rows[0];
+                    std::string et = r.count("entity_type") ? r.at("entity_type") : "";
+                    std::string eid = r.count("entity_id") ? r.at("entity_id") : "";
+                    if (!eid.empty()) { cmdCd({eid}); return; }
+                }
+            }
+            printErr("Kein Elternobjekt gefunden.");
+            return;
+        }
         // All self-commands on the current AKT route through documentMenu:
         if (!args.empty() && cur.type == EntityType::AKT) {
             static const std::set<std::string> aktSelf =

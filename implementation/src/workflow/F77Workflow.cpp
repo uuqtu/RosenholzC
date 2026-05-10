@@ -1538,6 +1538,17 @@ std::string F77Engine::handleTaskAction(F77Task& task,
         EntityStatus ts = (action == "start_release_workflow") ? EntityStatus::RELEASED
                         : (action == "start_lock_workflow")    ? EntityStatus::LOCKED
                         :                                        EntityStatus::IN_WORK;
+        // Check if a workflow is already active on this child entity:
+        auto existingWfs = F77W::loadForEntity(cType, cId);
+        for (auto& ew : existingWfs) {
+            if (ew->status == WorkflowStatus::ACTIVE) {
+                LOG_INFO("[F77] handleTaskAction: existing active WF "
+                         + ew->workflowId + " on " + cType + "/" + cId
+                         + " — waiting for it to complete");
+                F77Engine::tick(*ew);
+                return ew->workflowId;
+            }
+        }
         auto childWf = F77Engine::startDefault(cType, cId, ts, actor);
         if (childWf) {
             F77Engine::tick(*childWf);

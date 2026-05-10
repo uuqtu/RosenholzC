@@ -212,11 +212,10 @@ void stepMenu(Rosenholz::F24& step,
         std::string startPlan = step.startDatePlanned.empty() ? "-" : step.startDatePlanned.substr(0,10);
         std::string endPlan   = step.endDatePlanned.empty()   ? "-" : step.endDatePlanned.substr(0,10);
         // Show full breadcrumb:
-        auto& nav = Rosenholz::NavigationStack::instance();
-        std::string crumb;
-        auto cur = nav.current();
-        if (cur.valid()) crumb = cur.displayName + " > ";
-        std::cout << "\n  " << Color::bold(crumb + "F24 " + step.stepId) << "\n"
+        auto& navInner = Rosenholz::NavigationStack::instance();
+        std::string crumb = navInner.breadcrumb();
+        crumb += " > F24:" + step.stepId.substr(step.stepId.rfind('/')+1, 9);
+        std::cout << "\n  " << Color::bold(crumb) << "\n"
                   << "  " << std::string(50, '-') << "\n"
                   << "  Titel     : " << step.title << "\n"
                   << "  Typ       : " << step.stepType << "\n"
@@ -240,6 +239,10 @@ void stepMenu(Rosenholz::F24& step,
         printStepHeader();
         std::string line = readLine("> ");
         if (line.empty() || line == ".." || line == "0") return;
+        // -p: navigate to parent F18:
+        if (line == ". -p" || line == "-p") {
+            return;  // stepMenu returns → CLI lands in F18 context
+        }
 
         // Parse: first token is cmd, rest is args
         std::istringstream iss(line);

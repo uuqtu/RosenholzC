@@ -43,6 +43,6 @@ This warning is for project developers.  Use -Wno-dev to suppress it.
 -- SQLite3: sqlite3
 -- Build type: Debug
 -- SQL schemas embedded: /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/akt.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/core.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f16.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f18.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f22.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77task.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f99.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/notes.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/users.sql
--- Configuring done (8.6s)
+-- Configuring done (8.5s)
 -- Generating done (0.1s)
 -- Build files have been written to: /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug
