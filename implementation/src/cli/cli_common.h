@@ -195,12 +195,14 @@ void printDocument(const Rosenholz::Folder& d);
 void listDocuments(const std::vector<std::shared_ptr<Rosenholz::Folder>>& docs,
                    const std::string& title = "AKTEN");
 void documentMenu(std::shared_ptr<Rosenholz::Folder> doc,
-                  const std::string& initialCmd = "");
+                  const std::string& initialCmd = "",
+                  const std::string& contextCrumb = "");
 
 // Create document with known parent.
 std::shared_ptr<Rosenholz::Folder> createDocumentWizard(
-    const std::string& taskId  = "",
-    const std::string& f18OpId = "");
+    const std::string& taskId,
+    const std::string& f18OpId,
+    bool compact = false);
 
 // Guided: asks user which F16/F22/F18 to attach to.
 std::shared_ptr<Rosenholz::Folder> createDocumentWizardGuided();

@@ -351,6 +351,7 @@ std::shared_ptr<F18Operation> F18Operation::create(
             "Allgemeine Akte " + v->operationId, "general", taskId, v->operationId);
         if (opOk(allgAkte->save())) {
             allgAkte->attachToEntity("f18", v->operationId);
+            allgAkte->ensureRevision("system");  // create initial revision
             LOG_INFO("[F18] Allgemeine Akte angelegt: " + allgAkte->folderId
                      + " für F18 " + v->operationId);
         }

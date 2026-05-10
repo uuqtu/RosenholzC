@@ -966,8 +966,85 @@ static void executeSystemStep(F77W_Operation& step,
             bool allClosed = true;
             for (auto& t : prevTasks) if (!t->isClosed()) { allClosed = false; break; }
             if (allClosed) {
-                LOG_INFO("[F77] CHECK_CHILDREN: all child tasks closed for " + wf.entityId);
-                return;  // step stays APPROVED
+                // Re-verify: all child entities must actually be in target state.
+                // "Task closed" only means the child WF was STARTED, not that
+                // the child is RELEASED. Re-check actual child statuses:
+                bool childrenActuallyDone = true;
+                auto* aktdb = DatabasePool::instance().get("akt");
+                if (aktdb) {
+                    auto rows = aktdb->query(
+                        "SELECT f.folder_id FROM folders f "
+                        "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
+                        "WHERE ef.entity_type=? AND ef.entity_id=?;",
+                        {BindParam::text(wf.entityType), BindParam::text(wf.entityId)});
+                    for (auto& r : rows) {
+                        std::string cid = r.count("folder_id") ? r.at("folder_id") : "";
+                        if (cid.empty()) continue;
+                        auto rev = FolderRevision::currentRevision(cid);
+                        if (!rev || rev->revState == RevState::IN_WORK) {
+                            childrenActuallyDone = false; break;
+                        }
+                    }
+                }
+                if (childrenActuallyDone && wf.entityType == "f22") {
+                    auto* f18db = DatabasePool::instance().get("f18");
+                    if (f18db) {
+                        auto rows = f18db->query(
+                            "SELECT status FROM f18_operations WHERE task_id=?;",
+                            {BindParam::text(wf.entityId)});
+                        for (auto& r : rows) {
+                            std::string cs = r.count("status") ? r.at("status") : "in_work";
+                            if (entityStatusFrom(cs) == EntityStatus::IN_WORK) {
+                                childrenActuallyDone = false; break;
+                            }
+                        }
+                    }
+                }
+                if (childrenActuallyDone && wf.entityType == "f18") {
+                    // For F18: check all F24 step AKTs via entity_folders
+                    auto* f24db = DatabasePool::instance().get("f24");
+                    auto* aktdb2 = DatabasePool::instance().get("akt");
+                    if (f24db && aktdb2) {
+                        auto stepRows = f24db->query(
+                            "SELECT step_id FROM f24_steps WHERE operation_id=?;",
+                            {BindParam::text(wf.entityId)});
+                        for (auto& sr : stepRows) {
+                            std::string stepId = sr.count("step_id") ? sr.at("step_id") : "";
+                            if (stepId.empty()) continue;
+                            auto aktRows = aktdb2->query(
+                                "SELECT f.folder_id FROM folders f "
+                                "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
+                                "WHERE ef.entity_type='f24' AND ef.entity_id=?;",
+                                {BindParam::text(stepId)});
+                            for (auto& ar : aktRows) {
+                                std::string cid = ar.count("folder_id") ? ar.at("folder_id") : "";
+                                if (cid.empty()) continue;
+                                auto rev = FolderRevision::currentRevision(cid);
+                                if (!rev || rev->revState == RevState::IN_WORK) {
+                                    childrenActuallyDone = false; break;
+                                }
+                            }
+                            if (!childrenActuallyDone) break;
+                        }
+                    }
+                }
+                if (!childrenActuallyDone) {
+                    // Children not yet released — stay in progress, clear stale tasks
+                    // so they can be re-spawned with fresh state:
+                    step.status = StepStatus::IN_PROGRESS; step.completedDate = ""; step.save();
+                    changed = false;
+                    LOG_INFO("[F77] CHECK_CHILDREN: tasks closed but children still in_work for "
+                             + wf.entityId + " — re-spawning");
+                    // Delete stale closed tasks so loop re-enters the "no tasks" path:
+                    for (auto& t : prevTasks) t->remove();
+                    return;
+                }
+                LOG_INFO("[F77] CHECK_CHILDREN: all children verified released for " + wf.entityId);
+                step.status = StepStatus::APPROVED;
+                step.completedDate = nowIso();
+                step.save();
+                changed = true;
+                return;
             }
             // Still waiting — revert:
             step.status = StepStatus::IN_PROGRESS; step.completedDate = ""; step.save();
@@ -992,7 +1069,8 @@ static void executeSystemStep(F77W_Operation& step,
                 std::string cid = r.count("folder_id") ? r.at("folder_id") : "";
                 if (cid.empty()) continue;
                 auto rev = FolderRevision::currentRevision(cid);
-                if (rev && rev->revState == RevState::IN_WORK)
+                // No revision = AKT never released; treat as blocking:
+                if (!rev || rev->revState == RevState::IN_WORK)
                     blockingChildren.push_back({"akt", cid});
             }
         }
@@ -1035,7 +1113,7 @@ static void executeSystemStep(F77W_Operation& step,
                         std::string cid = ar.count("folder_id") ? ar.at("folder_id") : "";
                         if (cid.empty()) continue;
                         auto rev = FolderRevision::currentRevision(cid);
-                        if (rev && rev->revState == RevState::IN_WORK)
+                        if (!rev || rev->revState == RevState::IN_WORK)
                             blockingChildren.push_back({"akt", cid});
                     }
                 }

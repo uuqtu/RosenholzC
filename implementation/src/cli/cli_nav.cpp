@@ -42,8 +42,9 @@ void instanceMenu(const std::string& wfId);
 std::string startWfInstanceWizard(const std::string& entityType,
                                    const std::string& entityId);
 std::shared_ptr<F22>    createTaskWizard(const std::string& projectId);
-std::shared_ptr<Folder> createDocumentWizard(const std::string& projectId,
-                                              const std::string& taskId);
+std::shared_ptr<Folder> createDocumentWizard(const std::string& taskId,
+                                              const std::string& f18OpId,
+                                              bool compact);
 std::shared_ptr<F18Operation> createF18Wizard(const std::string& projectId,
                                                const std::string& taskId,
                                                const std::string& type);
@@ -1073,8 +1074,9 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
                       << "                   -f77 -d  (Workflows anzeigen)\n";
             return;
         }
-        // -n: create new AKT under current entity
-        if (!args.empty() && args[0] == "-n") {
+        // -n / -ns: create new AKT under current entity
+        if (!args.empty() && (args[0] == "-n" || args[0] == "-ns")) {
+            bool compact = (args[0] == "-ns");
             std::string projId, taskId;
             if (cur.type == EntityType::F16) {
                 // Akten gehören unter F22 oder F18, nicht direkt unter F16.
@@ -1104,7 +1106,7 @@ void cmdContextual(const std::string& cmd, const std::vector<std::string>& args)
             if (!projId.empty() || !taskId.empty()) {
                 // createDocumentWizard takes (taskId, f18OpId):
                 // taskId is set from context; projId is not needed by the wizard
-                auto doc = createDocumentWizard(taskId, "");
+                auto doc = createDocumentWizard(taskId, "", compact);
                 if (doc) {
                     printOk("AKT angelegt: " + doc->folderId + "  " + doc->title);
                     autoMFS();

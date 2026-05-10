@@ -269,7 +269,8 @@ void cmdAkt(const std::vector<std::string>& args) {
 // Source: local file, URL download, or new empty file.
 
 std::shared_ptr<Rosenholz::Folder> createDocumentWizard(
-    const std::string& taskId, const std::string& f18OpId)
+    const std::string& taskId, const std::string& f18OpId,
+    bool compact)
 {
     using namespace Rosenholz;
 
@@ -299,11 +300,13 @@ std::shared_ptr<Rosenholz::Folder> createDocumentWizard(
     if (!opOk(doc->save())) { std::cout << "  >> DB-Fehler.\n"; return nullptr; }
     doc->revise("Revision 1 — Erstanlage");
 
-    // ── Gemeinsame optionale Felder ───────────────────────────────
+    // ── Gemeinsame optionale Felder (übersprungen bei -ns) ──────────
+    if (!compact) {
     doc->summary        = readOpt("Kurzbeschreibung (optional): ");
     doc->authorId       = readOpt("Autor Person-ID (optional): ");
-    doc->classification = readOpt("Einstufung (intern/vertraulich/öffentlich, leer=intern): ");
+    doc->classification = readOpt("Einstufung (intern/vertraulich/öffentlich, leer=intern: ");
     if (doc->classification.empty()) doc->classification = "intern";
+    } // end if (!compact)
     { auto r = doc->update(); (void)r; }
 
     std::cout << "  >> Dokument registriert: " << doc->folderId << "\n"
@@ -1005,13 +1008,28 @@ static bool dokHandleRevisionSwitch(DocMenuCtx& ctx) {
 }
 
 void documentMenu(std::shared_ptr<Folder> doc,
-                  const std::string& initialCmd) {
+                  const std::string& initialCmd,
+                  const std::string& contextCrumb) {
     // Push AKT context onto navigation stack.
     // This makes ". -e", ". -r" etc. work for the document.
     Rosenholz::NavigationStack::instance().push({
         Rosenholz::EntityType::AKT, doc->folderId, doc->title, doc->folderId});
 
     auto printHeader = [&]() {
+        // Show breadcrumb if we have context:
+        {
+            std::string crumbStr = contextCrumb.empty()
+                ? Rosenholz::NavigationStack::instance().breadcrumb()
+                : contextCrumb;
+            if (!crumbStr.empty()) {
+                auto ls = doc->folderId.rfind('/');
+                auto ps = (ls!=std::string::npos) ? doc->folderId.rfind('/',ls-1) : std::string::npos;
+                std::string seq = (ps!=std::string::npos) ? doc->folderId.substr(ps+1) : doc->folderId;
+                std::cout << "\n  " << Color::bold(Color::cyan(
+                    "rh " + crumbStr + " > AKT:" + seq + " - " + doc->title))
+                    << "\n";
+            }
+        }
         if (auto fresh = Rosenholz::Folder::loadById(doc->folderId)) *doc = *fresh;
 
         auto cur       = Rosenholz::FolderRevision::currentRevision(doc->folderId);

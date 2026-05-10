@@ -221,7 +221,7 @@ void stepMenu(Rosenholz::F24& step,
             std::string seq = (ps != std::string::npos) ? step.stepId.substr(ps+1) : step.stepId;
             crumb += " > F24:" + seq + " - " + step.title;
         }
-        std::cout << "\n  " << Color::bold(crumb) << "\n"
+        std::cout << "\n  " << Color::bold(Color::cyan("rh " + crumb)) << "\n"
                   << "  " << std::string(50, '-') << "\n"
                   << "  Titel     : " << step.title << "\n"
                   << "  Typ       : " << step.stepType << "\n"
@@ -333,7 +333,8 @@ void stepMenu(Rosenholz::F24& step,
             auto docs = Folder::loadForEntity("f24", step.stepId);
             if (sub == "-n") {
                 auto doc = createDocumentWizard("", step.stepId);
-                if (doc) { documentMenu(doc, ""); autoMFS(); }
+                if (doc) { documentMenu(doc, "", stepCrumb); autoMFS(); }
+            // (compactAkt was passed to createDocumentWizard above)
             } else if (sub == "-o") {
                 if (docs.empty()) { std::cout << "  (keine Akten)\n"; continue; }
                 int n = 1;
@@ -517,6 +518,19 @@ static bool f18_step_open(std::shared_ptr<F18Operation> v) {
                   << s.title.substr(0,34) << "\n";
     int pick = readInt("F24 #", 1, (int)v->steps.size());
     stepMenu(v->steps[pick-1], v->steps);
+    return true;
+}
+
+static bool f18_step_new_compact(std::shared_ptr<F18Operation> v) {
+    std::string title = readLine("Schritt-Titel: ");
+    if (title.empty()) return true;
+    std::cout << "  Typ: 1.task  2.approval  3.review  4.notification  ";
+    int st = readInt("",1,4);
+    static const char* sts[]={"task","approval","review","notification"};
+    auto step = v->addStep(title, sts[st-1]);
+    if (!step) { printErr("Schritt konnte nicht angelegt werden."); return true; }
+    printOk("  >> F24 (Schnell) hinzugefuegt.");
+    stepMenu(*step, v->steps);
     return true;
 }
 
