@@ -235,9 +235,13 @@ void stepMenu(Rosenholz::F24& step,
                   << "            lo   ..\n\n";
     };
 
+    std::string stepCrumb;
     while (true) {
         printStepHeader();
-        std::string line = readLine("> ");
+        // Re-compute crumb for prompt (same as in header):
+        stepCrumb = Rosenholz::NavigationStack::instance().breadcrumb()
+                    + " > F24:" + step.stepId.substr(step.stepId.rfind('/')+1, 9);
+        std::string line = readLine("\nrh " + stepCrumb + " > ");
         if (line.empty() || line == ".." || line == "0") return;
         // -p: navigate to parent F18:
         if (line == ". -p" || line == "-p") {

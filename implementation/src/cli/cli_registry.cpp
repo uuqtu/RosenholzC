@@ -162,10 +162,23 @@ const std::vector<CliCommand>& registry() {
           int ticked = 0;
           for (auto& wf : wfs) {
               bool changed = Rosenholz::F77Engine::tick(*wf);
-              if (changed) {
+              // Also check propagation for completed WFs with pending parent:
+              bool prop = Rosenholz::F77Engine::checkPropagationComplete(wf->workflowId);
+              if (changed || prop) {
                   std::cout << "  >> Tick: " << wf->workflowId
                             << " [" << wf->entityType << "/" << wf->entityId << "]\n";
                   ++ticked;
+              }
+          }
+          // Also check all COMPLETED workflows for pending propagation:
+          auto allWfs = Rosenholz::F77W::loadAll(50);
+          for (auto& wf : allWfs) {
+              if (wf->status == Rosenholz::WorkflowStatus::COMPLETED) {
+                  bool prop = Rosenholz::F77Engine::checkPropagationComplete(wf->workflowId);
+                  if (prop) {
+                      std::cout << "  >> Propagation: " << wf->workflowId << "\n";
+                      ++ticked;
+                  }
               }
           }
           if (ticked == 0) std::cout << "  (keine Aenderungen)\n";

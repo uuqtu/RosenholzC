@@ -32,7 +32,9 @@ This warning is for project developers.  Use -Wno-dev to suppress it.
 -- Will embed SQL: f16.sql
 -- Will embed SQL: f18.sql
 -- Will embed SQL: f22.sql
+-- Will embed SQL: f24.sql
 -- Will embed SQL: f77.sql
+-- Will embed SQL: f77s.sql
 -- Will embed SQL: f77task.sql
 -- Will embed SQL: f99.sql
 -- Will embed SQL: notes.sql
@@ -42,7 +44,7 @@ This warning is for project developers.  Use -Wno-dev to suppress it.
 -- Rosenholz PM v2.0.0
 -- SQLite3: sqlite3
 -- Build type: Debug
--- SQL schemas embedded: /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/akt.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/core.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f16.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f18.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f22.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77task.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f99.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/notes.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/users.sql
--- Configuring done (8.5s)
+-- SQL schemas embedded: /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/akt.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/core.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f16.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f18.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f22.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f24.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77s.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f77task.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/f99.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/notes.sql;/home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/sql/users.sql
+-- Configuring done (8.3s)
 -- Generating done (0.1s)
 -- Build files have been written to: /home/jeandarq0ne/Documents/Source/Qt/RosenholzC/implementation/cmake-build-debug

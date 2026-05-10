@@ -11,7 +11,7 @@
 namespace Rosenholz {
 
 Database* F24::db() {
-    return DatabasePool::instance().get("f18");
+    return DatabasePool::instance().get("f24");
 }
 
 // ── fromRow ──────────────────────────────────────────────────

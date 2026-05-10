@@ -257,7 +257,9 @@ bool DatabasePool::initAll(const std::string& basePath, bool walMode, int cacheS
         {"f77",       "f77.db"},
         {"akt",       "akt.db"},
         {"f18",       "f18.db"},
-        {"f77task",    "f77task.db"},
+        {"f24",       "f24.db"},
+        {"f77s",      "f77s.db"},
+        {"f77task",   "f77task.db"},
     {"f99",        "f99.db"},
     };
 

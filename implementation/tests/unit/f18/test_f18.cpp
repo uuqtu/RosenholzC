@@ -266,7 +266,7 @@ TEST_CASE("F18: create() auto-adds Init and End steps", "[f18][lifecycle][steps]
     CHECK(hasInit);
     CHECK(hasEnd);
     // Verify SQL rows too:
-    CHECK(rowCount("f18","f24_steps",
+    CHECK(rowCount("f24","f24_steps",
                    "operation_id='"+v->operationId+"'") == 2);
 }
 

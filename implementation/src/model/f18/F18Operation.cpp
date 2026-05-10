@@ -255,9 +255,10 @@ OperationResult F18Operation::update() {
 
 OperationResult F18Operation::remove() const {
     auto* d = db(); if (!d) return OperationResult::DB_ERROR;
-    // Steps are cascade-deleted via FK or explicit delete
-    d->exec("DELETE FROM f24_steps WHERE operation_id=?;",
-            {BindParam::text(operationId)});
+    // Delete F24 steps from f24.db:
+    auto* d24 = DatabasePool::instance().get("f24");
+    if (d24) d24->exec("DELETE FROM f24_steps WHERE operation_id=?;",
+                       {BindParam::text(operationId)});
     return d->exec("DELETE FROM f18_operations WHERE operation_id=?;",
                    {BindParam::text(operationId)})
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;

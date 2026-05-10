@@ -119,7 +119,8 @@ WorkflowSymbol F77W::workflowSymbol() const {
 
 
 // ── DB helper ────────────────────────────────────────────────
-static Database* wfDB() { return DatabasePool::instance().get("f77"); }
+static Database* wfDB()    { return DatabasePool::instance().get("f77");  }
+static Database* stepsDB() { return DatabasePool::instance().get("f77s"); }
 
 // ─────────────────────────────────────────────────────────────
 // F77W_TemplateStep
@@ -341,7 +342,7 @@ void F77W_Operation::fromRow(const Row& r) {
 }
 
 OperationResult F77W_Operation::save() const {
-    auto* d=wfDB(); if(!d) return OperationResult::DB_ERROR;
+    auto* d=stepsDB(); if(!d) return OperationResult::DB_ERROR;
     return d->exec(R"SQL(
         INSERT OR REPLACE INTO f77_workflow_steps
         (step_id,workflow_id,tpl_step_id,title,sequence_order,is_initialize,is_final,
@@ -361,7 +362,7 @@ OperationResult F77W_Operation::save() const {
 }
 
 OperationResult F77W_Operation::remove() const {
-    auto* d=wfDB(); if(!d) return OperationResult::DB_ERROR;
+    auto* d=stepsDB(); if(!d) return OperationResult::DB_ERROR;
     return d->exec("DELETE FROM f77_workflow_steps WHERE step_id=?;",{BindParam::text(stepId)})
            ? OperationResult::OPERATION_ACK : OperationResult::DB_ERROR;
 }
@@ -380,14 +381,14 @@ bool F77W_Operation::canStart(const std::vector<F77W_Operation>& all) const {
 }
 
 std::shared_ptr<F77W_Operation> F77W_Operation::loadById(const std::string& id) {
-    auto* d=wfDB(); if(!d) return nullptr;
+    auto* d=stepsDB(); if(!d) return nullptr;
     auto rows=d->query("SELECT * FROM f77_workflow_steps WHERE step_id=?;",{BindParam::text(id)});
     if(rows.empty()) return nullptr;
     auto s=std::make_shared<F77W_Operation>(); s->fromRow(rows[0]); return s;
 }
 
 std::vector<F77W_Operation> F77W_Operation::loadForWorkflow(const std::string& wfId) {
-    auto* d=wfDB(); std::vector<F77W_Operation> res;
+    auto* d=stepsDB(); std::vector<F77W_Operation> res;
     if(!d) return res;
     for(auto& r:d->query(
         "SELECT * FROM f77_workflow_steps WHERE workflow_id=? ORDER BY sequence_order;",

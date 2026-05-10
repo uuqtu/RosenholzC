@@ -88,7 +88,8 @@ static void showF16Children(const std::string& projectId) {
             std::cout << "  " << std::setw(4) << n++
                       << std::setw(26) << d->folderId
                       << std::setw(34) << d->title.substr(0,32)
-                      << d->docType << "\n";
+                      << std::setw(12) << d->docType
+                      << Color::statusColor(Rosenholz::revStateToString(d->currentRevisionState())) << "\n";
     }
     std::cout << "\n";
 }
@@ -131,7 +132,8 @@ static void showF22Children(const std::string& taskId) {
             std::cout << "  " << std::setw(4) << n++
                       << std::setw(26) << d->folderId
                       << std::setw(34) << d->title.substr(0,32)
-                      << d->docType << "\n";
+                      << std::setw(12) << d->docType
+                      << Color::statusColor(Rosenholz::revStateToString(d->currentRevisionState())) << "\n";
     } else {
         std::cout << "\n  (keine Akten)\n";
     }
