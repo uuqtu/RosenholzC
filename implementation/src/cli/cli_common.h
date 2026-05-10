@@ -264,6 +264,7 @@ void stepMenu(Rosenholz::F24& step,
               std::vector<Rosenholz::F24>& allSteps);
     void printF18Operation(const Rosenholz::F18Operation& v);
     std::shared_ptr<Rosenholz::F18Operation> createF18WizardGuided();
+  void cmdTrace();
 } // namespace CLI
 
 

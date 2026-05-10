@@ -250,14 +250,14 @@ void stepMenu(Rosenholz::F24& step,
             auto ps2 = (ls2 != std::string::npos) ? step.stepId.rfind('/', ls2-1) : std::string::npos;
             std::string seq2 = (ps2 != std::string::npos) ? step.stepId.substr(ps2+1) : step.stepId;
             stepCrumb = Rosenholz::NavigationStack::instance().breadcrumb()
-                        + " > F24:" + seq2;
+                        + " > F24:" + seq2 + " - " + step.title;
         }
         std::string line = readLine("\nrh " + stepCrumb + " > ");
-        if (line.empty() || line == ".." || line == "0") return;
+        if (line.empty() || line == ".." || line == "0" || line == "cd ..") return;
+        // -t: hierarchy trace
+        if (line == "-t" || line == ". -t") { CLI::cmdTrace(); continue; }
         // -p: navigate to parent F18:
-        if (line == ". -p" || line == "-p") {
-            return;  // stepMenu returns → CLI lands in F18 context
-        }
+        if (line == ". -p" || line == "-p") { return; }
 
         // Parse: first token is cmd, rest is args
         std::istringstream iss(line);

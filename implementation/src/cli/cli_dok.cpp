@@ -1049,7 +1049,9 @@ void documentMenu(std::shared_ptr<Folder> doc,
         printHeader();
         std::string line = firstIter ? initialCmd : readLine("> ");
         firstIter = false;
-        if (line.empty() || line == ".." || line == "0") break;
+        // Handle navigation commands that would be unknown in inner menu:
+        if (line.empty() || line == ".." || line == "0" || line == "cd ..") break;
+        if (line == "-t" || line == ". -t") { CLI::cmdTrace(); continue; }
 
         std::istringstream iss(line);
         std::string cmd; iss >> cmd;
