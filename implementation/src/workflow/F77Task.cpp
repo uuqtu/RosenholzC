@@ -2,6 +2,7 @@
 // F77Task.cpp — Workflow-spawned tasks
 // ============================================================
 #include "F77Task.h"
+#include "F77Workflow.h"
 #include "../core/Logger.h"
 #include "../core/RegNumber.h"
 #include "../model/Utils.h"
@@ -191,6 +192,25 @@ std::shared_ptr<F77Task> F77Task::create(
         return nullptr;
     }
     LOG_INFO("[F77Task] Created: " + t->taskId + " — " + title);
+    // Lock the target entity — same flag as when a WF is active on it:
+    if (!targetEntityType.empty() && !targetEntityId.empty()) {
+        auto& pool__ = DatabasePool::instance();
+    struct Ctx { Database* db; std::string table, idCol; };
+    Ctx ctx__;
+    if      (targetEntityType=="f16") ctx__={pool__.get("f16"),"projects","project_id"};
+    else if (targetEntityType=="f22") ctx__={pool__.get("f22"),"tasks","task_id"};
+    else if (targetEntityType=="f18") ctx__={pool__.get("f18"),"f18_operations","operation_id"};
+    else if (targetEntityType=="akt") ctx__={pool__.get("akt"),"folders","folder_id"};
+    else ctx__={nullptr,"",""};
+    if (ctx__.db) {
+        ctx__.db->exec(
+            "UPDATE " + ctx__.table + " SET wf_locked=1, updated_at=? WHERE "
+            + ctx__.idCol + "=?;",
+            {BindParam::text(nowIso()), BindParam::text(targetEntityId)});
+        LOG_INFO("[F77Task] wfLocked=1 set on target "
+                 + targetEntityType + "/" + targetEntityId);
+    }
+    }
     return t;
 }
 
