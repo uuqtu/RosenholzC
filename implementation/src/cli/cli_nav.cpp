@@ -601,6 +601,63 @@ static std::string contextId(EntityType expected = EntityType::NONE) {
     return "";
 }
 
+// ── cmdTrace: show parent-to-child hierarchy for current entity ─────────────
+void cmdTrace() {
+    using namespace Rosenholz;
+    auto& nav = NavigationStack::instance();
+    if (nav.empty()) {
+        std::cout << "  (kein Kontext aktiv)\n";
+        return;
+    }
+    auto entries = nav.all();
+    std::cout << "\n  Hierarchie-Trace:\n"
+              << "  " << std::string(60, '-') << "\n";
+    for (std::size_t i = 0; i < entries.size(); i++) {
+        const auto& e = entries[i];
+        std::string indent(i * 2, ' ');
+        std::string label = entityTypeLabel(e.type);
+        std::cout << "  " << indent
+                  << Color::bold(label + ":" + e.id.substr(std::min(e.id.rfind('/')+1, e.id.size())-0))
+                  << "  " << e.displayName << "\n";
+        if (e.type == EntityType::F22) {
+            // Show F18 children:
+            auto* f18db = DatabasePool::instance().get("f18");
+            if (f18db) {
+                auto rows = f18db->query(
+                    "SELECT operation_id, title, status FROM f18_operations WHERE task_id=?;",
+                    {BindParam::text(e.id)});
+                for (auto& r : rows) {
+                    std::string cid   = r.count("operation_id") ? r.at("operation_id") : "";
+                    std::string ctitl = r.count("title") ? r.at("title") : "";
+                    std::string cst   = r.count("status") ? r.at("status") : "";
+                    std::cout << "  " << indent << "  "
+                              << "F18:" << cid.substr(cid.rfind('/')+1-4 < cid.size() ? cid.rfind('/',cid.rfind('/')-1)+1 : 0)
+                              << "  " << ctitl
+                              << "  [" << cst << "]\n";
+                }
+            }
+            // Show AKT children:
+            auto* aktdb = DatabasePool::instance().get("akt");
+            if (aktdb) {
+                auto rows = aktdb->query(
+                    "SELECT f.folder_id, f.title FROM folders f "
+                    "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
+                    "WHERE ef.entity_type='f22' AND ef.entity_id=?;",
+                    {BindParam::text(e.id)});
+                for (auto& r : rows) {
+                    std::string cid  = r.count("folder_id") ? r.at("folder_id") : "";
+                    std::string ctitl = r.count("title") ? r.at("title") : "";
+                    std::cout << "  " << indent << "  "
+                              << "AKT:" << cid.substr(cid.rfind('/')+1)
+                              << "  " << ctitl << "\n";
+                }
+            }
+        }
+    }
+    std::cout << "  " << std::string(60, '-') << "\n\n";
+}
+
+
 void cmdContextual(const std::string& cmd, const std::vector<std::string>& args) {
     auto& nav = NavigationStack::instance();
     auto cur = nav.current();

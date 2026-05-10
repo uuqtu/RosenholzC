@@ -214,7 +214,13 @@ void stepMenu(Rosenholz::F24& step,
         // Show full breadcrumb:
         auto& navInner = Rosenholz::NavigationStack::instance();
         std::string crumb = navInner.breadcrumb();
-        crumb += " > F24:" + step.stepId.substr(step.stepId.rfind('/')+1, 9);
+        {
+            // shortSeq: XV/F24/000003/26 → 000003/26
+            auto ls = step.stepId.rfind('/');
+            auto ps = (ls != std::string::npos) ? step.stepId.rfind('/', ls-1) : std::string::npos;
+            std::string seq = (ps != std::string::npos) ? step.stepId.substr(ps+1) : step.stepId;
+            crumb += " > F24:" + seq + " - " + step.title;
+        }
         std::cout << "\n  " << Color::bold(crumb) << "\n"
                   << "  " << std::string(50, '-') << "\n"
                   << "  Titel     : " << step.title << "\n"
@@ -239,8 +245,13 @@ void stepMenu(Rosenholz::F24& step,
     while (true) {
         printStepHeader();
         // Re-compute crumb for prompt (same as in header):
-        stepCrumb = Rosenholz::NavigationStack::instance().breadcrumb()
-                    + " > F24:" + step.stepId.substr(step.stepId.rfind('/')+1, 9);
+        {
+            auto ls2 = step.stepId.rfind('/');
+            auto ps2 = (ls2 != std::string::npos) ? step.stepId.rfind('/', ls2-1) : std::string::npos;
+            std::string seq2 = (ps2 != std::string::npos) ? step.stepId.substr(ps2+1) : step.stepId;
+            stepCrumb = Rosenholz::NavigationStack::instance().breadcrumb()
+                        + " > F24:" + seq2;
+        }
         std::string line = readLine("\nrh " + stepCrumb + " > ");
         if (line.empty() || line == ".." || line == "0") return;
         // -p: navigate to parent F18:

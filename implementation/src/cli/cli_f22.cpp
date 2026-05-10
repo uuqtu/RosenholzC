@@ -236,7 +236,7 @@ void cmdF22(const std::vector<std::string>& args) {
                       << std::setw(26) << hits[i]->regNumber.toString()
                       << std::setw(28) << hits[i]->title.substr(0,26)
                       << std::setw(22) << pname.substr(0,20)
-                      << std::setw(12) << Color::statusColor(entityStatusToString(hits[i]->status))
+                      << Color::statusColor(std::string(entityStatusToString(hits[i]->status)).append(std::string(std::max(0, 12 - (int)std::string(entityStatusToString(hits[i]->status)).size()), ' ')))  
                       << hits[i]->priority << "\n";
         }
         if (!doOpen) return;

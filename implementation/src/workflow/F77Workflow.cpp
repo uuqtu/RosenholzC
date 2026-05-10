@@ -1013,6 +1013,35 @@ static void executeSystemStep(F77W_Operation& step,
             }
         }
 
+        // F24 step AKTs — for F18 parent: find AKTs linked to any F24 steps of this F18:
+        if (wf.entityType == "f18") {
+            auto* f24db = DatabasePool::instance().get("f24");
+            auto* aktdb2 = DatabasePool::instance().get("akt");
+            if (f24db && aktdb2) {
+                // Get all F24 step IDs for this F18:
+                auto stepRows = f24db->query(
+                    "SELECT step_id FROM f24_steps WHERE operation_id=?;",
+                    {BindParam::text(wf.entityId)});
+                for (auto& sr : stepRows) {
+                    std::string stepId = sr.count("step_id") ? sr.at("step_id") : "";
+                    if (stepId.empty()) continue;
+                    // Find AKTs linked to this F24 step:
+                    auto aktRows = aktdb2->query(
+                        "SELECT f.folder_id FROM folders f "
+                        "JOIN entity_folders ef ON f.folder_id=ef.folder_id "
+                        "WHERE ef.entity_type='f24' AND ef.entity_id=?;",
+                        {BindParam::text(stepId)});
+                    for (auto& ar : aktRows) {
+                        std::string cid = ar.count("folder_id") ? ar.at("folder_id") : "";
+                        if (cid.empty()) continue;
+                        auto rev = FolderRevision::currentRevision(cid);
+                        if (rev && rev->revState == RevState::IN_WORK)
+                            blockingChildren.push_back({"akt", cid});
+                    }
+                }
+            }
+        }
+
         if (blockingChildren.empty()) {
             // No blocking children — step is correctly approved.
             LOG_INFO("[F77] CHECK_CHILDREN: no blocking children for " + wf.entityId);
@@ -1579,18 +1608,23 @@ bool F77Engine::checkPropagationComplete(const std::string& workflowId) {
     }
 
     // All tasks done — re-apply the target state to the parent entity.
-    // Only if the parent entity is still in_work (it was reverted by propagation):
-    auto actx = entityContext(wf->entityType);
-    if (!actx.valid()) return false;
-
-    std::string currentStatus;
-    auto rows = actx.db->query(
-        "SELECT status FROM " + actx.table + " WHERE " + actx.idCol + "=?;",
-        {BindParam::text(wf->entityId)});
-    if (!rows.empty() && rows[0].count("status"))
-        currentStatus = rows[0].at("status");
-
-    if (currentStatus != "in_work") return false;  // already advanced
+    // Check current state: AKTs use FolderRevision, others use status column.
+    bool needsReapply = false;
+    if (wf->entityType == "akt") {
+        auto rev = FolderRevision::currentRevision(wf->entityId);
+        needsReapply = (rev && rev->revState == RevState::IN_WORK);
+    } else {
+        auto actx = entityContext(wf->entityType);
+        if (!actx.valid()) return false;
+        auto rows = actx.db->query(
+            "SELECT status FROM " + actx.table + " WHERE " + actx.idCol + "=?;",
+            {BindParam::text(wf->entityId)});
+        std::string currentStatus;
+        if (!rows.empty() && rows[0].count("status"))
+            currentStatus = rows[0].at("status");
+        needsReapply = (currentStatus == "in_work");
+    }
+    if (!needsReapply) return false;  // already advanced
 
     LOG_INFO("[F77] All propagation tasks done for " + workflowId +
              " — re-applying target state to " + wf->entityType + "/" + wf->entityId);

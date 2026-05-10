@@ -32,6 +32,7 @@ void cmdF24Step(const std::vector<std::string>&, std::shared_ptr<Rosenholz::F18O
 void cmdAkt(const std::vector<std::string>&);
 void cmdF77(const std::vector<std::string>&);
 void cmdWorkflows(const std::vector<std::string>&);
+void cmdTrace();
 void cmdPer(const std::vector<std::string>&);
 void cmdDe(const std::vector<std::string>&);
 void cmdTasks(const std::vector<std::string>&);
@@ -153,6 +154,12 @@ const std::vector<CliCommand>& registry() {
       ctx("f99"),  global(cmdF99) },
 
     // ── F77 Tasks ─────────────────────────────────────────────────────────────
+    { "trce", "-t",  CTX_NONE,
+      "-t  Hierarchie-Trace: Eltern→Kind-Pfad des aktuellen Objekts",
+      {},
+      [](const std::vector<std::string>&) { cmdTrace(); },
+      nullptr },
+
     { "tick", "-tick",  CTX_NONE,
       "tick / -tick  Manuellen Tick auf aktiven Workflows ausfuehren",
       {},
